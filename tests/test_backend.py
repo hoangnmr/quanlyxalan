@@ -203,6 +203,9 @@ def test_static_frontend(client):
     assert 'class="skip-link"' in res.text
     assert 'id="main-content" tabindex="-1" aria-busy="false"' in res.text
     assert 'id="toast-region" class="toast-region" role="status"' in res.text
+    app_js = client.get("/app.js").text
+    assert "function setSubmitting(" in app_js
+    assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
 
 
 def test_declaration_pagination_contract_is_bounded_and_compatible(client, auth_headers):

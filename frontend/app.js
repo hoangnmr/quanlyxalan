@@ -28,9 +28,25 @@ async function api(path, options = {}) {
 function toast(message, error = false) {
   const node = document.createElement('div');
   node.className = `toast${error ? ' error' : ''}`;
+  node.setAttribute('role', error ? 'alert' : 'status');
   node.textContent = message;
   $('#toast-region').append(node);
   setTimeout(() => node.remove(), 4200);
+}
+
+function setSubmitting(form, submitter, pending, pendingLabel = 'Đang xử lý…') {
+  form.setAttribute('aria-busy', String(pending));
+  $$('button[type="submit"]', form).forEach(button => {
+    if (pending) {
+      button.dataset.label = button.textContent;
+      button.disabled = true;
+    } else {
+      button.disabled = false;
+      if (button.dataset.label) button.textContent = button.dataset.label;
+      delete button.dataset.label;
+    }
+  });
+  if (pending && submitter) submitter.textContent = pendingLabel;
 }
 
 function optionList(items = [], selected = '') {
@@ -222,17 +238,20 @@ function openCrew(id = null) {
 
 async function saveCrew(event) {
   event.preventDefault();
-  const data = values($('#crew-form'));
+  const form = $('#crew-form');
+  const data = values(form);
   if (state.editingCrew?.id) {
     data.id = state.editingCrew.id;
     data.version = state.editingCrew.version;
   }
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
   try {
     await api('/api/crew', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     $('#crew-dialog').close();
     toast('Đã lưu thông tin thuyền viên và chứng chỉ.');
     await Promise.all([loadCrew(), loadDashboard()]);
   } catch (error) { toast(error.message, true); }
+  finally { setSubmitting(form, event.submitter, false); }
 }
 
 function empty(title, text) { return `<div class="empty-state"><div><strong>${title}</strong><p>${text}</p></div></div>`; }
@@ -269,19 +288,22 @@ function openVessel(id = null) {
 
 async function saveVessel(event) {
   event.preventDefault();
-  const data = values($('#vessel-form'));
+  const form = $('#vessel-form');
+  const data = values(form);
   data.organization = {name: data.organization_name};
   delete data.organization_name;
   if (state.editingVessel?.id) {
     data.id = state.editingVessel.id;
     data.version = state.editingVessel.version;
   }
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
   try {
     await api('/api/vessels', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     $('#vessel-dialog').close();
     toast('Đã lưu hồ sơ phương tiện.');
     await loadVessels();
   } catch (error) { toast(error.message, true); }
+  finally { setSubmitting(form, event.submitter, false); }
 }
 
 function cargoFields(prefix, title, current = {}, load = false) {
@@ -394,8 +416,10 @@ function rememberDraft() {
 
 async function saveDeclaration(event) {
   event.preventDefault();
+  const form = $('#declaration-form');
   const submit = event.submitter?.value === 'submit';
-  if (!$('#declaration-form').reportValidity()) return;
+  if (!form.reportValidity()) return;
+  setSubmitting(form, event.submitter, true, submit ? 'Đang nộp…' : 'Đang lưu…');
   try {
     const result = await api(`/api/declarations?submit=${submit}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(declarationData())});
     const files = [...$('#declaration-form').elements.attachments.files];
@@ -408,6 +432,7 @@ async function saveDeclaration(event) {
     await loadDeclarations();
     await loadDashboard();
   } catch (error) { toast(error.message, true); }
+  finally { setSubmitting(form, event.submitter, false); }
 }
 
 async function loadSuggestions() {
@@ -449,8 +474,10 @@ async function openWorkflow(id) {
 
 async function saveWorkflow(event) {
   event.preventDefault();
+  const form = event.currentTarget;
   const data = values(event.currentTarget);
   if (['REQUEST_CHANGES','REVOKE'].includes(data.action) && !data.note.trim()) return toast('Cần nhập lý do cho thao tác này.', true);
+  setSubmitting(form, event.submitter, true, 'Đang ghi nhận…');
   try {
     await api(`/api/declarations/${state.workflowDeclaration.id}/workflow`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     event.currentTarget.reset();
@@ -458,6 +485,7 @@ async function saveWorkflow(event) {
     await loadDeclarations();
     await openWorkflow(state.workflowDeclaration.id);
   } catch (error) { toast(error.message, true); }
+  finally { setSubmitting(form, event.submitter, false); }
 }
 
 function applyDeclarationFilters() {

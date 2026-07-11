@@ -308,6 +308,8 @@ adapter-ready; external activation remains blocked.
   state in the UI.
 - Added a server-calculated, role-scoped attention queue to the dashboard;
   it displays only statuses visible to that role and never grants an action.
+- Standardized write-form busy/recovery states and assertive API-error
+  announcements to avoid duplicate submissions and inaccessible failures.
 - Tests: `65 passed, 0 failed`; `git diff --check`: PASS.
 
 ### Open Gate 5 evidence

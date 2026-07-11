@@ -165,3 +165,4 @@ main[aria-busy="true"] .page.active { opacity: .72; }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 14px; color: var(--cvf-text-muted); font-size: 12px; }
 .pagination button:disabled { cursor: not-allowed; opacity: .45; }
 .attention-queue { margin-top: 18px; }.attention-list { display: grid; gap: 8px; }.attention-list article { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 9px; background: var(--cvf-surface-elevated); }.attention-list strong,.attention-list small { display: block; }.attention-list small { margin-top: 4px; color: var(--cvf-text-muted); }.attention-list article > span { white-space: nowrap; color: var(--cvf-warning); font-size: 12px; font-weight: 700; }
+form[aria-busy="true"] { cursor: progress; }form[aria-busy="true"] button[type="submit"] { min-width: 100px; }

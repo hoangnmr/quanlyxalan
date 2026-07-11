@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Cổng khai báo phương tiện thủy nội địa Cảng Tân Thuận">
-  <title>Cảng Tân Thuận | Khai báo PTTND</title>
+  <meta name="description" content="Port Declaration System - TIEN-TAN THUAN PORT">
+  <title>Port Declaration System | TIEN-TAN THUAN PORT</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar" aria-label="Điều hướng chính">
-      <a class="brand" href="#dashboard" aria-label="Về tổng quan">
-        <span class="brand-mark">TT</span>
-        <span><strong>Cảng Tân Thuận</strong><small>Khai báo PTTND</small></span>
+      <a class="brand" href="#dashboard" aria-label="Về tổng quan TIEN-TAN THUAN PORT">
+        <span class="brand-logo-frame"><img src="/assets/csg-logo.jpg" alt="CSG Saigon Port logo"></span>
+        <span class="brand-copy"><strong>TIEN-TAN THUAN PORT</strong><small>Port Declaration System</small></span>
       </a>
       <div class="workspace-chip"><span class="status-dot"></span><span><small>HỆ THỐNG</small><strong>Đang hoạt động</strong></span></div>
       <nav>
@@ -20,6 +20,7 @@
         <a href="#dashboard" data-route="dashboard"><span>▦</span>Tổng quan</a>
         <a href="#declarations" data-route="declarations"><span>▤</span>Phiếu khai báo</a>
         <a href="#vessels" data-route="vessels"><span>◈</span>Hồ sơ phương tiện</a>
+        <a href="#crew" data-route="crew"><span>◎</span>Danh sách thuyền viên</a>
         <p class="nav-label">Dữ liệu</p>
         <a href="#import" data-route="import"><span>⇧</span>Import Excel</a>
         <a href="#reports" data-route="reports"><span>⇩</span>Báo cáo Cảng vụ</a>
@@ -40,6 +41,8 @@
       <main id="main-content">
         <section class="page active" data-page="dashboard">
           <div class="page-heading"><div><p class="eyebrow">TÌNH HÌNH HÔM NAY</p><h1>Bàn điều phối khai báo</h1><p>Trạng thái hồ sơ phương tiện và các lượt tàu dự kiến.</p></div><button class="primary-button" data-action="new-declaration">+ Khai báo lượt mới</button></div>
+          <section class="dashboard-search panel"><label class="search"><span>⌕</span><input id="dashboard-vessel-search" placeholder="Lọc nhanh theo số hiệu tàu hoặc số sà lan"></label><span class="muted">Nhập ít nhất 2 ký tự</span></section>
+          <div id="dashboard-search-results" class="search-card-grid"></div>
           <div id="stats" class="stat-grid" aria-live="polite"></div>
           <div class="content-grid">
             <section class="panel span-2"><div class="panel-header"><div><p class="eyebrow">HOẠT ĐỘNG GẦN ĐÂY</p><h2>Phiếu khai báo</h2></div><button class="soft-button" data-route-link="declarations">Xem tất cả</button></div><div id="recent-table" class="table-wrap"></div></section>
@@ -53,8 +56,15 @@
         </section>
 
         <section class="page" data-page="declarations">
-          <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Phiếu khai báo trước khi đến cảng</h1><p>Lưu nháp, kiểm tra và nộp phiếu có dấu vết thay đổi.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
-          <section class="panel"><div class="filter-bar"><div class="segmented"><button class="active" data-filter-status="">Tất cả</button><button data-filter-status="DRAFT">Nháp</button><button data-filter-status="SUBMITTED">Đã nộp</button></div><span id="declaration-count" class="muted"></span></div><div id="declaration-table" class="table-wrap"></div></section>
+          <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Điều phối phiếu vào, rời cảng</h1><p>Theo dõi khai báo, kiểm tra nhiều cấp, ban hành và lịch sử xử lý.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
+          <section class="panel advanced-filter"><label>Tàu / số đăng ký<input id="declaration-search" placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select id="movement-filter"><option value="">Tất cả</option><option value="ARRIVAL">Vào cảng</option><option value="DEPARTURE">Rời cảng</option></select></label><label>Trạng thái<select id="workflow-filter"><option value="">Tất cả</option><option value="PENDING_REVIEW">Chờ CV</option><option value="PENDING_QLC">Chờ QLC</option><option value="PENDING_BP">Chờ BP</option><option value="CHANGES_REQUESTED">Cần bổ sung</option><option value="APPROVED">Đã duyệt</option><option value="ISSUED">Đã ban hành</option><option value="REVOKED">Đã thu hồi</option></select></label><label>Thuyền trưởng<input id="master-filter" placeholder="Họ tên"></label><label>Từ ngày<input id="declaration-from" type="date"></label><label>Đến ngày<input id="declaration-to" type="date"></label><button id="clear-declaration-filter" class="ghost-button">Đặt lại</button><span id="declaration-count" class="muted"></span></section>
+          <section class="panel"><div id="declaration-table" class="table-wrap"></div></section>
+        </section>
+
+        <section class="page" data-page="crew">
+          <div class="page-heading"><div><p class="eyebrow">CREW LIST / CHỨNG CHỈ</p><h1>Danh sách thuyền viên</h1><p>Quản lý thuyền trưởng, thuyền viên và hạn chứng chỉ chuyên môn.</p></div><button class="primary-button" id="add-crew">+ Thêm thuyền viên</button></div>
+          <div id="crew-warning-strip" class="warning-strip"></div>
+          <section class="panel"><div class="filter-bar"><label class="search"><span>⌕</span><input id="crew-search" placeholder="Tìm họ tên, chức danh hoặc số chứng chỉ"></label><span id="crew-count" class="muted"></span></div><div id="crew-table" class="table-wrap"></div></section>
         </section>
 
         <section class="page" data-page="import">
@@ -74,6 +84,7 @@
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button" data-report="appendix-2">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button" data-report="appendix-3">Xuất Excel</button></article>
           </div>
+          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã nộp. Hệ thống chỉ gửi khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói đồng bộ</button></div><div id="sync-jobs" class="table-wrap span-full"></div></section>
         </section>
       </main>
     </div>
@@ -81,7 +92,11 @@
 
   <dialog id="vessel-dialog" class="modal"><form id="vessel-form"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ DÙNG LẠI</p><h2>Thông tin phương tiện</h2></div><button type="button" class="icon-button" data-close-dialog="vessel-dialog" aria-label="Đóng">×</button></div><div id="vessel-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="vessel-dialog">Hủy</button><button type="submit" class="primary-button" id="save-vessel">Lưu hồ sơ</button></div></form></dialog>
 
+  <dialog id="crew-dialog" class="modal"><form id="crew-form"><div class="modal-header"><div><p class="eyebrow">CREW LIST</p><h2>Thông tin và chứng chỉ chuyên môn</h2></div><button type="button" class="icon-button" data-close-dialog="crew-dialog" aria-label="Đóng">×</button></div><div id="crew-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="crew-dialog">Hủy</button><button type="submit" class="primary-button">Lưu thuyền viên</button></div></form></dialog>
+
   <dialog id="declaration-dialog" class="modal wide"><form id="declaration-form"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Tự lưu trên trình duyệt</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div><div id="declaration-fields"></div><div class="review-strip"><div><strong>Kiểm tra trước khi nộp</strong><p>Dấu * là bắt buộc. Phiếu đã nộp được khóa để bảo toàn báo cáo.</p></div><div><button type="submit" class="outline-button" value="draft" id="save-draft">Lưu nháp</button><button type="submit" class="primary-button" value="submit" id="submit-declaration">Kiểm tra & nộp</button></div></div></form></dialog>
+
+  <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2 id="workflow-title">Chi tiết phiếu</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div><div id="workflow-summary" class="workflow-summary"></div><div id="workflow-timeline" class="timeline"></div><form id="workflow-form" class="workflow-form"><label>Thao tác<select name="action" required><option value="">Chọn</option><option value="CV_APPROVE">CV duyệt</option><option value="QLC_APPROVE">QLC duyệt</option><option value="BP_APPROVE">BP duyệt</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option><option value="ISSUE">Ban hành giấy phép</option><option value="REVOKE">Thu hồi giấy phép</option></select></label><label>Vai trò<select name="actor_role" required><option value="CV">CV</option><option value="QLC">QLC</option><option value="BP">BP</option></select></label><label>Người xử lý<input name="actor_name" required placeholder="Họ tên cán bộ"></label><label>Số giấy phép<input name="permit_no" placeholder="Tự sinh nếu để trống"></label><label class="span-full">Ghi chú / lý do<textarea name="note" placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung hoặc thu hồi"></textarea></label><button class="primary-button" type="submit">Ghi nhận thao tác</button></form></dialog>
 
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
   <script src="/app.js" defer></script>

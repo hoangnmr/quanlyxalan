@@ -1,7 +1,7 @@
-# Cong khai bao phuong tien thuy noi dia
+# Port Declaration System
 
-Web application for Tan Thuan Port customer declarations and periodic Maritime
-Administration reporting.
+Web application for TIEN-TAN THUAN PORT customer declarations, vessel and crew
+certificate tracking, attachments, and periodic Maritime Administration reporting.
 
 ## Run locally
 

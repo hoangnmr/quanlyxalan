@@ -23,5 +23,7 @@
     "enforcementVersion":  "1.0",
     "bootstrapScript":  "scripts/new-cvf-workspace.ps1",
     "w112TrancheRef":  "CVF_W112_T1_WORKSPACE_AGENT_ENFORCEMENT_AND_WEB_CONTROL_UPLIFT_ROADMAP_2026-04-22.md",
-    "knowledgePath":  "knowledge/"
+    "knowledgePath":  "knowledge/",
+    "cvfPublicRemote":  "https://github.com/Blackbird081/Controlled-Vibe-Framework-CVF.git",
+    "publicCoreFreshnessRequired":  true
 }

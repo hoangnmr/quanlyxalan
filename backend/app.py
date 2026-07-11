@@ -5,6 +5,7 @@ import json
 import mimetypes
 import re
 import sys
+import uuid
 from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,7 +21,9 @@ from xlsx_io import declaration_row, excel_date, make_xlsx, read_workbook, vesse
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
+UPLOAD_ROOT = ROOT / "data" / "uploads"
 MAX_BODY = 12 * 1024 * 1024
+ALLOWED_ATTACHMENT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx", ".xls", ".xlsx"}
 
 VESSEL_TYPES = ["Tàu hàng khô", "Tàu container", "Tàu hàng lỏng/dầu", "Tàu khách", "Tàu kéo/đẩy", "Sà lan tự hành", "Sà lan", "Khác"]
 VESSEL_CLASSES = ["VR-SI", "VR-SII", "VR-SIII", "Khác"]
@@ -54,6 +57,58 @@ def clean_date(value: Any) -> str | None:
     if isinstance(value, datetime):
         return value.isoformat(timespec="minutes")
     return str(value)
+
+
+def certificate_status(value: Any, warning_days: int = 30) -> str:
+    text = clean_date(value)
+    if not text:
+        return "UNKNOWN"
+    try:
+        expiry = date.fromisoformat(text[:10])
+    except ValueError:
+        return "UNKNOWN"
+    remaining = (expiry - date.today()).days
+    if remaining < 0:
+        return "EXPIRED"
+    if remaining <= warning_days:
+        return "EXPIRING"
+    return "VALID"
+
+
+def validate_attachment_content(extension: str, content: bytes) -> None:
+    signatures = {
+        ".pdf": lambda data: data.startswith(b"%PDF"),
+        ".jpg": lambda data: data.startswith(b"\xff\xd8\xff"),
+        ".jpeg": lambda data: data.startswith(b"\xff\xd8\xff"),
+        ".png": lambda data: data.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".webp": lambda data: data.startswith(b"RIFF") and data[8:12] == b"WEBP",
+        ".docx": lambda data: data.startswith(b"PK"),
+        ".xlsx": lambda data: data.startswith(b"PK"),
+        ".doc": lambda data: data.startswith(b"\xd0\xcf\x11\xe0"),
+        ".xls": lambda data: data.startswith(b"\xd0\xcf\x11\xe0"),
+    }
+    if not signatures[extension](content):
+        raise ApiError(415, "Nội dung file không khớp với phần mở rộng.")
+
+
+def enrich_vessel(item: dict[str, Any]) -> dict[str, Any]:
+    item["certificate_status"] = certificate_status(item.get("certificate_expiry_date"))
+    return item
+
+
+def enrich_declaration(db: Any, row: Any) -> dict[str, Any]:
+    item = decode_declaration(row)
+    item["certificate_status"] = certificate_status(item.get("certificate_expiry_date"))
+    item["crew"] = rows_to_dicts(db.execute(
+        "SELECT cm.*,dc.crew_role_snapshot,dc.certificate_no_snapshot,dc.certificate_expiry_snapshot "
+        "FROM declaration_crew dc JOIN crew_members cm ON cm.id=dc.crew_member_id WHERE dc.declaration_id=? ORDER BY cm.crew_role,cm.full_name",
+        (item["id"],),
+    ))
+    item["attachments"] = rows_to_dicts(db.execute(
+        "SELECT id,original_name,content_type,size_bytes,created_at FROM attachments WHERE declaration_id=? ORDER BY created_at",
+        (item["id"],),
+    ))
+    return item
 
 
 def validate_required(payload: dict[str, Any], names: list[str]) -> None:
@@ -159,19 +214,28 @@ def save_declaration(db: Any, payload: dict[str, Any], submit: bool = False, imp
     stamp = now_iso()
     reference = str(payload.get("reference_no") or f"TT-{datetime.now():%Y%m%d-%H%M%S%f}")
     status = "SUBMITTED" if submit else str(payload.get("status") or "DRAFT")
+    workflow_status = "PENDING_REVIEW" if submit else str(payload.get("workflow_status") or "DRAFT")
     columns = [
         "reference_no", "status", "organization_id", "vessel_id", "declaration_date", "company_name",
         "vessel_name", "registration_no", "vessel_type", "vessel_class", "length_m", "deadweight_tons",
         "gross_tonnage", "certificate_expiry_date", "crew_count", "passenger_count", "last_port",
         "working_port", "destination_port", "eta", "etd", "unload_json", "load_json", "master_name", "master_phone",
+        "movement_type", "purpose", "cargo_description", "actual_arrival_at", "actual_departure_at", "workflow_status",
     ]
     values = {
         **data, "reference_no": reference, "status": status, "organization_id": organization_id,
         "vessel_id": as_number(vessel_id, True), "unload_json": json.dumps(data["unload"], ensure_ascii=False),
         "load_json": json.dumps(data["load"], ensure_ascii=False),
+        "movement_type": str(payload.get("movement_type") or "ARRIVAL"),
+        "purpose": str(payload.get("purpose") or ""),
+        "cargo_description": str(payload.get("cargo_description") or ""),
+        "actual_arrival_at": clean_date(payload.get("actual_arrival_at")),
+        "actual_departure_at": clean_date(payload.get("actual_departure_at")),
+        "workflow_status": workflow_status,
     }
     if existing:
-        if db.execute("SELECT status FROM declarations WHERE id=?", (existing["id"],)).fetchone()["status"] == "SUBMITTED":
+        existing_state = db.execute("SELECT status,workflow_status FROM declarations WHERE id=?", (existing["id"],)).fetchone()
+        if existing_state["status"] == "SUBMITTED" and existing_state["workflow_status"] != "CHANGES_REQUESTED":
             raise ApiError(409, "Phiếu đã nộp không thể sửa. Hãy tạo phiếu điều chỉnh mới.")
         db.execute(
             f"UPDATE declarations SET {','.join(f'{name}=?' for name in columns)},submitted_at=?,updated_at=? WHERE id=?",
@@ -179,6 +243,11 @@ def save_declaration(db: Any, payload: dict[str, Any], submit: bool = False, imp
         )
         declaration_id = int(existing["id"])
         action = "SUBMIT" if submit else "UPDATE_DRAFT"
+        if submit and existing_state["workflow_status"] == "CHANGES_REQUESTED":
+            db.execute(
+                "UPDATE declarations SET cv_approval='PENDING',qlc_approval='PENDING',bp_approval='PENDING' WHERE id=?",
+                (declaration_id,),
+            )
     else:
         cursor = db.execute(
             f"INSERT INTO declarations({','.join(columns)},submitted_at,created_at,updated_at) VALUES({','.join('?' for _ in columns)},?,?,?)",
@@ -187,7 +256,106 @@ def save_declaration(db: Any, payload: dict[str, Any], submit: bool = False, imp
         declaration_id = int(cursor.lastrowid)
         action = "IMPORT" if imported else ("SUBMIT" if submit else "CREATE_DRAFT")
     audit(db, "DECLARATION", declaration_id, action, reference)
-    return decode_declaration(db.execute("SELECT * FROM declarations WHERE id=?", (declaration_id,)).fetchone())
+    if not existing or submit:
+        db.execute(
+            "INSERT INTO declaration_events(declaration_id,action,from_status,to_status,actor_name,actor_role,note,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (declaration_id, action, "DRAFT" if submit else "", workflow_status, str(payload.get("actor_name") or data["company_name"]), "CUSTOMER", "Phiếu được nộp" if submit else "Khởi tạo phiếu", stamp),
+        )
+    if "crew_ids" in payload:
+        db.execute("DELETE FROM declaration_crew WHERE declaration_id=?", (declaration_id,))
+        for crew_id in {int(value) for value in payload.get("crew_ids", []) if str(value).isdigit()}:
+            member = db.execute("SELECT * FROM crew_members WHERE id=?", (crew_id,)).fetchone()
+            if member:
+                db.execute(
+                    "INSERT INTO declaration_crew(declaration_id,crew_member_id,crew_role_snapshot,certificate_no_snapshot,certificate_expiry_snapshot) VALUES(?,?,?,?,?)",
+                    (declaration_id, crew_id, member["crew_role"], member["professional_certificate_no"], member["certificate_expiry_date"]),
+                )
+    return enrich_declaration(db, db.execute("SELECT * FROM declarations WHERE id=?", (declaration_id,)).fetchone())
+
+
+WORKFLOW_ACTIONS = {
+    "REQUEST_CHANGES": {"roles": {"CV", "QLC", "BP"}, "status": "CHANGES_REQUESTED"},
+    "CV_APPROVE": {"roles": {"CV"}, "status": "PENDING_QLC", "approval": ("cv_approval", "APPROVED")},
+    "QLC_APPROVE": {"roles": {"QLC"}, "status": "PENDING_BP", "approval": ("qlc_approval", "APPROVED")},
+    "BP_APPROVE": {"roles": {"BP"}, "status": "APPROVED", "approval": ("bp_approval", "APPROVED")},
+    "ISSUE": {"roles": {"BP"}, "status": "ISSUED"},
+    "REVOKE": {"roles": {"BP"}, "status": "REVOKED"},
+}
+
+
+def transition_declaration(db: Any, declaration_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    item = db.execute("SELECT * FROM declarations WHERE id=?", (declaration_id,)).fetchone()
+    if not item:
+        raise ApiError(404, "Không tìm thấy phiếu khai báo.")
+    action = str(payload.get("action") or "").upper()
+    actor_role = str(payload.get("actor_role") or "").upper()
+    actor_name = str(payload.get("actor_name") or "").strip()
+    rule = WORKFLOW_ACTIONS.get(action)
+    if not rule or actor_role not in rule["roles"] or not actor_name:
+        raise ApiError(422, "Thao tác, vai trò hoặc người xử lý không hợp lệ.")
+    current = item["workflow_status"]
+    allowed_from = {
+        "REQUEST_CHANGES": {"PENDING_REVIEW", "PENDING_QLC", "PENDING_BP"},
+        "CV_APPROVE": {"PENDING_REVIEW"}, "QLC_APPROVE": {"PENDING_QLC"},
+        "BP_APPROVE": {"PENDING_BP"}, "ISSUE": {"APPROVED"}, "REVOKE": {"ISSUED"},
+    }
+    if current not in allowed_from[action]:
+        raise ApiError(409, f"Không thể thực hiện {action} khi phiếu ở trạng thái {current}.")
+    stamp, target = now_iso(), rule["status"]
+    updates: dict[str, Any] = {"workflow_status": target, "updated_at": stamp}
+    if rule.get("approval"):
+        updates[rule["approval"][0]] = rule["approval"][1]
+    if action == "REQUEST_CHANGES":
+        updates[{"CV": "cv_approval", "QLC": "qlc_approval", "BP": "bp_approval"}[actor_role]] = "REJECTED"
+    if action == "ISSUE":
+        updates["permit_no"] = str(payload.get("permit_no") or f"{declaration_id:04d}/GP-TT")
+        updates["issued_at"] = stamp
+    if action == "REVOKE":
+        updates["revoked_at"] = stamp
+    db.execute(f"UPDATE declarations SET {','.join(f'{key}=?' for key in updates)} WHERE id=?", (*updates.values(), declaration_id))
+    db.execute(
+        "INSERT INTO declaration_events(declaration_id,action,from_status,to_status,actor_name,actor_role,note,created_at) VALUES(?,?,?,?,?,?,?,?)",
+        (declaration_id, action, current, target, actor_name, actor_role, str(payload.get("note") or "")[:1000], stamp),
+    )
+    audit(db, "DECLARATION", declaration_id, action, f"{actor_name} / {actor_role} / {current} -> {target}")
+    return enrich_declaration(db, db.execute("SELECT * FROM declarations WHERE id=?", (declaration_id,)).fetchone())
+
+
+def save_crew_member(db: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    validate_required(payload, ["full_name", "crew_role", "professional_certificate_type", "professional_certificate_no"])
+    columns = [
+        "organization_id", "vessel_id", "full_name", "crew_role", "phone", "identity_no",
+        "professional_certificate_type", "professional_certificate_no", "certificate_issue_date",
+        "certificate_expiry_date", "notes",
+    ]
+    values = {
+        **payload,
+        "organization_id": as_number(payload.get("organization_id"), True),
+        "vessel_id": as_number(payload.get("vessel_id"), True),
+        "certificate_issue_date": clean_date(payload.get("certificate_issue_date")),
+        "certificate_expiry_date": clean_date(payload.get("certificate_expiry_date")),
+    }
+    for key in columns:
+        if key not in values or values[key] is None and key not in ("organization_id", "vessel_id", "certificate_issue_date", "certificate_expiry_date"):
+            values[key] = ""
+    stamp = now_iso()
+    existing = db.execute("SELECT id FROM crew_members WHERE id=?", (payload.get("id"),)).fetchone() if payload.get("id") else None
+    if existing:
+        db.execute(
+            f"UPDATE crew_members SET {','.join(f'{name}=?' for name in columns)},updated_at=? WHERE id=?",
+            (*[values.get(name) for name in columns], stamp, existing["id"]),
+        )
+        member_id, action = int(existing["id"]), "UPDATE"
+    else:
+        cursor = db.execute(
+            f"INSERT INTO crew_members({','.join(columns)},created_at,updated_at) VALUES({','.join('?' for _ in columns)},?,?)",
+            (*[values.get(name) for name in columns], stamp, stamp),
+        )
+        member_id, action = int(cursor.lastrowid), "CREATE"
+    audit(db, "CREW_MEMBER", member_id, action, f"{values['full_name']} / {values['crew_role']}")
+    item = dict(db.execute("SELECT * FROM crew_members WHERE id=?", (member_id,)).fetchone())
+    item["certificate_status"] = certificate_status(item.get("certificate_expiry_date"))
+    return item
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -220,29 +388,115 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/catalogs":
             return self.json(200, {"vesselTypes": VESSEL_TYPES, "vesselClasses": VESSEL_CLASSES, "shellMaterials": SHELL_MATERIALS, "cargoTypes": CARGO_TYPES, "unloadMovements": UNLOAD_MOVEMENTS, "loadMovements": LOAD_MOVEMENTS})
         if path == "/api/dashboard":
+            search = (query.get("q") or [""])[0].strip()
             with connection() as db:
                 stats = {
                     "vessels": db.execute("SELECT COUNT(*) FROM vessels").fetchone()[0],
                     "drafts": db.execute("SELECT COUNT(*) FROM declarations WHERE status='DRAFT'").fetchone()[0],
                     "submitted": db.execute("SELECT COUNT(*) FROM declarations WHERE status='SUBMITTED'").fetchone()[0],
                     "arrivingToday": db.execute("SELECT COUNT(*) FROM declarations WHERE substr(eta,1,10)=?", (date.today().isoformat(),)).fetchone()[0],
+                    "certificateWarnings": db.execute(
+                        "SELECT COUNT(*) FROM vessels WHERE certificate_expiry_date<>'' AND certificate_expiry_date<=date('now','+30 day')"
+                    ).fetchone()[0] + db.execute(
+                        "SELECT COUNT(*) FROM crew_members WHERE certificate_expiry_date<>'' AND certificate_expiry_date<=date('now','+30 day')"
+                    ).fetchone()[0],
                 }
-                recent = [decode_declaration(row) for row in db.execute("SELECT * FROM declarations ORDER BY updated_at DESC LIMIT 8")]
-            return self.json(200, {"stats": stats, "recent": recent})
+                recent = [enrich_declaration(db, row) for row in db.execute("SELECT * FROM declarations ORDER BY updated_at DESC LIMIT 8")]
+                matches = []
+                if search:
+                    wildcard = f"%{search}%"
+                    matches = [enrich_vessel(dict(row)) for row in db.execute(
+                        "SELECT v.*,o.name organization_name FROM vessels v LEFT JOIN organizations o ON o.id=v.organization_id WHERE v.registration_no LIKE ? OR v.name LIKE ? ORDER BY v.updated_at DESC LIMIT 12",
+                        (wildcard, wildcard),
+                    )]
+            return self.json(200, {"stats": stats, "recent": recent, "matches": matches})
         if path == "/api/organizations":
             with connection() as db:
                 return self.json(200, rows_to_dicts(db.execute("SELECT * FROM organizations ORDER BY name")))
         if path == "/api/vessels":
+            search = (query.get("q") or [""])[0].strip()
+            sql = "SELECT v.*,o.name organization_name FROM vessels v LEFT JOIN organizations o ON o.id=v.organization_id"
+            params: list[Any] = []
+            if search:
+                sql += " WHERE v.registration_no LIKE ? OR v.name LIKE ?"
+                params = [f"%{search}%", f"%{search}%"]
             with connection() as db:
-                rows = db.execute("SELECT v.*,o.name organization_name FROM vessels v LEFT JOIN organizations o ON o.id=v.organization_id ORDER BY v.updated_at DESC")
-                return self.json(200, rows_to_dicts(rows))
+                rows = db.execute(sql + " ORDER BY v.updated_at DESC", params)
+                return self.json(200, [enrich_vessel(dict(row)) for row in rows])
         if path == "/api/declarations":
             status = (query.get("status") or [""])[0]
-            sql, params = "SELECT * FROM declarations", []
+            search = (query.get("q") or [""])[0].strip()
+            movement_type = (query.get("movement_type") or [""])[0]
+            workflow_status = (query.get("workflow_status") or [""])[0]
+            master_name = (query.get("master_name") or [""])[0].strip()
+            date_from = (query.get("from") or [""])[0]
+            date_to = (query.get("to") or [""])[0]
+            clauses, params = [], []
             if status:
-                sql, params = sql + " WHERE status=?", [status]
+                clauses.append("status=?")
+                params.append(status)
+            if search:
+                clauses.append("(registration_no LIKE ? OR vessel_name LIKE ?)")
+                params.extend([f"%{search}%", f"%{search}%"])
+            if movement_type:
+                clauses.append("movement_type=?")
+                params.append(movement_type)
+            if workflow_status:
+                clauses.append("workflow_status=?")
+                params.append(workflow_status)
+            if master_name:
+                clauses.append("master_name LIKE ?")
+                params.append(f"%{master_name}%")
+            if date_from:
+                clauses.append("substr(eta,1,10)>=?")
+                params.append(date_from)
+            if date_to:
+                clauses.append("substr(eta,1,10)<=?")
+                params.append(date_to)
+            sql = "SELECT * FROM declarations" + (" WHERE " + " AND ".join(clauses) if clauses else "")
             with connection() as db:
-                return self.json(200, [decode_declaration(row) for row in db.execute(sql + " ORDER BY updated_at DESC", params)])
+                return self.json(200, [enrich_declaration(db, row) for row in db.execute(sql + " ORDER BY updated_at DESC", params)])
+        event_match = re.fullmatch(r"/api/declarations/(\d+)/events", path)
+        if event_match:
+            with connection() as db:
+                rows = rows_to_dicts(db.execute(
+                    "SELECT * FROM declaration_events WHERE declaration_id=? ORDER BY created_at DESC,id DESC",
+                    (int(event_match.group(1)),),
+                ))
+            return self.json(200, rows)
+        if path == "/api/crew":
+            with connection() as db:
+                rows = rows_to_dicts(db.execute(
+                    "SELECT cm.*,v.name vessel_name,v.registration_no FROM crew_members cm LEFT JOIN vessels v ON v.id=cm.vessel_id ORDER BY cm.updated_at DESC"
+                ))
+            for item in rows:
+                item["certificate_status"] = certificate_status(item.get("certificate_expiry_date"))
+            return self.json(200, rows)
+        attachment_match = re.fullmatch(r"/api/declarations/(\d+)/attachments", path)
+        if attachment_match:
+            with connection() as db:
+                rows = rows_to_dicts(db.execute(
+                    "SELECT id,original_name,content_type,size_bytes,created_at FROM attachments WHERE declaration_id=? ORDER BY created_at",
+                    (int(attachment_match.group(1)),),
+                ))
+            return self.json(200, rows)
+        download_match = re.fullmatch(r"/api/attachments/(\d+)/download", path)
+        if download_match:
+            with connection() as db:
+                item = db.execute("SELECT * FROM attachments WHERE id=?", (int(download_match.group(1)),)).fetchone()
+            if not item:
+                raise ApiError(404, "Không tìm thấy file đính kèm.")
+            target = (UPLOAD_ROOT / item["stored_name"]).resolve()
+            if UPLOAD_ROOT.resolve() not in target.parents or not target.is_file():
+                raise ApiError(404, "File đính kèm không còn trên máy chủ.")
+            return self.file_response(target, item["content_type"], item["original_name"])
+        if path == "/api/integrations/maritime-authority":
+            with connection() as db:
+                connector = dict(db.execute("SELECT * FROM integration_connectors WHERE connector_key='LOCAL_MARITIME_AUTHORITY'").fetchone())
+                jobs = rows_to_dicts(db.execute("SELECT id,report_from,report_to,status,record_count,created_at,sent_at FROM sync_jobs ORDER BY created_at DESC LIMIT 10"))
+            connector["readyToSend"] = connector["status"] == "CONFIGURED" and bool(connector["base_url"])
+            connector["boundary"] = "Chỉ chuẩn bị payload cho đến khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức."
+            return self.json(200, {"connector": connector, "jobs": jobs})
         if path == "/api/suggestions":
             field = (query.get("field") or [""])[0]
             allowed = {"last_port", "working_port", "destination_port", "master_name", "master_phone", "company_name"}
@@ -267,12 +521,36 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/vessels":
             with connection() as db:
                 return self.json(201, save_vessel(db, self.body_json()))
+        verify_match = re.fullmatch(r"/api/vessels/(\d+)/verify-registry", path)
+        if verify_match:
+            vessel_id = int(verify_match.group(1))
+            with connection() as db:
+                vessel = db.execute("SELECT * FROM vessels WHERE id=?", (vessel_id,)).fetchone()
+                if not vessel:
+                    raise ApiError(404, "Không tìm thấy phương tiện.")
+                status = certificate_status(vessel["certificate_expiry_date"])
+                db.execute(
+                    "UPDATE vessels SET registry_verification_status=?,registry_verified_at=?,registry_verification_source=?,updated_at=? WHERE id=?",
+                    (status, now_iso(), "LOCAL_EXPIRY_DATE_CHECK", now_iso(), vessel_id),
+                )
+                audit(db, "VESSEL", vessel_id, "REGISTRY_DATE_CHECK", status)
+                result = enrich_vessel(dict(db.execute("SELECT * FROM vessels WHERE id=?", (vessel_id,)).fetchone()))
+            result["verificationBoundary"] = "Đối soát ngày hết hạn nội bộ; chưa xác minh với cơ sở dữ liệu đăng kiểm bên ngoài."
+            return self.json(200, result)
+        if path == "/api/crew":
+            with connection() as db:
+                return self.json(201, save_crew_member(db, self.body_json()))
         if path == "/api/declarations":
             submit = (query.get("submit") or ["false"])[0].lower() == "true"
             with connection() as db:
                 return self.json(201, save_declaration(db, self.body_json(), submit=submit))
+        workflow_match = re.fullmatch(r"/api/declarations/(\d+)/workflow", path)
+        if workflow_match:
+            with connection() as db:
+                return self.json(200, transition_declaration(db, int(workflow_match.group(1)), self.body_json()))
         if path in ("/api/import/vessels", "/api/import/declaration"):
             content = self.body_bytes()
+            validate_attachment_content(".xlsx", content)
             sheets = read_workbook(content)
             with connection() as db:
                 if path.endswith("vessels"):
@@ -289,6 +567,55 @@ class Handler(BaseHTTPRequestHandler):
                 row = declaration_row(sheets)
                 result = save_declaration(db, row, imported=True)
                 return self.json(200, {"accepted": 1, "declaration": result})
+        attachment_match = re.fullmatch(r"/api/declarations/(\d+)/attachments", path)
+        if attachment_match:
+            declaration_id = int(attachment_match.group(1))
+            original_name = (query.get("filename") or [""])[0].strip()
+            extension = Path(original_name).suffix.lower()
+            if not original_name or extension not in ALLOWED_ATTACHMENT_EXTENSIONS:
+                raise ApiError(415, "Chỉ nhận ảnh, PDF, Word hoặc Excel.")
+            content = self.body_bytes()
+            safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(original_name).stem).strip("-.") or "attachment"
+            stored_name = f"{uuid.uuid4().hex}-{safe_stem[:80]}{extension}"
+            UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+            target = (UPLOAD_ROOT / stored_name).resolve()
+            if UPLOAD_ROOT.resolve() not in target.parents:
+                raise ApiError(400, "Tên file không hợp lệ.")
+            with connection() as db:
+                if not db.execute("SELECT 1 FROM declarations WHERE id=?", (declaration_id,)).fetchone():
+                    raise ApiError(404, "Không tìm thấy phiếu khai báo.")
+                target.write_bytes(content)
+                cursor = db.execute(
+                    "INSERT INTO attachments(declaration_id,original_name,stored_name,content_type,size_bytes,created_at) VALUES(?,?,?,?,?,?)",
+                    (declaration_id, original_name[:255], stored_name, self.headers.get("Content-Type", "application/octet-stream"), len(content), now_iso()),
+                )
+                attachment_id = int(cursor.lastrowid)
+                audit(db, "DECLARATION", declaration_id, "ATTACH_FILE", original_name)
+            return self.json(201, {"id": attachment_id, "original_name": original_name, "size_bytes": len(content)})
+        if path == "/api/integrations/prepare-sync":
+            payload = self.body_json()
+            report_from = str(payload.get("from") or "")
+            report_to = str(payload.get("to") or "")
+            validate_required({"from": report_from, "to": report_to}, ["from", "to"])
+            with connection() as db:
+                records = [enrich_declaration(db, row) for row in db.execute(
+                    "SELECT * FROM declarations WHERE status='SUBMITTED' AND substr(eta,1,10) BETWEEN ? AND ? ORDER BY eta",
+                    (report_from, report_to),
+                )]
+                sync_payload = {
+                    "schemaVersion": "draft.pending-authority-contract",
+                    "reportingUnit": "TIEN-TAN THUAN PORT",
+                    "period": {"from": report_from, "to": report_to},
+                    "recordCount": len(records),
+                    "records": records,
+                }
+                cursor = db.execute(
+                    "INSERT INTO sync_jobs(connector_key,report_from,report_to,status,record_count,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                    ("LOCAL_MARITIME_AUTHORITY", report_from, report_to, "PREPARED", len(records), json.dumps(sync_payload, ensure_ascii=False, default=str), now_iso()),
+                )
+                job_id = int(cursor.lastrowid)
+                audit(db, "SYNC_JOB", job_id, "PREPARE", f"{report_from}..{report_to} / {len(records)} records")
+            return self.json(201, {"id": job_id, "status": "PREPARED", "recordCount": len(records), "payloadPreview": sync_payload, "sendAuthorized": False})
         raise ApiError(404, "Không tìm thấy API.")
 
     def report(self, kind: str, query: dict[str, list[str]]) -> None:
@@ -336,6 +663,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def file_response(self, path: Path, content_type: str, download_name: str) -> None:
+        content = path.read_bytes()
+        safe_name = re.sub(r"[\r\n\"]+", "_", download_name)
+        self.send_response(200)
+        self.send_header("Content-Type", content_type or "application/octet-stream")
+        self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)

@@ -20,5 +20,10 @@ ephemeral container filesystem or a network filesystem with unreliable locks.
 - Operator review of the Appendix field mapping against the signed reporting
   instructions.
 - Privacy notice and customer consent language approved by the company.
+- Persistent `data/uploads/` storage plus malware scanning and quarantine.
+- Official Maritime Authority API specification, test environment, credentials,
+  retry/idempotency rules, and signed data-sharing approval before enabling send.
+- External registry API authority and matching rules before presenting a check
+  as registry-verified; local date checks must remain labelled as local.
 
 The current MVP does not claim production or legal-approval readiness.

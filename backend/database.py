@@ -74,6 +74,9 @@ def init_db() -> None:
                 safety_certificate_no TEXT NOT NULL DEFAULT '',
                 certificate_issue_date TEXT,
                 certificate_expiry_date TEXT,
+                registry_verification_status TEXT NOT NULL DEFAULT 'NOT_VERIFIED',
+                registry_verified_at TEXT,
+                registry_verification_source TEXT NOT NULL DEFAULT '',
                 notes TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -106,6 +109,18 @@ def init_db() -> None:
                 load_json TEXT NOT NULL,
                 master_name TEXT NOT NULL,
                 master_phone TEXT NOT NULL,
+                movement_type TEXT NOT NULL DEFAULT 'ARRIVAL',
+                purpose TEXT NOT NULL DEFAULT '',
+                cargo_description TEXT NOT NULL DEFAULT '',
+                actual_arrival_at TEXT,
+                actual_departure_at TEXT,
+                workflow_status TEXT NOT NULL DEFAULT 'DRAFT',
+                cv_approval TEXT NOT NULL DEFAULT 'PENDING',
+                qlc_approval TEXT NOT NULL DEFAULT 'PENDING',
+                bp_approval TEXT NOT NULL DEFAULT 'PENDING',
+                permit_no TEXT NOT NULL DEFAULT '',
+                issued_at TEXT,
+                revoked_at TEXT,
                 submitted_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -120,11 +135,115 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS declaration_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                declaration_id INTEGER NOT NULL REFERENCES declarations(id) ON DELETE CASCADE,
+                action TEXT NOT NULL,
+                from_status TEXT NOT NULL DEFAULT '',
+                to_status TEXT NOT NULL,
+                actor_name TEXT NOT NULL,
+                actor_role TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS crew_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER REFERENCES organizations(id),
+                vessel_id INTEGER REFERENCES vessels(id),
+                full_name TEXT NOT NULL,
+                crew_role TEXT NOT NULL,
+                phone TEXT NOT NULL DEFAULT '',
+                identity_no TEXT NOT NULL DEFAULT '',
+                professional_certificate_type TEXT NOT NULL,
+                professional_certificate_no TEXT NOT NULL,
+                certificate_issue_date TEXT,
+                certificate_expiry_date TEXT,
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS declaration_crew (
+                declaration_id INTEGER NOT NULL REFERENCES declarations(id) ON DELETE CASCADE,
+                crew_member_id INTEGER NOT NULL REFERENCES crew_members(id),
+                crew_role_snapshot TEXT NOT NULL,
+                certificate_no_snapshot TEXT NOT NULL,
+                certificate_expiry_snapshot TEXT,
+                PRIMARY KEY (declaration_id, crew_member_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                declaration_id INTEGER NOT NULL REFERENCES declarations(id) ON DELETE CASCADE,
+                original_name TEXT NOT NULL,
+                stored_name TEXT NOT NULL UNIQUE,
+                content_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS integration_connectors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                connector_key TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'NOT_CONFIGURED',
+                base_url TEXT NOT NULL DEFAULT '',
+                auth_mode TEXT NOT NULL DEFAULT 'PENDING_AUTHORITY_SPEC',
+                last_sync_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                connector_key TEXT NOT NULL,
+                report_from TEXT NOT NULL,
+                report_to TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'PREPARED',
+                record_count INTEGER NOT NULL DEFAULT 0,
+                payload_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                sent_at TEXT
+            );
+
             CREATE INDEX IF NOT EXISTS idx_vessel_org ON vessels(organization_id);
             CREATE INDEX IF NOT EXISTS idx_declaration_dates ON declarations(eta, etd);
             CREATE INDEX IF NOT EXISTS idx_declaration_status ON declarations(status);
+            CREATE INDEX IF NOT EXISTS idx_declaration_workflow ON declarations(workflow_status, movement_type);
+            CREATE INDEX IF NOT EXISTS idx_declaration_events ON declaration_events(declaration_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_crew_vessel ON crew_members(vessel_id);
+            CREATE INDEX IF NOT EXISTS idx_attachment_declaration ON attachments(declaration_id);
             """
         )
+        _ensure_column(db, "vessels", "registry_verification_status", "TEXT NOT NULL DEFAULT 'NOT_VERIFIED'")
+        _ensure_column(db, "vessels", "registry_verified_at", "TEXT")
+        _ensure_column(db, "vessels", "registry_verification_source", "TEXT NOT NULL DEFAULT ''")
+        declaration_columns = {
+            "movement_type": "TEXT NOT NULL DEFAULT 'ARRIVAL'",
+            "purpose": "TEXT NOT NULL DEFAULT ''",
+            "cargo_description": "TEXT NOT NULL DEFAULT ''",
+            "actual_arrival_at": "TEXT",
+            "actual_departure_at": "TEXT",
+            "workflow_status": "TEXT NOT NULL DEFAULT 'DRAFT'",
+            "cv_approval": "TEXT NOT NULL DEFAULT 'PENDING'",
+            "qlc_approval": "TEXT NOT NULL DEFAULT 'PENDING'",
+            "bp_approval": "TEXT NOT NULL DEFAULT 'PENDING'",
+            "permit_no": "TEXT NOT NULL DEFAULT ''",
+            "issued_at": "TEXT",
+            "revoked_at": "TEXT",
+        }
+        for column, declaration in declaration_columns.items():
+            _ensure_column(db, "declarations", column, declaration)
+        db.execute(
+            "INSERT OR IGNORE INTO integration_connectors(connector_key,display_name,status,auth_mode,updated_at) VALUES(?,?,?,?,?)",
+            ("LOCAL_MARITIME_AUTHORITY", "API Cảng vụ địa phương", "NOT_CONFIGURED", "PENDING_AUTHORITY_SPEC", now_iso()),
+        )
+
+
+def _ensure_column(db: sqlite3.Connection, table: str, column: str, declaration: str) -> None:
+    columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
 
 def rows_to_dicts(rows: Any) -> list[dict[str, Any]]:
@@ -172,4 +291,3 @@ def decode_declaration(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     item["unload"] = json.loads(item.pop("unload_json"))
     item["load"] = json.loads(item.pop("load_json"))
     return item
-

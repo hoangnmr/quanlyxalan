@@ -18,11 +18,25 @@
 - Import mapping for the two provided XLSX templates.
 - Appendix 1, 2, and 3 XLSX report endpoints.
 - CVF Ops / Industrial responsive frontend with dark/light modes.
+- Port Declaration System branding with CSG logo.
+- Crew List and professional certificate snapshots/warnings.
+- Local vessel registry-expiry check with explicit source boundary.
+- Multi-file declaration attachments for image, PDF, Word, and Excel.
+- Maritime Authority API sync preparation queue; outbound send remains disabled.
+- Arrival/departure permit type, planned and actual movement times, purpose,
+  cargo summary, advanced operational filters, and mobile status cards.
+- Ordered CV/QLC/BP approval, change requests, permit issue/revocation, and an
+  append-only declaration timeline.
 
 ## Verification
 
 - Python compile check: PASS.
-- Backend unit tests: PASS (2/2).
+- Backend unit tests: PASS (5/5 after feature expansion).
+- Real HTTP approval smoke: CV -> QLC -> BP -> issue, filters, and 5-event
+  timeline PASS.
+- Runtime Crew List, registry date check, attachment, dashboard filter, and sync
+  preparation flow: PASS.
+- Outbound Maritime Authority send authorization: `false` by design.
 - Runtime health, vessel create, declaration submit: PASS.
 - TEU test: 7 containers -> 11 TEU; empty -> 3 TEU: PASS.
 - Generated Appendix 3 opened by Microsoft Excel: PASS.

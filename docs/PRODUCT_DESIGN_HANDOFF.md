@@ -2,7 +2,7 @@
 
 ## 1. Website Goal
 
-Build a company-hosted web application for Tan Thuan Port customers to maintain
+Build a company-hosted web application for TIEN-TAN THUAN PORT customers to maintain
 inland-waterway vessel profiles, submit one declaration per port call, reuse
 prior data, import the existing Excel forms, and produce periodic Appendix 1,
 2, and 3 reports for the Maritime Administration.
@@ -23,6 +23,9 @@ prior data, import the existing Excel forms, and produce periodic Appendix 1,
 5. Appendix 1 daily plan, Appendix 2 monthly/cumulative summary, and Appendix 3
    detailed port-call export.
 6. Audit history for create, edit, submit, and import actions.
+7. Crew List with professional certificate expiry warnings.
+8. Images/PDF/Word/Excel attachments stored with each declaration.
+9. Connector-ready Maritime Authority synchronization with prepared payloads.
 
 ## 4. CVF Web Design DNA
 
@@ -72,3 +75,6 @@ is port teal, remapped through CVF accent roles.
 - [x] Appendix 1/2/3 exports are available.
 - [x] Desktop and mobile layouts are usable.
 - [x] API and CVF workspace checks pass.
+- [x] Crew List and certificate warning flow work.
+- [x] Attachment upload flow works with allowed file types.
+- [x] Maritime Authority sync jobs remain preview-only until configured.

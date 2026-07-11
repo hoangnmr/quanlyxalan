@@ -79,7 +79,8 @@ commit/Doctor evidence.
 - Write forms now expose `aria-busy`, disable duplicate submit attempts and
   restore controls after success or error; API failures are announced as
   `role=alert`.
-- Local automated evidence: `65 passed`; `git diff --check` PASS.
+- Local automated evidence: `66 passed`; `git diff --check` PASS; CVF Doctor
+  PASS 17/17 after the final local checkpoint.
 - `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` defines the pending representative-user,
   WCAG/responsive and performance evidence without asserting unperformed UAT.
 - Added an auditable per-user in-app certificate-reminder preference, an

@@ -315,7 +315,7 @@ adapter-ready; external activation remains blocked.
 - CVF public core reconciled at `141031c`; Workspace Doctor: PASS 17/17.
 - Added audited, user-controlled in-app certificate-reminder preferences;
   fresh SQLite Alembic upgrade through `f05f0f000005` rehearsal: PASS.
-- Tests: `65 passed, 0 failed`; `git diff --check`: PASS.
+- Tests: `66 passed, 0 failed`; `git diff --check`: PASS; CVF Doctor: PASS 17/17.
 
 ### Open Gate 5 evidence
 

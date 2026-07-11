@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="vi" data-theme="dark" data-accent="teal">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cổng khai báo phương tiện thủy nội địa Cảng Tân Thuận">
+  <title>Cảng Tân Thuận | Khai báo PTTND</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Điều hướng chính">
+      <a class="brand" href="#dashboard" aria-label="Về tổng quan">
+        <span class="brand-mark">TT</span>
+        <span><strong>Cảng Tân Thuận</strong><small>Khai báo PTTND</small></span>
+      </a>
+      <div class="workspace-chip"><span class="status-dot"></span><span><small>HỆ THỐNG</small><strong>Đang hoạt động</strong></span></div>
+      <nav>
+        <p class="nav-label">Vận hành</p>
+        <a href="#dashboard" data-route="dashboard"><span>▦</span>Tổng quan</a>
+        <a href="#declarations" data-route="declarations"><span>▤</span>Phiếu khai báo</a>
+        <a href="#vessels" data-route="vessels"><span>◈</span>Hồ sơ phương tiện</a>
+        <p class="nav-label">Dữ liệu</p>
+        <a href="#import" data-route="import"><span>⇧</span>Import Excel</a>
+        <a href="#reports" data-route="reports"><span>⇩</span>Báo cáo Cảng vụ</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="theme-toggle" class="ghost-button" type="button">Chuyển giao diện</button>
+        <small>CVF governed workspace</small>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <button id="menu-toggle" class="icon-button mobile-only" aria-label="Mở menu">☰</button>
+        <div><span class="eyebrow">CỔNG THÔNG TIN KHÁCH HÀNG</span><strong id="page-context">Tổng quan khai báo</strong></div>
+        <div class="topbar-actions"><span id="api-state" class="state-badge pending">Đang kết nối</span><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
+      </header>
+
+      <main id="main-content">
+        <section class="page active" data-page="dashboard">
+          <div class="page-heading"><div><p class="eyebrow">TÌNH HÌNH HÔM NAY</p><h1>Bàn điều phối khai báo</h1><p>Trạng thái hồ sơ phương tiện và các lượt tàu dự kiến.</p></div><button class="primary-button" data-action="new-declaration">+ Khai báo lượt mới</button></div>
+          <div id="stats" class="stat-grid" aria-live="polite"></div>
+          <div class="content-grid">
+            <section class="panel span-2"><div class="panel-header"><div><p class="eyebrow">HOẠT ĐỘNG GẦN ĐÂY</p><h2>Phiếu khai báo</h2></div><button class="soft-button" data-route-link="declarations">Xem tất cả</button></div><div id="recent-table" class="table-wrap"></div></section>
+            <aside class="panel action-panel"><p class="eyebrow">THAO TÁC NHANH</p><h2>Không nhập lại dữ liệu</h2><p>Chọn phương tiện đã lưu để tự điền hồ sơ hoặc import trực tiếp từ mẫu Excel.</p><button class="primary-button full" data-action="new-declaration">Tạo từ hồ sơ tàu</button><button class="outline-button full" data-route-link="import">Import file Excel</button><div class="rule-note"><span>✓</span><p><strong>TEU tự động</strong><br>20' = 1 TEU, 40' = 2 TEU</p></div></aside>
+          </div>
+        </section>
+
+        <section class="page" data-page="vessels">
+          <div class="page-heading"><div><p class="eyebrow">DANH MỤC DÙNG LẠI</p><h1>Hồ sơ phương tiện</h1><p>Khai một lần, chọn lại cho những lượt đến cảng sau.</p></div><button class="primary-button" id="add-vessel">+ Thêm phương tiện</button></div>
+          <section class="panel"><div class="filter-bar"><label class="search"><span>⌕</span><input id="vessel-search" placeholder="Tìm tên tàu hoặc số đăng ký"></label><span id="vessel-count" class="muted"></span></div><div id="vessel-table" class="table-wrap"></div></section>
+        </section>
+
+        <section class="page" data-page="declarations">
+          <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Phiếu khai báo trước khi đến cảng</h1><p>Lưu nháp, kiểm tra và nộp phiếu có dấu vết thay đổi.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
+          <section class="panel"><div class="filter-bar"><div class="segmented"><button class="active" data-filter-status="">Tất cả</button><button data-filter-status="DRAFT">Nháp</button><button data-filter-status="SUBMITTED">Đã nộp</button></div><span id="declaration-count" class="muted"></span></div><div id="declaration-table" class="table-wrap"></div></section>
+        </section>
+
+        <section class="page" data-page="import">
+          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><h1>Import biểu mẫu Excel</h1><p>Dùng đúng hai file mẫu đã phát hành để map dữ liệu vào hệ thống.</p></div></div>
+          <div class="import-grid">
+            <section class="panel upload-card"><span class="upload-icon">▦</span><h2>Hồ sơ phương tiện</h2><p>Nhập danh sách phương tiện từ <code>Ho_so_phuong_tien_thuy_noi_dia.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" id="import-vessels" accept=".xlsx"></label></section>
+            <section class="panel upload-card"><span class="upload-icon">▤</span><h2>Phiếu khai báo</h2><p>Nhập một lượt từ <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
+          </div>
+          <section class="panel"><div class="panel-header"><div><p class="eyebrow">NHẬT KÝ IMPORT</p><h2>Kết quả gần nhất</h2></div></div><div id="import-result" class="empty-state">Chưa có file nào được import trong phiên này.</div></section>
+        </section>
+
+        <section class="page" data-page="reports">
+          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu gửi Cảng vụ</h1><p>Dữ liệu được tổng hợp từ các phiếu đã nộp trong kỳ.</p></div></div>
+          <section class="panel report-filter"><label>Từ ngày<input id="report-from" type="date"></label><label>Đến ngày<input id="report-to" type="date"></label><p><span class="info-dot">i</span> Chỉ phiếu ở trạng thái <strong>Đã nộp</strong> được đưa vào báo cáo.</p></section>
+          <div class="report-grid">
+            <article class="panel report-card"><span>PL.01</span><h2>Kế hoạch hoạt động PTTND</h2><p>Kế hoạch theo ngày, vị trí đến/rời, hàng hóa và thuyền trưởng.</p><button class="outline-button" data-report="appendix-1">Xuất Excel</button></article>
+            <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button" data-report="appendix-2">Xuất Excel</button></article>
+            <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button" data-report="appendix-3">Xuất Excel</button></article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="vessel-dialog" class="modal"><form id="vessel-form"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ DÙNG LẠI</p><h2>Thông tin phương tiện</h2></div><button type="button" class="icon-button" data-close-dialog="vessel-dialog" aria-label="Đóng">×</button></div><div id="vessel-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="vessel-dialog">Hủy</button><button type="submit" class="primary-button" id="save-vessel">Lưu hồ sơ</button></div></form></dialog>
+
+  <dialog id="declaration-dialog" class="modal wide"><form id="declaration-form"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Tự lưu trên trình duyệt</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div><div id="declaration-fields"></div><div class="review-strip"><div><strong>Kiểm tra trước khi nộp</strong><p>Dấu * là bắt buộc. Phiếu đã nộp được khóa để bảo toàn báo cáo.</p></div><div><button type="submit" class="outline-button" value="draft" id="save-draft">Lưu nháp</button><button type="submit" class="primary-button" value="submit" id="submit-declaration">Kiểm tra & nộp</button></div></div></form></dialog>
+
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

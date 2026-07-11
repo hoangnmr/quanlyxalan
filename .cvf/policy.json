@@ -1,0 +1,18 @@
+﻿{
+    "policyVersion":  "1.0",
+    "policyDate":  "2026-07-11",
+    "liveGovernanceEvidenceRequired":  true,
+    "mockAllowedOnlyForUi":  true,
+    "workspaceIsolationRequired":  true,
+    "workspaceRulesRequired":  true,
+    "phaseTransitionRequired":  true,
+    "riskCeiling":  "R2",
+    "overrideRefusal":  [
+                            "Skip phase transitions",
+                            "Use mock output as governance evidence",
+                            "Commit API keys or secrets to the repository",
+                            "Act outside the workspace isolation boundary",
+                            "Ignore CVF policy constraints"
+                        ],
+    "cvfCoreRef":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\.Controlled-Vibe-Framework-CVF"
+}

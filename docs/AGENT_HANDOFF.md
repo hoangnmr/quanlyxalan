@@ -303,7 +303,10 @@ adapter-ready; external activation remains blocked.
 - Added keyboard skip navigation, route focus management, visible focus,
   screen-reader status regions and dashboard `aria-busy` feedback.
 - Static frontend assertions cover these accessibility hooks.
-- Tests: `63 passed, 0 failed`; `git diff --check`: PASS.
+- Added compatible opt-in pagination for declarations: scope-safe filters,
+  bound 1–100 page sizes, allowlisted ordering and URL-preserved filter/page
+  state in the UI.
+- Tests: `64 passed, 0 failed`; `git diff --check`: PASS.
 
 ### Open Gate 5 evidence
 

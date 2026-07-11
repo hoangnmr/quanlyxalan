@@ -69,6 +69,10 @@ commit/Doctor evidence.
 - Added a keyboard skip link, route focus target, visible focus styling,
   screen-reader status announcements and an explicit dashboard busy state.
 - Static frontend assertions cover the new semantic hooks.
-- Local automated evidence: `63 passed`; `git diff --check` PASS.
+- Declaration list uses an opt-in server-side pagination envelope with stable
+  filters, an allowlisted sort contract and bounded `page_size` (1–100); old
+  callers keep the compatible array response. Filter/page state is retained in
+  the browser URL.
+- Local automated evidence: `64 passed`; `git diff --check` PASS.
 - Open before Gate 5: representative-user protocol/results, browser-assisted
   WCAG audit, responsive matrix and measured performance budget.

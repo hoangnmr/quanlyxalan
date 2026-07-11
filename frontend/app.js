@@ -1,6 +1,6 @@
 const state = {
   catalogs: {}, vessels: [], declarations: [], organizations: [], crew: [],
-  declarationFilter: {}, editingVessel: null, editingDeclaration: null, editingCrew: null, workflowDeclaration: null,
+  declarationFilter: {}, declarationPage: 1, declarationPaging: null, editingVessel: null, editingDeclaration: null, editingCrew: null, workflowDeclaration: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -130,13 +130,27 @@ function renderVessels() {
 
 async function loadDeclarations() {
   try {
-    const query = new URLSearchParams(Object.entries(state.declarationFilter).filter(([, value]) => value));
-    state.declarations = await api(`/api/declarations${query.size ? `?${query}` : ''}`);
-    $('#declaration-count').textContent = `${state.declarations.length} phiếu`;
+    const query = new URLSearchParams(Object.entries({...state.declarationFilter, page: state.declarationPage, page_size: 25, sort: 'updated_at', direction: 'desc'}).filter(([, value]) => value));
+    const result = await api(`/api/declarations?${query}`);
+    state.declarations = result.items;
+    state.declarationPaging = result;
+    $('#declaration-count').textContent = `${result.total} phiếu`;
     $('#declaration-table').innerHTML = declarationTable(state.declarations, true);
+    renderDeclarationPagination(result);
     $$('[data-edit-declaration]').forEach(button => button.onclick = () => openDeclaration(Number(button.dataset.editDeclaration)));
     $$('[data-workflow]').forEach(button => button.onclick = () => openWorkflow(Number(button.dataset.workflow)));
   } catch (error) { toast(error.message, true); }
+}
+
+function renderDeclarationPagination(result) {
+  const container = $('#declaration-pagination');
+  if (result.total_pages <= 1) { container.innerHTML = ''; return; }
+  container.innerHTML = `<span>Trang ${result.page}/${result.total_pages}</span><button type="button" data-declaration-page="${result.page - 1}" ${result.page <= 1 ? 'disabled' : ''}>Trước</button><button type="button" data-declaration-page="${result.page + 1}" ${result.page >= result.total_pages ? 'disabled' : ''}>Sau</button>`;
+  $$('[data-declaration-page]', container).forEach(button => button.onclick = () => {
+    state.declarationPage = Number(button.dataset.declarationPage);
+    syncDeclarationUrl();
+    loadDeclarations();
+  });
 }
 
 function declarationTable(items = [], editable = false) {
@@ -434,7 +448,16 @@ async function saveWorkflow(event) {
 
 function applyDeclarationFilters() {
   state.declarationFilter = {q:$('#declaration-search').value.trim(),movement_type:$('#movement-filter').value,workflow_status:$('#workflow-filter').value,master_name:$('#master-filter').value.trim(),from:$('#declaration-from').value,to:$('#declaration-to').value};
+  state.declarationPage = 1;
+  syncDeclarationUrl();
   loadDeclarations();
+}
+
+function syncDeclarationUrl() {
+  const params = new URLSearchParams(Object.entries({...state.declarationFilter, page: state.declarationPage}).filter(([, value]) => value));
+  const url = new URL(window.location);
+  url.search = params.toString();
+  history.replaceState(null, '', url);
 }
 
 async function importFile(input, path) {
@@ -521,6 +544,11 @@ async function init() {
     return;
   }
 
+  const savedDeclarationQuery = new URLSearchParams(location.search);
+  ['q','movement_type','workflow_status','master_name','from','to'].forEach(key => { if (savedDeclarationQuery.get(key)) state.declarationFilter[key] = savedDeclarationQuery.get(key); });
+  state.declarationPage = Number(savedDeclarationQuery.get('page') || 1);
+  const filterControls = {q: 'declaration-search', movement_type: 'movement-filter', workflow_status: 'workflow-filter', master_name: 'master-filter', from: 'declaration-from', to: 'declaration-to'};
+  Object.entries(filterControls).forEach(([key, id]) => { if (state.declarationFilter[key]) $(`#${id}`).value = state.declarationFilter[key]; });
   $$('[data-route-link]').forEach(button => button.onclick = () => location.hash = button.dataset.routeLink);
   $$('[data-action="new-declaration"]').forEach(button => button.onclick = () => openDeclaration());
   $('#add-vessel').onclick = () => openVessel();

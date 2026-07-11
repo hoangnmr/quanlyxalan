@@ -194,6 +194,21 @@ def test_static_frontend(client):
     assert 'id="toast-region" class="toast-region" role="status"' in res.text
 
 
+def test_declaration_pagination_contract_is_bounded_and_compatible(client, auth_headers):
+    legacy = client.get("/api/declarations", headers=auth_headers)
+    assert legacy.status_code == 200
+    assert isinstance(legacy.json(), list)
+
+    paged = client.get("/api/declarations?page=1&page_size=1&sort=reference_no&direction=asc", headers=auth_headers)
+    assert paged.status_code == 200
+    body = paged.json()
+    assert {"items", "page", "page_size", "total", "total_pages", "sort", "direction"}.issubset(body)
+    assert body["page_size"] == 1
+    assert len(body["items"]) <= 1
+
+    assert client.get("/api/declarations?page=1&page_size=101", headers=auth_headers).status_code == 422
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. AUTHENTICATION
 # ══════════════════════════════════════════════════════════════════════════════

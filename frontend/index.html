@@ -70,7 +70,7 @@
         <section class="page" data-page="declarations">
           <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Điều phối phiếu vào, rời cảng</h1><p>Theo dõi khai báo, kiểm tra nhiều cấp, ban hành và lịch sử xử lý.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
           <section class="panel advanced-filter"><label>Tàu / số đăng ký<input id="declaration-search" placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select id="movement-filter"><option value="">Tất cả</option><option value="ARRIVAL">Vào cảng</option><option value="DEPARTURE">Rời cảng</option></select></label><label>Trạng thái<select id="workflow-filter"><option value="">Tất cả</option><option value="PENDING_REVIEW">Chờ CV</option><option value="PENDING_QLC">Chờ QLC</option><option value="PENDING_BP">Chờ BP</option><option value="CHANGES_REQUESTED">Cần bổ sung</option><option value="APPROVED">Đã duyệt</option><option value="ISSUED">Đã ban hành</option><option value="REVOKED">Đã thu hồi</option></select></label><label>Thuyền trưởng<input id="master-filter" placeholder="Họ tên"></label><label>Từ ngày<input id="declaration-from" type="date"></label><label>Đến ngày<input id="declaration-to" type="date"></label><button id="clear-declaration-filter" class="ghost-button">Đặt lại</button><span id="declaration-count" class="muted"></span></section>
-          <section class="panel"><div id="declaration-table" class="table-wrap"></div></section>
+          <section class="panel"><div id="declaration-table" class="table-wrap"></div><div id="declaration-pagination" class="pagination" aria-label="Phân trang phiếu khai báo"></div></section>
         </section>
 
         <section class="page" data-page="crew">

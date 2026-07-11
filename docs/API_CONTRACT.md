@@ -74,7 +74,7 @@ This system implements four roles with distinct scopes of operations.
 
 | Method | Path | Allowed Roles | Request | Response |
 |--------|------|---------------|---------|----------|
-| GET | `/api/declarations` | Any | query filters | `[Declaration]` |
+| GET | `/api/declarations` | Any | query filters; optional `page`, `page_size` (1–100), `sort`, `direction` | `[Declaration]` or paged envelope |
 | POST | `/api/declarations?submit=false` | CUSTOMER, ADMIN | `DeclarationSaveRequest` | `Declaration` |
 | POST | `/api/declarations?submit=true` | CUSTOMER | `DeclarationSaveRequest` | `Declaration` |
 | POST | `/api/declarations/{id}/attachments` | CUSTOMER, ADMIN | raw file body | `Attachment` |
@@ -82,6 +82,11 @@ This system implements four roles with distinct scopes of operations.
 | POST | `/api/declarations/{id}/workflow` | CV, QLC, BP | `WorkflowActionRequest` | `Declaration` |
 
 *   **Tenant Constraint**: If `CUSTOMER`, GET/POST/attachments are strictly restricted to own organization's declarations.
+*   **Paging Contract**: Existing callers without `page` receive the compatible
+    array response. Callers sending `page` receive `{items, page, page_size,
+    total, total_pages, sort, direction}`. Sort is allowlisted to
+    `updated_at`, `declaration_date`, `reference_no` and `workflow_status`;
+    `direction` is `asc` or `desc`.
 *   **Workflow Constraints**:
     *   Only `CUSTOMER` is allowed to submit a declaration (`submit=true`).
     *   `ADMIN` is denied from workflow actions.

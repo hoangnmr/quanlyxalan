@@ -879,6 +879,10 @@ def get_declarations(
     master_name: Optional[str] = None,
     from_: Optional[str] = Query(default=None, alias="from"),
     to: Optional[str] = None,
+    page: Optional[int] = Query(default=None, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    sort: str = Query(default="updated_at"),
+    direction: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
 ):
@@ -909,8 +913,30 @@ def get_declarations(
         query = query.filter(Declaration.declaration_date >= from_)
     if to:
         query = query.filter(Declaration.declaration_date <= to)
-    decls = query.order_by(desc(Declaration.updated_at)).all()
-    return [_declaration_dict(d) for d in decls]
+    sort_columns = {
+        "updated_at": Declaration.updated_at,
+        "declaration_date": Declaration.declaration_date,
+        "reference_no": Declaration.reference_no,
+        "workflow_status": Declaration.workflow_status,
+    }
+    order_column = sort_columns.get(sort, Declaration.updated_at)
+    ordered = query.order_by(order_column.asc() if direction == "asc" else order_column.desc(), Declaration.id.desc())
+    if page is None:
+        # Compatibility mode for existing consumers. New UI clients must opt in
+        # to the bounded envelope by sending an explicit page number.
+        return [_declaration_dict(d) for d in ordered.all()]
+
+    total = query.order_by(None).count()
+    decls = ordered.offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [_declaration_dict(d) for d in decls],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+        "sort": sort if sort in sort_columns else "updated_at",
+        "direction": direction,
+    }
 
 
 @app.post("/api/declarations")

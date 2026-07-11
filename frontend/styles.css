@@ -162,3 +162,5 @@ html[data-theme="light"] .theme-btn .moon-icon {
 :focus-visible { outline: 3px solid var(--cvf-accent); outline-offset: 3px; }
 main[aria-busy="true"] { cursor: progress; }
 main[aria-busy="true"] .page.active { opacity: .72; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 14px; color: var(--cvf-text-muted); font-size: 12px; }
+.pagination button:disabled { cursor: not-allowed; opacity: .45; }

@@ -310,6 +310,8 @@ adapter-ready; external activation remains blocked.
   it displays only statuses visible to that role and never grants an action.
 - Standardized write-form busy/recovery states and assertive API-error
   announcements to avoid duplicate submissions and inaccessible failures.
+- Added `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` for controlled UAT,
+  accessibility, responsive and performance evidence collection.
 - Tests: `65 passed, 0 failed`; `git diff --check`: PASS.
 
 ### Open Gate 5 evidence

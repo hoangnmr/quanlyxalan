@@ -80,5 +80,7 @@ commit/Doctor evidence.
   restore controls after success or error; API failures are announced as
   `role=alert`.
 - Local automated evidence: `65 passed`; `git diff --check` PASS.
+- `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` defines the pending representative-user,
+  WCAG/responsive and performance evidence without asserting unperformed UAT.
 - Open before Gate 5: representative-user protocol/results, browser-assisted
   WCAG audit, responsive matrix and measured performance budget.

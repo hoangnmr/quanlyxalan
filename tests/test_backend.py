@@ -26,7 +26,7 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.models import AuditEvent, Base, User, Organization
+from backend.models import AuditEvent, Base, ImportJob, User, Organization
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db
@@ -787,3 +787,40 @@ def test_crew_certificate_snapshot(client, customer_headers):
     assert res.status_code == 200
     # Crew snapshot was recorded (declaration created with crew_ids)
     assert res.json()["workflow_status"] == "PENDING_REVIEW"
+
+
+def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
+    root = Path(__file__).resolve().parents[1]
+    vessel_content = (root / "templates" / "Ho_so_phuong_tien_thuy_noi_dia.xlsx").read_bytes()
+
+    db = SessionLocal()
+    before = db.query(ImportJob).count()
+    db.close()
+    preview = client.post(
+        "/api/import/vessels?preview=true",
+        content=vessel_content,
+        headers={**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["preview"] is True
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.0"
+    db = SessionLocal()
+    assert db.query(ImportJob).count() == before
+    db.close()
+
+    declaration_content = (root / "templates" / "Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx").read_bytes()
+    first = client.post(
+        "/api/import/declaration",
+        content=declaration_content,
+        headers={**customer_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    )
+    assert first.status_code == 200
+    assert first.json()["idempotent"] is False
+    repeated = client.post(
+        "/api/import/declaration",
+        content=declaration_content,
+        headers={**customer_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["idempotent"] is True
+    assert repeated.json()["id"] == first.json()["id"]

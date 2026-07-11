@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship, backref
 
 Base = declarative_base()
@@ -214,3 +214,21 @@ class SyncJob(Base):
     payload_json = Column(Text, nullable=False)
     created_at = Column(String, nullable=False, default=now_iso)
     sent_at = Column(String)
+
+
+class ImportJob(Base):
+    __tablename__ = "import_jobs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "import_kind", "source_checksum", "mapping_version", name="uq_import_idempotency"),
+    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    import_kind = Column(String, nullable=False)
+    source_checksum = Column(String, nullable=False)
+    mapping_version = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="COMPLETED")
+    accepted_count = Column(Integer, nullable=False, default=0)
+    rejected_count = Column(Integer, nullable=False, default=0)
+    result_json = Column(Text, nullable=False, default="{}")
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(String, nullable=False, default=now_iso)

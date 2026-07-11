@@ -86,7 +86,8 @@ def read_workbook(content: bytes) -> dict[str, dict[str, Any]]:
         rels = _safe_xml(archive.read("xl/_rels/workbook.xml.rels"), "workbook relationships")
         rel_map = {node.attrib["Id"]: node.attrib["Target"] for node in rels}
         sheets: dict[str, dict[str, Any]] = {}
-        for sheet in workbook.find("m:sheets", NS) or []:
+        sheet_nodes = workbook.find("m:sheets", NS)
+        for sheet in sheet_nodes if sheet_nodes is not None else []:
             rel_id = sheet.attrib["{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"]
             target = rel_map[rel_id].lstrip("/")
             path = target if target.startswith("xl/") else f"xl/{target}"

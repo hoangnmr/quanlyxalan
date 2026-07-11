@@ -7,6 +7,7 @@ Entry point: python -m uvicorn backend.app:app --host 127.0.0.1 --port 8080
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import uuid
 from datetime import date, datetime
@@ -30,10 +31,12 @@ from .rbac import require_roles, verify_organization_ownership
 from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, now_iso
 from .models import (
     Attachment, AuditEvent, Base, CrewMember, Declaration,
-    DeclarationCrew, DeclarationEvent, IntegrationConnector, Organization,
+    DeclarationCrew, DeclarationEvent, ImportJob, IntegrationConnector, Organization,
     SyncJob, User, Vessel,
 )
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
+
+IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.0"
 
 ROOT = Path(__file__).resolve().parents[1]
 ATTACHMENT_DIR = ROOT / "data" / "attachments"
@@ -1192,6 +1195,7 @@ def get_suggestions(
 @app.post("/api/import/vessels")
 async def import_vessels(
     request: Request,
+    preview: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
@@ -1212,42 +1216,84 @@ async def import_vessels(
         org = _get_or_create_org(db, org_data.get("name"))
         org_id = org.id if org else None
 
+    checksum = hashlib.sha256(content).hexdigest()
+    if preview:
+        db.rollback()
+        return {
+            "preview": True,
+            "mappingVersion": IMPORT_MAPPING_VERSION,
+            "checksum": checksum,
+            "organization": org_data,
+            "rows": [{"sourceRow": index, **row} for index, row in enumerate(rows, 11)],
+            "accepted": 0,
+            "rejected": [],
+        }
+    prior = db.query(ImportJob).filter(
+        ImportJob.organization_id == org_id,
+        ImportJob.import_kind == "VESSELS",
+        ImportJob.source_checksum == checksum,
+        ImportJob.mapping_version == IMPORT_MAPPING_VERSION,
+    ).first()
+    if prior:
+        result = json.loads(prior.result_json)
+        result["idempotent"] = True
+        result["importJobId"] = prior.id
+        return result
+
     accepted = 0
     rejected: list[dict] = []
-    for row in rows:
+    for source_row, row in enumerate(rows, 11):
         try:
-            existing = db.query(Vessel).filter(
-                Vessel.registration_no == row.get("registration_no")
-            ).first()
-            if existing:
-                # Tenant isolation check before updating
-                verify_organization_ownership(user, existing.organization_id)
-                for k, v in row.items():
-                    if hasattr(existing, k) and k not in ("id", "created_at", "organization_id"):
-                        setattr(existing, k, excel_date(v) if "date" in k else v)
-                existing.organization_id = org_id
-                existing.updated_at = now_iso()
-            else:
-                safe = {
-                    k: (excel_date(v) if "date" in k else v)
-                    for k, v in row.items()
-                    if hasattr(Vessel, k) and k not in ("id", "organization_id")
-                }
-                safe["organization_id"] = org_id
-                safe["created_at"] = now_iso()
-                safe["updated_at"] = now_iso()
-                db.add(Vessel(**safe))
-            db.flush()
+            with db.begin_nested():
+                existing = db.query(Vessel).filter(
+                    Vessel.registration_no == row.get("registration_no")
+                ).first()
+                if existing:
+                    verify_organization_ownership(user, existing.organization_id)
+                    for k, v in row.items():
+                        if hasattr(existing, k) and k not in ("id", "created_at", "organization_id"):
+                            setattr(existing, k, excel_date(v) if "date" in k else v)
+                    existing.organization_id = org_id
+                    existing.updated_at = now_iso()
+                    existing.version += 1
+                else:
+                    safe = {
+                        k: (excel_date(v) if "date" in k else v)
+                        for k, v in row.items()
+                        if hasattr(Vessel, k) and k not in ("id", "organization_id")
+                    }
+                    safe["organization_id"] = org_id
+                    safe["created_at"] = now_iso()
+                    safe["updated_at"] = now_iso()
+                    db.add(Vessel(**safe))
+                db.flush()
             accepted += 1
         except Exception as exc:
-            rejected.append({"row": row.get("name"), "error": str(exc)})
+            rejected.append({"sourceRow": source_row, "row": row.get("name"), "error": str(exc) or type(exc).__name__})
+    result = {
+        "accepted": accepted,
+        "rejected": rejected,
+        "mappingVersion": IMPORT_MAPPING_VERSION,
+        "checksum": checksum,
+        "idempotent": False,
+    }
+    job = ImportJob(
+        organization_id=org_id, import_kind="VESSELS", source_checksum=checksum,
+        mapping_version=IMPORT_MAPPING_VERSION, accepted_count=accepted,
+        rejected_count=len(rejected), result_json=json.dumps(result, ensure_ascii=False),
+        created_by_user_id=user.id, created_at=now_iso(),
+    )
+    db.add(job)
     db.commit()
-    return {"accepted": accepted, "rejected": rejected}
+    db.refresh(job)
+    result["importJobId"] = job.id
+    return result
 
 
 @app.post("/api/import/declaration")
 async def import_declaration(
     request: Request,
+    preview: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER")),
 ):
@@ -1261,6 +1307,28 @@ async def import_declaration(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Lỗi đọc file: {exc}")
 
+    checksum = hashlib.sha256(content).hexdigest()
+    if preview:
+        return {
+            "preview": True,
+            "mappingVersion": IMPORT_MAPPING_VERSION,
+            "checksum": checksum,
+            "row": row,
+            "accepted": 0,
+            "rejected": [],
+        }
+    prior = db.query(ImportJob).filter(
+        ImportJob.organization_id == user.organization_id,
+        ImportJob.import_kind == "DECLARATION",
+        ImportJob.source_checksum == checksum,
+        ImportJob.mapping_version == IMPORT_MAPPING_VERSION,
+    ).first()
+    if prior:
+        result = json.loads(prior.result_json)
+        result["idempotent"] = True
+        result["importJobId"] = prior.id
+        return result
+
     row["created_at"] = now_iso()
     row["updated_at"] = now_iso()
     row["reference_no"] = f"TT-IMP-{datetime.now():%Y%m%d-%H%M%S}-{datetime.now().microsecond:06d}"
@@ -1270,6 +1338,8 @@ async def import_declaration(
     row["load_json"] = json.dumps(cargo(row.pop("load", {})), ensure_ascii=False)
 
     safe = {k: v for k, v in row.items() if hasattr(Declaration, k)}
+    if not safe.get("declaration_date"):
+        safe["declaration_date"] = date.today().isoformat()
     for required in ("company_name", "vessel_name", "registration_no", "vessel_type",
                      "vessel_class", "last_port", "working_port", "eta", "etd",
                      "master_name", "master_phone"):
@@ -1283,9 +1353,25 @@ async def import_declaration(
 
     decl = Declaration(**safe)
     db.add(decl)
+    db.flush()
+    result = {
+        "accepted": 1, "rejected": [], "id": decl.id,
+        "mappingVersion": IMPORT_MAPPING_VERSION, "checksum": checksum,
+        "idempotent": False,
+    }
+    job = ImportJob(
+        organization_id=user.organization_id, import_kind="DECLARATION",
+        source_checksum=checksum, mapping_version=IMPORT_MAPPING_VERSION,
+        accepted_count=1, rejected_count=0,
+        result_json=json.dumps(result, ensure_ascii=False),
+        created_by_user_id=user.id, created_at=now_iso(),
+    )
+    db.add(job)
     db.commit()
     db.refresh(decl)
-    return {"accepted": 1, "rejected": [], "id": decl.id}
+    db.refresh(job)
+    result["importJobId"] = job.id
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════

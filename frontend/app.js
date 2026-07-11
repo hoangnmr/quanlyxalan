@@ -177,7 +177,10 @@ function openCrew(id = null) {
 async function saveCrew(event) {
   event.preventDefault();
   const data = values($('#crew-form'));
-  if (state.editingCrew?.id) data.id = state.editingCrew.id;
+  if (state.editingCrew?.id) {
+    data.id = state.editingCrew.id;
+    data.version = state.editingCrew.version;
+  }
   try {
     await api('/api/crew', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     $('#crew-dialog').close();
@@ -223,7 +226,10 @@ async function saveVessel(event) {
   const data = values($('#vessel-form'));
   data.organization = {name: data.organization_name};
   delete data.organization_name;
-  if (state.editingVessel?.id) data.id = state.editingVessel.id;
+  if (state.editingVessel?.id) {
+    data.id = state.editingVessel.id;
+    data.version = state.editingVessel.version;
+  }
   try {
     await api('/api/vessels', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     $('#vessel-dialog').close();
@@ -329,7 +335,10 @@ function declarationData() {
     data[prefix] = {cargo_type:data[`${prefix}_cargo_type`],movement_type:data[`${prefix}_movement_type`],cargo_name:data[`${prefix}_cargo_name`],cont20_full:data[`${prefix}_cont20_full`],cont20_empty:data[`${prefix}_cont20_empty`],cont40_full:data[`${prefix}_cont40_full`],cont40_empty:data[`${prefix}_cont40_empty`],tons:data[`${prefix}_tons`]};
     Object.keys(data).filter(key => key.startsWith(`${prefix}_`)).forEach(key => delete data[key]);
   });
-  if (state.editingDeclaration?.id) data.id = state.editingDeclaration.id;
+  if (state.editingDeclaration?.id) {
+    data.id = state.editingDeclaration.id;
+    data.version = state.editingDeclaration.version;
+  }
   return data;
 }
 

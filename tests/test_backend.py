@@ -291,6 +291,35 @@ def test_vessel_stale_version_rejected(client, auth_headers):
     assert stale.status_code == 409
 
 
+def test_duplicate_vessel_rolls_back_new_organization(client, auth_headers):
+    """A failed write cannot leave the organization created during that request."""
+    registration = _reg()
+    first = client.post("/api/vessels", json={
+        "name": "TT DUPLICATE ONE",
+        "registration_no": registration,
+        "vessel_type": "Tàu hàng khô",
+        "vessel_class": "VR-SI",
+        "organization_name": "Committed Org",
+    }, headers=auth_headers)
+    assert first.status_code == 200
+
+    failed_org = f"Rolled Back Org {time.time_ns()}"
+    duplicate = client.post("/api/vessels", json={
+        "name": "TT DUPLICATE TWO",
+        "registration_no": registration,
+        "vessel_type": "Tàu hàng khô",
+        "vessel_class": "VR-SI",
+        "organization_name": failed_org,
+    }, headers=auth_headers)
+    assert duplicate.status_code == 409
+
+    db = SessionLocal()
+    try:
+        assert db.query(Organization).filter(Organization.name == failed_org).first() is None
+    finally:
+        db.close()
+
+
 def test_vessel_verify_registry(client, auth_headers):
     res = client.post("/api/vessels", json={
         "name": "TT VERIFY",

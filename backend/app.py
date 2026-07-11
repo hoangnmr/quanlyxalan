@@ -17,10 +17,11 @@ from fastapi import (
     Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import desc, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import create_access_token, get_current_user, get_password_hash, verify_password
@@ -51,6 +52,14 @@ async def add_correlation_id(request: Request, call_next):
         correlation_id.reset(token)
     response.headers["X-Correlation-ID"] = request_id[:128]
     return response
+
+
+@app.exception_handler(IntegrityError)
+async def database_constraint_error(_: Request, __: IntegrityError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": "Dữ liệu xung đột với một bản ghi đã tồn tại."},
+    )
 
 origins_env = os.getenv("ALLOWED_ORIGINS")
 if origins_env:
@@ -623,12 +632,21 @@ def save_vessel(
             if hasattr(vessel, k):
                 setattr(vessel, k, v)
         vessel.version += 1
+        audit(
+            db, "VESSEL", vessel.id, "UPDATE", f"{vessel.name} / {vessel.registration_no}",
+            actor_user_id=user.id, organization_id=vessel.organization_id,
+        )
         db.commit()
         db.refresh(vessel)
     else:
         data["created_at"] = now_iso()
         vessel = Vessel(**{k: v for k, v in data.items() if hasattr(Vessel, k)})
         db.add(vessel)
+        db.flush()
+        audit(
+            db, "VESSEL", vessel.id, "CREATE", f"{vessel.name} / {vessel.registration_no}",
+            actor_user_id=user.id, organization_id=vessel.organization_id,
+        )
         db.commit()
         db.refresh(vessel)
 
@@ -723,12 +741,21 @@ def save_crew(
             if hasattr(member, k):
                 setattr(member, k, v)
         member.version += 1
+        audit(
+            db, "CREW", member.id, "UPDATE", f"{member.full_name} / {member.crew_role}",
+            actor_user_id=user.id, organization_id=member.organization_id,
+        )
         db.commit()
         db.refresh(member)
     else:
         data["created_at"] = now_iso()
         member = CrewMember(**{k: v for k, v in data.items() if hasattr(CrewMember, k)})
         db.add(member)
+        db.flush()
+        audit(
+            db, "CREW", member.id, "CREATE", f"{member.full_name} / {member.crew_role}",
+            actor_user_id=user.id, organization_id=member.organization_id,
+        )
         db.commit()
         db.refresh(member)
 
@@ -927,10 +954,18 @@ def save_declaration(
             to_status="PENDING_REVIEW",
             actor_name=user.full_name or user.username,
             actor_role=user.role,
+            actor_user_id=user.id,
+            correlation_id=correlation_id.get(),
             note="Nộp phiếu khai báo",
             created_at=now_iso(),
         )
         db.add(event)
+
+    audit(
+        db, "DECLARATION", decl.id, "SUBMIT" if submit else ("UPDATE" if payload.id else "CREATE"),
+        f"{decl.reference_no} / {decl.workflow_status}",
+        actor_user_id=user.id, organization_id=decl.organization_id,
+    )
 
     db.commit()
     db.refresh(decl)

@@ -8,9 +8,9 @@ This document details the security constraints, architecture, and threat mitigat
 
 *   **Authentication Mechanism**: Stateless JWT Bearer tokens passed via HTTP `Authorization: Bearer <token>` header.
 *   **Storage**: Client stores token in `localStorage`.
-*   **Token Lifetime**: Expire time defaults to **60 minutes** (configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`). 
+*   **Token Lifetime**: Expire time defaults to **24 hours** (configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`).
 *   **Session Revocation**: Handled via `POST /api/auth/logout` and validated against client-side token deletion. Session expiry triggers a redirection to the login dialog.
-*   **Fail-Fast Key check**: The application will abort startup (`SystemExit`) if `SECRET_KEY` is not set or matches the insecure default (`"supersecretkey"`) when running in production environment.
+*   **Fail-Fast Key check**: The application aborts startup (`SystemExit`) if `SECRET_KEY` is not set or matches the development default outside the explicit test environment.
 
 ---
 

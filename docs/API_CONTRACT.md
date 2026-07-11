@@ -1,8 +1,8 @@
 # API Contract — Khai-bao-Cang-vu
 
-> Generated: 2026-07-11  
-> Tranche: T1 Identity, RBAC & Tenant Isolation (WO-KBCV-T1-20260711)  
-> Backend: FastAPI + SQLAlchemy (SQLite local / PostgreSQL production)  
+> Generated: 2026-07-11
+> Tranche: T1 Identity, RBAC & Tenant Isolation (WO-KBCV-T1-20260711)
+> Backend: FastAPI + SQLAlchemy (SQLite local / PostgreSQL production)
 > Auth: JWT Bearer (`Authorization: Bearer <token>`)
 
 ## Role-Based Access Control & Tenant Scope
@@ -40,7 +40,7 @@ This system implements four roles with distinct scopes of operations.
 
 | Method | Path | Allowed Roles | Request | Response |
 |--------|------|---------------|---------|----------|
-| GET | `/api/organizations` | BP, ADMIN | — | `[Organization]` |
+| GET | `/api/organizations` | ADMIN | — | `[Organization]` |
 
 ### DASHBOARD
 
@@ -120,11 +120,11 @@ any → REVOKED  (REVOKE, requires note)
 
 | Method | Path | Allowed Roles | Request | Response |
 |--------|------|---------------|---------|----------|
-| GET | `/api/reports/appendix1` | CV, QLC, BP, ADMIN | date range | XLSX download |
-| GET | `/api/reports/appendix2` | CV, QLC, BP, ADMIN | date range | XLSX download |
-| GET | `/api/reports/appendix3` | CV, QLC, BP, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix1` | CUSTOMER, CV, QLC, BP, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix2` | CUSTOMER, CV, QLC, BP, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix3` | CUSTOMER, CV, QLC, BP, ADMIN | date range | XLSX download |
 
-*   **Role Constraint**: CUSTOMER is denied access to report generation.
+*   **Tenant Constraint**: CUSTOMER receives only records from its own organization; reviewers and ADMIN receive the operational scope allowed by their role.
 
 ### INTEGRATIONS
 

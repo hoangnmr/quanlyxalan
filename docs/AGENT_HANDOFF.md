@@ -105,7 +105,7 @@ Work order issued: `docs/WORK_ORDER_T1_IDENTITY_RBAC_TENANT_ISOLATION.md`
 
 ## Tranche: T1 Identity, RBAC and Tenant Isolation (WO-KBCV-T1-20260711)
 
-- **Status**: CLOSED — Gate 1 PASSED and committed
+- **Status**: CLOSED — Gate 1 remediation reviewed and committed
 - **Date**: 2026-07-11
 - **Phase**: FREEZE
 - **Risk Level**: R2
@@ -125,9 +125,30 @@ Work order issued: `docs/WORK_ORDER_T1_IDENTITY_RBAC_TENANT_ISOLATION.md`
 ### Test results (Gate 1 verification)
 
 ```
-40 passed, 0 failed — 19.68s
+44 passed, 0 failed — reviewer re-run
 Python 3.13.12 | pytest 8.2.0
 ```
+
+### Reviewer remediation record (2026-07-11)
+
+- The initial T1 closure was reopened because `git diff --check` failed and
+  security/migration evidence was incomplete.
+- Removed client-required workflow actor fields; actor identity is now solely
+  derived from the authenticated server-side user.
+- Added negative tests for tenant-scoped declaration lists, suggestions, crew
+  updates, report output, invalid roles and expired tokens.
+- Added an isolated Alembic upgrade/downgrade rehearsal against a legacy SQLite
+  schema; unbound legacy non-admin users are disabled on upgrade.
+- Reconciled API contract and security documentation with actual roles and the
+  24-hour default token lifetime.
+- Formatted all T1 files so `git diff --check` passes.
+
+Final reviewer evidence after remediation:
+
+- `pytest -q`: 44 passed, 0 failed.
+- `git diff --check HEAD~1`: PASS.
+- CVF Workspace Doctor: PASS 17/17.
+- No runtime database, attachment, secret or raw token staged.
 
 ### Next governed move
 
@@ -138,10 +159,10 @@ Python 3.13.12 | pytest 8.2.0
 
 ### Human review closure record
 
-1. ✅ Tests: `40 passed, 0 failed`
+1. ✅ Tests: `44 passed, 0 failed`
 2. ✅ Gate 1: tenant isolation, RBAC matrix, Rate limit, and token validation PASS (verified by test suite)
 3. ✅ Frontend user display, role constraints, and logout integration PASS
-4. ✅ Database migrations (Alembic) upgrade and downgrade PASS
+4. ✅ Database migrations (Alembic) upgrade and downgrade PASS in isolated automated rehearsal
 5. ✅ CVF doctor re-run: PASS 17/17
 6. ✅ Workspace Web Evidence Bridge generated PASS
 7. ✅ Security and user bootstrap docs created PASS

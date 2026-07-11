@@ -1,7 +1,7 @@
 """t1_user_org_binding
 
 Revision ID: ad84e1157033
-Revises: 
+Revises:
 Create Date: 2026-07-11 16:08:13.539315
 
 """

@@ -275,8 +275,6 @@ class DeclarationSaveRequest(BaseModel):
 
 class WorkflowActionRequest(BaseModel):
     action: str
-    actor_role: str
-    actor_name: str
     note: str = ""
     permit_no: str = ""
 
@@ -447,7 +445,7 @@ def get_dashboard(
     user: User = Depends(get_current_user),
 ):
     today_iso = date.today().isoformat()
-    
+
     # Base queries
     vessels_q = db.query(Vessel)
     drafts_q = db.query(Declaration).filter(Declaration.workflow_status == "DRAFT")
@@ -564,7 +562,7 @@ def save_vessel(
             raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện.")
         # Tenant isolation check
         verify_organization_ownership(user, vessel.organization_id)
-        
+
         for k, v in data.items():
             if hasattr(vessel, k):
                 setattr(vessel, k, v)
@@ -648,7 +646,7 @@ def save_crew(
 
     data = payload.model_dump(exclude={"id"})
     data["updated_at"] = now_iso()
-    
+
     if user.role == "CUSTOMER":
         data["organization_id"] = user.organization_id
 
@@ -657,11 +655,11 @@ def save_crew(
         if not member:
             raise HTTPException(status_code=404, detail="Không tìm thấy thuyền viên.")
         verify_organization_ownership(user, member.organization_id)
-        
+
         # If user is ADMIN, organization_id can be updated, but for CUSTOMER we keep it same
         if user.role == "CUSTOMER":
             data.pop("organization_id", None)
-            
+
         for k, v in data.items():
             if hasattr(member, k):
                 setattr(member, k, v)
@@ -700,7 +698,7 @@ def get_declarations(
     user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
 ):
     query = db.query(Declaration)
-    
+
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
     elif user.role in ("CV", "QLC", "BP"):
@@ -795,7 +793,7 @@ def save_declaration(
             val = getattr(payload, field_name, None)
             if val is not None and hasattr(decl, field_name):
                 setattr(decl, field_name, val)
-        
+
         decl.company_name = company_name
         decl.unload_json = json.dumps(unload_data, ensure_ascii=False)
         decl.load_json = json.dumps(load_data, ensure_ascii=False)
@@ -893,7 +891,7 @@ def get_declaration_events(
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
-    
+
     # Tenant isolation check
     verify_organization_ownership(user, decl.organization_id)
 
@@ -1022,11 +1020,11 @@ def get_suggestions(
     col = _SUGGESTION_FIELDS.get(field)
     if not col:
         return []
-    
+
     query = db.query(col).filter(col.isnot(None), col != "")
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
-        
+
     rows = (
         query
         .distinct()
@@ -1160,7 +1158,7 @@ def export_report(
     )
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
-        
+
     if from_:
         query = query.filter(Declaration.declaration_date >= from_)
     if to:

@@ -1,8 +1,8 @@
 # ADR-002: JWT Bearer and Local Session Design for Pilot
 
-**Status**: ACCEPTED  
-**Date**: 2026-07-11  
-**Context**: Tranche T1 (WO-KBCV-T1-20260711)  
+**Status**: ACCEPTED
+**Date**: 2026-07-11
+**Context**: Tranche T1 (WO-KBCV-T1-20260711)
 **Author**: Antigravity
 
 ## Context

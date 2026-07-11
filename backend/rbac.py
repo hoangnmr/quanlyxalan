@@ -20,27 +20,27 @@ class RoleChecker:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Tài khoản đã bị vô hiệu hóa."
             )
-        
+
         # Validate user role
         if user.role not in ROLE_ENUM:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Vai trò không hợp lệ."
             )
-            
+
         if user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Bạn không có quyền thực hiện hành động này."
             )
-            
+
         # Check CUSTOMER role has an assigned organization
         if user.role == "CUSTOMER" and user.organization_id is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Tài khoản chưa được liên kết với tổ chức nào."
             )
-            
+
         return user
 
 def require_roles(*roles: str):
@@ -48,7 +48,7 @@ def require_roles(*roles: str):
 
 def verify_organization_ownership(user: User, resource_org_id: Optional[int]) -> None:
     """
-    Enforces tenant isolation. For CUSTOMER role, verifies that they belong 
+    Enforces tenant isolation. For CUSTOMER role, verifies that they belong
     to the same organization as the resource.
     """
     if user.role == "CUSTOMER":

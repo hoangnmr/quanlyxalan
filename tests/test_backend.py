@@ -58,7 +58,7 @@ def _seed_user() -> None:
             db.add(org)
             db.commit()
             db.refresh(org)
-        
+
         # Seed users
         user_data = [
             ("testuser", "ADMIN", None),

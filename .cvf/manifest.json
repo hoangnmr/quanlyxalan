@@ -1,29 +1,29 @@
-{
-  "cvfCorePath": "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\.Controlled-Vibe-Framework-CVF",
-  "cvfCoreCommit": "141031c",
-  "workspaceRoot": "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace",
-  "workspaceRulesPath": "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\WORKSPACE_RULES.md",
-  "projectPath": "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\Khai-bao-Cang-vu",
-  "phaseModel": [
-    "INTAKE",
-    "DESIGN",
-    "BUILD",
-    "REVIEW",
-    "FREEZE"
-  ],
-  "liveGovernanceEvidenceRequired": true,
-  "mockAllowedOnlyForUi": true,
-  "requiredDocs": [
-    ".cvf/manifest.json",
-    ".cvf/policy.json",
-    "..\\WORKSPACE_RULES.md",
-    "docs/CVF_BOOTSTRAP_LOG_20260711.md"
-  ],
-  "bootstrapDate": "2026-07-11",
-  "enforcementVersion": "1.0",
-  "bootstrapScript": "scripts/new-cvf-workspace.ps1",
-  "w112TrancheRef": "CVF_W112_T1_WORKSPACE_AGENT_ENFORCEMENT_AND_WEB_CONTROL_UPLIFT_ROADMAP_2026-04-22.md",
-  "knowledgePath": "knowledge/",
-  "cvfPublicRemote": "https://github.com/Blackbird081/Controlled-Vibe-Framework-CVF.git",
-  "publicCoreFreshnessRequired": true
+﻿{
+    "cvfCorePath":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\.Controlled-Vibe-Framework-CVF",
+    "cvfCoreCommit":  "141031c",
+    "workspaceRoot":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace",
+    "workspaceRulesPath":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\WORKSPACE_RULES.md",
+    "projectPath":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\Khai-bao-Cang-vu",
+    "phaseModel":  [
+                       "INTAKE",
+                       "DESIGN",
+                       "BUILD",
+                       "REVIEW",
+                       "FREEZE"
+                   ],
+    "liveGovernanceEvidenceRequired":  true,
+    "mockAllowedOnlyForUi":  true,
+    "requiredDocs":  [
+                         ".cvf/manifest.json",
+                         ".cvf/policy.json",
+                         "..\\WORKSPACE_RULES.md",
+                         "docs/CVF_BOOTSTRAP_LOG_20260711.md"
+                     ],
+    "bootstrapDate":  "2026-07-11",
+    "enforcementVersion":  "1.0",
+    "bootstrapScript":  "scripts/new-cvf-workspace.ps1",
+    "w112TrancheRef":  "CVF_W112_T1_WORKSPACE_AGENT_ENFORCEMENT_AND_WEB_CONTROL_UPLIFT_ROADMAP_2026-04-22.md",
+    "knowledgePath":  "knowledge/",
+    "cvfPublicRemote":  "https://github.com/Blackbird081/Controlled-Vibe-Framework-CVF.git",
+    "publicCoreFreshnessRequired":  true
 }

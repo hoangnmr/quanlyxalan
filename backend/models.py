@@ -18,7 +18,7 @@ class User(Base):
     is_active = Column(Integer, nullable=False, default=1)  # Using Integer (0 or 1) as SQLite boolean
     created_at = Column(String, default=now_iso)
 
-    organization = relationship("Organization", lazy="select")
+    organization = relationship("Organization", back_populates="users", lazy="select")
 
 class Organization(Base):
     __tablename__ = "organizations"
@@ -33,6 +33,9 @@ class Organization(Base):
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
     vessels = relationship("Vessel", back_populates="organization", lazy="dynamic")
+    users = relationship("User", back_populates="organization", lazy="dynamic")
+    crew_members = relationship("CrewMember", back_populates="organization", lazy="dynamic")
+    declarations = relationship("Declaration", back_populates="organization", lazy="dynamic")
 
 class Vessel(Base):
     __tablename__ = "vessels"
@@ -67,6 +70,8 @@ class Vessel(Base):
     updated_at = Column(String, nullable=False, default=now_iso)
     version = Column(Integer, nullable=False, default=1)
     organization = relationship("Organization", back_populates="vessels", lazy="select")
+    crew_members = relationship("CrewMember", back_populates="vessel", lazy="dynamic")
+    declarations = relationship("Declaration", back_populates="vessel", lazy="dynamic")
 
 class Declaration(Base):
     __tablename__ = "declarations"
@@ -112,6 +117,11 @@ class Declaration(Base):
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
     version = Column(Integer, nullable=False, default=1)
+    organization = relationship("Organization", back_populates="declarations", lazy="select")
+    vessel = relationship("Vessel", back_populates="declarations", lazy="select")
+    crew_links = relationship("DeclarationCrew", back_populates="declaration", cascade="all, delete-orphan")
+    events = relationship("DeclarationEvent", back_populates="declaration", cascade="all, delete-orphan")
+    attachments = relationship("Attachment", back_populates="declaration", cascade="all, delete-orphan")
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -138,6 +148,7 @@ class DeclarationEvent(Base):
     correlation_id = Column(String, nullable=False, default="")
     note = Column(Text, nullable=False, default="")
     created_at = Column(String, nullable=False, default=now_iso)
+    declaration = relationship("Declaration", back_populates="events")
 
 class CrewMember(Base):
     __tablename__ = "crew_members"
@@ -156,6 +167,9 @@ class CrewMember(Base):
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
     version = Column(Integer, nullable=False, default=1)
+    organization = relationship("Organization", back_populates="crew_members", lazy="select")
+    vessel = relationship("Vessel", back_populates="crew_members", lazy="select")
+    declaration_links = relationship("DeclarationCrew", back_populates="crew_member")
 
 class DeclarationCrew(Base):
     __tablename__ = "declaration_crew"
@@ -164,6 +178,8 @@ class DeclarationCrew(Base):
     crew_role_snapshot = Column(String, nullable=False)
     certificate_no_snapshot = Column(String, nullable=False)
     certificate_expiry_snapshot = Column(String)
+    declaration = relationship("Declaration", back_populates="crew_links")
+    crew_member = relationship("CrewMember", back_populates="declaration_links")
 
 class Attachment(Base):
     __tablename__ = "attachments"
@@ -174,6 +190,7 @@ class Attachment(Base):
     content_type = Column(String, nullable=False)
     size_bytes = Column(Integer, nullable=False)
     created_at = Column(String, nullable=False, default=now_iso)
+    declaration = relationship("Declaration", back_populates="attachments")
 
 class IntegrationConnector(Base):
     __tablename__ = "integration_connectors"

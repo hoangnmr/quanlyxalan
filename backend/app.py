@@ -269,6 +269,13 @@ class VesselSaveRequest(BaseModel):
             raise ValueError("Thông số không được âm.")
         return value
 
+    @field_validator("build_year", "passenger_capacity", "min_crew")
+    @classmethod
+    def non_negative_integer_fields(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("Thông số không được âm.")
+        return value
+
 
 class CrewSaveRequest(BaseModel):
     id: Optional[int] = None
@@ -324,6 +331,31 @@ class DeclarationSaveRequest(BaseModel):
     unload: CargoPayload = CargoPayload()
     load: CargoPayload = CargoPayload()
     crew_ids: List[int] = []
+
+    @field_validator("crew_count", "passenger_count")
+    @classmethod
+    def non_negative_counts(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("Số lượng không được âm.")
+        return value
+
+    @field_validator("movement_type")
+    @classmethod
+    def valid_movement_type(cls, value: str) -> str:
+        if value not in {"ARRIVAL", "DEPARTURE"}:
+            raise ValueError("Loại phiếu không hợp lệ.")
+        return value
+
+    @field_validator(
+        "company_name", "vessel_name", "registration_no", "vessel_type", "vessel_class",
+        "last_port", "working_port", "master_name", "master_phone",
+    )
+    @classmethod
+    def required_declaration_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Trường này là bắt buộc.")
+        return value
 
     @model_validator(mode="after")
     def eta_before_etd(self) -> "DeclarationSaveRequest":
@@ -944,6 +976,10 @@ def save_declaration(
                 ))
 
     if submit:
+        if payload.id and decl.workflow_status == "CHANGES_REQUESTED":
+            decl.cv_approval = "PENDING"
+            decl.qlc_approval = "PENDING"
+            decl.bp_approval = "PENDING"
         decl.workflow_status = "PENDING_REVIEW"
         decl.status = "SUBMITTED"
         decl.submitted_at = now_iso()

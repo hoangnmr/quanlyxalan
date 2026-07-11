@@ -407,6 +407,22 @@ def test_declaration_submit(client, customer_headers):
     assert data["status"] == "SUBMITTED"
 
 
+def test_declaration_validation_rejects_negative_count_and_invalid_movement(client, customer_headers):
+    invalid_count = client.post(
+        "/api/declarations",
+        json=_minimal_declaration(crew_count=-1),
+        headers=customer_headers,
+    )
+    assert invalid_count.status_code == 422
+
+    invalid_movement = client.post(
+        "/api/declarations",
+        json=_minimal_declaration(movement_type="TRANSFER"),
+        headers=customer_headers,
+    )
+    assert invalid_movement.status_code == 422
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 6. TEU CALCULATIONS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -498,6 +514,31 @@ def test_skip_workflow_stage_rejected(client, customer_headers, cv_headers, bp_h
         "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "BP skip",
     }, headers=bp_headers)
     assert res2.status_code == 400
+
+
+def test_changes_requested_resubmission_resets_approval_state(client, customer_headers, cv_headers):
+    created = client.post(
+        "/api/declarations?submit=true",
+        json=_minimal_declaration(),
+        headers=customer_headers,
+    )
+    declaration = created.json()
+    requested = client.post(
+        f"/api/declarations/{declaration['id']}/workflow",
+        json={"action": "REQUEST_CHANGES", "note": "Thiếu thông tin hàng hóa"},
+        headers=cv_headers,
+    )
+    assert requested.status_code == 200
+    assert requested.json()["workflow_status"] == "CHANGES_REQUESTED"
+
+    resubmitted = client.post(
+        "/api/declarations?submit=true",
+        json={**_minimal_declaration(), "id": declaration["id"], "version": requested.json()["version"]},
+        headers=customer_headers,
+    )
+    assert resubmitted.status_code == 200
+    assert resubmitted.json()["workflow_status"] == "PENDING_REVIEW"
+    assert resubmitted.json()["cv_approval"] == "PENDING"
 
 
 def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, customer_headers, cv_headers):

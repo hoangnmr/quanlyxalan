@@ -30,6 +30,9 @@ All tests must pass before deploying or committing.
 powershell -ExecutionPolicy Bypass -File .\scripts\run-dev.ps1
 ```
 
+The launcher applies Alembic migrations before starting the server. Set a
+non-default `SECRET_KEY` in your local environment before running the service.
+
 Or manually:
 
 ```powershell

@@ -12,6 +12,8 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 
 Set-Location $projectRoot
 
+python -m alembic upgrade head
+
 Write-Host "Tan Thuan Port declaration app (FastAPI)" -ForegroundColor Cyan
 Write-Host "Open: http://$HostAddress`:$Port"
 Write-Host "Press Ctrl+C to stop." -ForegroundColor Yellow

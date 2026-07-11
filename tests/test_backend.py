@@ -26,7 +26,7 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.models import Base, User, Organization
+from backend.models import AuditEvent, Base, User, Organization
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db
@@ -264,6 +264,33 @@ def test_vessel_update(client, auth_headers):
     assert res2.json()["vessel_class"] == "VR-SII"
 
 
+def test_vessel_stale_version_rejected(client, auth_headers):
+    reg_no = _reg()
+    created = client.post("/api/vessels", json={
+        "name": "TT VERSION",
+        "registration_no": reg_no,
+        "vessel_type": "Tàu hàng khô",
+        "vessel_class": "VR-SI",
+    }, headers=auth_headers)
+    assert created.status_code == 200
+    vessel = created.json()
+
+    updated = client.post("/api/vessels", json={
+        "id": vessel["id"], "version": vessel["version"],
+        "name": "TT VERSION UPDATED", "registration_no": reg_no,
+        "vessel_type": "Tàu hàng khô", "vessel_class": "VR-SI",
+    }, headers=auth_headers)
+    assert updated.status_code == 200
+    assert updated.json()["version"] == vessel["version"] + 1
+
+    stale = client.post("/api/vessels", json={
+        "id": vessel["id"], "version": vessel["version"],
+        "name": "TT VERSION STALE", "registration_no": reg_no,
+        "vessel_type": "Tàu hàng khô", "vessel_class": "VR-SI",
+    }, headers=auth_headers)
+    assert stale.status_code == 409
+
+
 def test_vessel_verify_registry(client, auth_headers):
     res = client.post("/api/vessels", json={
         "name": "TT VERIFY",
@@ -442,6 +469,36 @@ def test_skip_workflow_stage_rejected(client, customer_headers, cv_headers, bp_h
         "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "BP skip",
     }, headers=bp_headers)
     assert res2.status_code == 400
+
+
+def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, customer_headers, cv_headers):
+    created = client.post(
+        "/api/declarations?submit=true",
+        json=_minimal_declaration(),
+        headers=customer_headers,
+    )
+    declaration_id = created.json()["id"]
+    correlation = "t2-correlation-test"
+    response = client.post(
+        f"/api/declarations/{declaration_id}/workflow",
+        json={"action": "CV_APPROVE"},
+        headers={**cv_headers, "X-Correlation-ID": correlation},
+    )
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == correlation
+
+    db = SessionLocal()
+    try:
+        audit_event = db.query(AuditEvent).filter(
+            AuditEvent.entity_type == "DECLARATION",
+            AuditEvent.entity_id == declaration_id,
+            AuditEvent.action == "CV_APPROVE",
+        ).one()
+        assert audit_event.correlation_id == correlation
+        assert audit_event.actor_user_id is not None
+        assert audit_event.organization_id is not None
+    finally:
+        db.close()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

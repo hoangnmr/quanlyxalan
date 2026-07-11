@@ -19,13 +19,13 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
 from .auth import create_access_token, get_current_user, get_password_hash, verify_password
 from .rbac import require_roles, verify_organization_ownership
-from .database import DB_PATH, SessionLocal, audit, cargo, engine, now_iso
+from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, now_iso
 from .models import (
     Attachment, AuditEvent, Base, CrewMember, Declaration,
     DeclarationCrew, DeclarationEvent, IntegrationConnector, Organization,
@@ -33,15 +33,24 @@ from .models import (
 )
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
 
-# ── Database init ──────────────────────────────────────────────────────────────
-Base.metadata.create_all(bind=engine)
-
 ROOT = Path(__file__).resolve().parents[1]
 ATTACHMENT_DIR = ROOT / "data" / "attachments"
 ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Khai-bao-Cang-vu API", version="1.0.0")
+
+
+@app.middleware("http")
+async def add_correlation_id(request: Request, call_next):
+    request_id = request.headers.get("X-Correlation-ID", "").strip() or str(uuid.uuid4())
+    token = correlation_id.set(request_id[:128])
+    try:
+        response = await call_next(request)
+    finally:
+        correlation_id.reset(token)
+    response.headers["X-Correlation-ID"] = request_id[:128]
+    return response
 
 origins_env = os.getenv("ALLOWED_ORIGINS")
 if origins_env:
@@ -62,6 +71,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -120,7 +132,7 @@ WORKFLOW_TRANSITIONS: dict[str, dict[str, str]] = {
 
 def _apply_workflow_transition(
     db: Session, declaration: Declaration, action: str, actor_role: str,
-    actor_name: str, note: str = "", permit_no: str = ""
+    actor_name: str, actor_user_id: int, note: str = "", permit_no: str = ""
 ) -> Declaration:
     rule = WORKFLOW_TRANSITIONS.get(action)
     if not rule:
@@ -156,6 +168,7 @@ def _apply_workflow_transition(
         declaration.revoked_at = now_iso()
 
     declaration.updated_at = now_iso()
+    declaration.version += 1
 
     event = DeclarationEvent(
         declaration_id=declaration.id,
@@ -164,12 +177,12 @@ def _apply_workflow_transition(
         to_status=new_status,
         actor_name=actor_name,
         actor_role=actor_role,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id.get(),
         note=note,
         created_at=now_iso(),
     )
     db.add(event)
-    db.commit()
-    db.refresh(declaration)
     return declaration
 
 
@@ -189,9 +202,24 @@ class CargoPayload(BaseModel):
     cont40_empty: int = 0
     tons: float = 0.0
 
+    @field_validator("cont20_full", "cont20_empty", "cont40_full", "cont40_empty")
+    @classmethod
+    def non_negative_containers(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("Số lượng container không được âm.")
+        return value
+
+    @field_validator("tons")
+    @classmethod
+    def non_negative_tons(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("Khối lượng không được âm.")
+        return value
+
 
 class VesselSaveRequest(BaseModel):
     id: Optional[int] = None
+    version: Optional[int] = None
     organization_name: Optional[str] = None
     organization: Optional[Dict[str, Any]] = None
     name: str
@@ -217,9 +245,25 @@ class VesselSaveRequest(BaseModel):
     certificate_expiry_date: Optional[str] = None
     notes: str = ""
 
+    @field_validator("name", "registration_no")
+    @classmethod
+    def required_vessel_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Trường này là bắt buộc.")
+        return value
+
+    @field_validator("length_m", "width_m", "side_height_m", "draft_m", "deadweight_tons", "gross_tonnage", "engine_power_cv", "cargo_capacity_tons", "container_capacity_teu")
+    @classmethod
+    def non_negative_measurements(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and value < 0:
+            raise ValueError("Thông số không được âm.")
+        return value
+
 
 class CrewSaveRequest(BaseModel):
     id: Optional[int] = None
+    version: Optional[int] = None
     vessel_id: Optional[int] = None
     full_name: str
     crew_role: str
@@ -231,9 +275,18 @@ class CrewSaveRequest(BaseModel):
     certificate_expiry_date: Optional[str] = None
     notes: str = ""
 
+    @field_validator("full_name", "crew_role", "professional_certificate_type", "professional_certificate_no")
+    @classmethod
+    def required_crew_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Trường này là bắt buộc.")
+        return value
+
 
 class DeclarationSaveRequest(BaseModel):
     id: Optional[int] = None
+    version: Optional[int] = None
     vessel_id: Optional[int] = None
     company_name: str
     declaration_date: str
@@ -280,11 +333,9 @@ class WorkflowActionRequest(BaseModel):
 
 
 class PrepareSyncRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     from_: Optional[str] = None
     to: Optional[str] = None
-
-    class Config:
-        populate_by_name = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "PrepareSyncRequest":
@@ -338,6 +389,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
         # Audit failure (NO password/token printed)
         audit(db, "auth", 0, "LOGIN_FAILURE", f"Đăng nhập thất bại từ IP={ip}")
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Thông tin đăng nhập không đúng."
@@ -346,6 +398,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     # Check active status
     if not getattr(user, "is_active", True):
         audit(db, "auth", user.id, "LOGIN_FAILURE_DISABLED", f"Đăng nhập thất bại do tài khoản bị vô hiệu hóa từ IP={ip}")
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tài khoản đã bị vô hiệu hóa."
@@ -364,6 +417,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
     # Audit success
     audit(db, "user", user.id, "LOGIN_SUCCESS", f"Đăng nhập thành công từ IP={ip}")
+    db.commit()
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -552,7 +606,7 @@ def save_vessel(
         org = _get_or_create_org(db, org_name)
         org_id = org.id if org else None
 
-    data = payload.model_dump(exclude={"id", "organization", "organization_name"})
+    data = payload.model_dump(exclude={"id", "version", "organization", "organization_name"})
     data["organization_id"] = org_id
     data["updated_at"] = now_iso()
 
@@ -560,12 +614,15 @@ def save_vessel(
         vessel = db.query(Vessel).filter(Vessel.id == payload.id).first()
         if not vessel:
             raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện.")
+        if payload.version is not None and payload.version != vessel.version:
+            raise HTTPException(status_code=409, detail="Hồ sơ phương tiện đã được cập nhật bởi người dùng khác.")
         # Tenant isolation check
         verify_organization_ownership(user, vessel.organization_id)
 
         for k, v in data.items():
             if hasattr(vessel, k):
                 setattr(vessel, k, v)
+        vessel.version += 1
         db.commit()
         db.refresh(vessel)
     else:
@@ -644,7 +701,7 @@ def save_crew(
             raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện được gán.")
         verify_organization_ownership(user, vessel.organization_id)
 
-    data = payload.model_dump(exclude={"id"})
+    data = payload.model_dump(exclude={"id", "version"})
     data["updated_at"] = now_iso()
 
     if user.role == "CUSTOMER":
@@ -654,6 +711,8 @@ def save_crew(
         member = db.query(CrewMember).filter(CrewMember.id == payload.id).first()
         if not member:
             raise HTTPException(status_code=404, detail="Không tìm thấy thuyền viên.")
+        if payload.version is not None and payload.version != member.version:
+            raise HTTPException(status_code=409, detail="Hồ sơ thuyền viên đã được cập nhật bởi người dùng khác.")
         verify_organization_ownership(user, member.organization_id)
 
         # If user is ADMIN, organization_id can be updated, but for CUSTOMER we keep it same
@@ -663,6 +722,7 @@ def save_crew(
         for k, v in data.items():
             if hasattr(member, k):
                 setattr(member, k, v)
+        member.version += 1
         db.commit()
         db.refresh(member)
     else:
@@ -773,6 +833,8 @@ def save_declaration(
         decl = db.query(Declaration).filter(Declaration.id == payload.id).first()
         if not decl:
             raise HTTPException(status_code=404, detail="Không tìm thấy phiếu khai báo.")
+        if payload.version is not None and payload.version != decl.version:
+            raise HTTPException(status_code=409, detail="Phiếu khai báo đã được cập nhật bởi người dùng khác.")
         # Tenant isolation check
         verify_organization_ownership(user, decl.organization_id)
 
@@ -799,6 +861,7 @@ def save_declaration(
         decl.load_json = json.dumps(load_data, ensure_ascii=False)
         decl.organization_id = org_id
         decl.updated_at = now_iso()
+        decl.version += 1
     else:
         ref_no = f"TT-{datetime.now():%Y%m%d-%H%M%S}-{datetime.now().microsecond:06d}"
         decl = Declaration(
@@ -951,9 +1014,17 @@ def declaration_workflow(
         action=payload.action,
         actor_role=actor_role,
         actor_name=actor_name,
+        actor_user_id=user.id,
         note=payload.note,
         permit_no=payload.permit_no,
     )
+    audit(
+        db, "DECLARATION", declaration_id, payload.action,
+        f"{actor_name} / {actor_role} / {updated.workflow_status}",
+        actor_user_id=user.id, organization_id=updated.organization_id,
+    )
+    db.commit()
+    db.refresh(updated)
     return _declaration_dict(updated)
 
 

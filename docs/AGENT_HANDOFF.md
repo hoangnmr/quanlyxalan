@@ -174,3 +174,30 @@ Issued work orders:
 5. ✅ CVF doctor re-run: PASS 17/17
 6. ✅ Workspace Web Evidence Bridge generated PASS
 7. ✅ Security and user bootstrap docs created PASS
+
+---
+
+## Tranche: T2 Domain Integrity and Persistence (WO-KBCV-T2-20260711)
+
+- **Status**: IN_PROGRESS
+- **Phase**: BUILD
+- **Risk Level**: R2
+
+### Work started
+
+- Removed runtime `create_all()` from the FastAPI application.
+- Added Alembic baseline/T2 migration chain for fresh and legacy SQLite paths.
+- Added optimistic versions to vessel, crew and declaration aggregates.
+- Added correlation id propagation and authoritative audit metadata.
+- Added transaction rollback in database dependencies and expanded regression
+  coverage for stale updates, audit metadata and fresh migration bootstrap.
+
+### Open Gate 2 work
+
+- Complete remaining endpoint transaction/error normalization.
+- Complete workflow/audit relationship and state-table hardening.
+- Review constraints and migration matrix before closure.
+
+### Next governed move
+
+Continue T2 BUILD; do not start T3 until Gate 2 is reviewer-approved.

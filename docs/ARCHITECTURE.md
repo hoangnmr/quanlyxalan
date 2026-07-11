@@ -6,13 +6,16 @@
 Browser
   -> frontend/ (HTML, CSS, JavaScript)
   -> /api/*
-backend/app.py (Python HTTP API)
+backend/app.py (FastAPI HTTP API)
   -> backend/database.py
-  -> data/cang_vu.db (SQLite, persistent volume in production)
+  -> Alembic migrations
+  -> data/cang_vu.db (SQLite local/pilot only)
   -> backend/xlsx_io.py (stdlib XLSX import/export)
 ```
 
-The backend serves the frontend in local/single-host mode. In production, a
+The backend serves the frontend in local/single-host mode. Schema changes are
+applied only through Alembic; runtime startup never creates or changes tables.
+In production, a
 reverse proxy may serve `frontend/` directly and proxy `/api/` to the Python
 service. This keeps the front-door/backend contract separate from day one.
 
@@ -27,18 +30,27 @@ service. This keeps the front-door/backend contract separate from day one.
   the persistent data volume.
 - `integration_connectors` and `sync_jobs`: connector readiness plus prepared,
   auditable report payloads.
-- `declaration_events`: append-only actor, role, status transition, and note
-  timeline for each arrival/departure permit.
-- `audit_events`: append-only operational change history.
+- `declaration_events`: append-only actor, role, status transition, note and
+  correlation timeline for each arrival/departure permit.
+- `audit_events`: append-only operational change history with actor,
+  organization and correlation id.
+
+## Persistence Contract
+
+- One API write is one database unit of work; a failed request rolls back its
+  session before release.
+- Vessels, crew and declarations expose optimistic `version`; supplied stale
+  versions receive `409 Conflict`.
+- SQLite is limited to local/pilot single-node use. PostgreSQL cutover and
+  production operations are governed by T4.
 
 ## Permit Workflow
 
 Submitted declarations follow the ordered route `CV -> QLC -> BP -> ISSUE`.
 The API rejects skipped stages and records each transition. Reviewers can
 request changes with a reason; authorized BP operators can issue a permit
-number or revoke an issued permit. Actor names and roles are currently explicit
-workflow inputs, not proof of identity. Production RBAC must bind them to an
-authenticated server-side session.
+number or revoke an issued permit. Actor identity is derived from the
+authenticated server-side user and cannot be supplied by the browser.
 
 ## Registry And Certificate Checks
 

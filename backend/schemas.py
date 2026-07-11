@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 class Token(BaseModel):
     access_token: str
@@ -10,12 +10,11 @@ class TokenData(BaseModel):
     role: Optional[str] = None
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
     full_name: str
     role: str
-    class Config:
-        orm_mode = True
 
 class OrganizationBase(BaseModel):
     name: str
@@ -27,9 +26,8 @@ class OrganizationBase(BaseModel):
     email: str = ""
 
 class OrganizationResponse(OrganizationBase):
+    model_config = ConfigDict(from_attributes=True)
     id: int
-    class Config:
-        orm_mode = True
 
 class VesselBase(BaseModel):
     organization_id: Optional[int] = None
@@ -57,11 +55,10 @@ class VesselBase(BaseModel):
     notes: str = ""
 
 class VesselResponse(VesselBase):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     certificate_status: Optional[str] = None
     organization_name: Optional[str] = None
-    class Config:
-        orm_mode = True
 
 class DeclarationBase(BaseModel):
     vessel_id: Optional[int] = None
@@ -103,12 +100,11 @@ class CrewMember(BaseModel):
     notes: str = ""
 
 class CrewMemberResponse(CrewMember):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     certificate_status: Optional[str] = None
     vessel_name: Optional[str] = None
     registration_no: Optional[str] = None
-    class Config:
-        orm_mode = True
 
 class Cargo(BaseModel):
     cargo_type: str = ""
@@ -126,11 +122,10 @@ class DeclarationCreate(DeclarationBase):
     crew_ids: List[int] = []
 
 class DeclarationResponse(DeclarationBase):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     reference_no: str
     status: str
     workflow_status: str
     unload: Cargo
     load: Cargo
-    class Config:
-        orm_mode = True

@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text
 from sqlalchemy.orm import declarative_base, relationship, backref
 
 Base = declarative_base()
 
 def now_iso():
-    return datetime.utcnow().isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 class User(Base):
     __tablename__ = "users"
@@ -65,6 +65,7 @@ class Vessel(Base):
     notes = Column(Text, nullable=False, default="")
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
+    version = Column(Integer, nullable=False, default=1)
     organization = relationship("Organization", back_populates="vessels", lazy="select")
 
 class Declaration(Base):
@@ -110,6 +111,7 @@ class Declaration(Base):
     submitted_at = Column(String)
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
+    version = Column(Integer, nullable=False, default=1)
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -118,6 +120,9 @@ class AuditEvent(Base):
     entity_id = Column(Integer, nullable=False)
     action = Column(String, nullable=False)
     summary = Column(Text, nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id"))
+    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    correlation_id = Column(String, nullable=False, default="")
     created_at = Column(String, nullable=False, default=now_iso)
 
 class DeclarationEvent(Base):
@@ -129,6 +134,8 @@ class DeclarationEvent(Base):
     to_status = Column(String, nullable=False)
     actor_name = Column(String, nullable=False)
     actor_role = Column(String, nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id"))
+    correlation_id = Column(String, nullable=False, default="")
     note = Column(Text, nullable=False, default="")
     created_at = Column(String, nullable=False, default=now_iso)
 
@@ -148,6 +155,7 @@ class CrewMember(Base):
     notes = Column(Text, nullable=False, default="")
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
+    version = Column(Integer, nullable=False, default=1)
 
 class DeclarationCrew(Base):
     __tablename__ = "declaration_crew"

@@ -1,11 +1,14 @@
 import json
 import os
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .models import Base, AuditEvent
+
+correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "data" / "cang_vu.db"
@@ -26,22 +29,30 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-def audit(db, entity_type: str, entity_id: int, action: str, summary: str) -> None:
+def audit(
+    db, entity_type: str, entity_id: int, action: str, summary: str,
+    *, actor_user_id: int | None = None, organization_id: int | None = None,
+) -> None:
     event = AuditEvent(
         entity_type=entity_type,
         entity_id=entity_id,
         action=action,
         summary=summary[:500],
+        actor_user_id=actor_user_id,
+        organization_id=organization_id,
+        correlation_id=correlation_id.get(),
         created_at=now_iso()
     )
     db.add(event)
-    db.commit()
 
 def cargo(value: Any) -> dict[str, Any]:
     source = value if isinstance(value, dict) else {}

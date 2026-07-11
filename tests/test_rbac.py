@@ -538,3 +538,21 @@ def test_alembic_t1_upgrade_and_downgrade_rehearsal(monkeypatch, tmp_path):
     columns_after = {column["name"] for column in inspect(legacy_engine).get_columns("users")}
     assert "organization_id" not in columns_after
     assert "is_active" not in columns_after
+
+
+def test_alembic_fresh_database_reaches_t2_head(monkeypatch, tmp_path):
+    """A fresh local database is initialized by migrations, not app startup."""
+    fresh_db = tmp_path / "fresh.db"
+    url = f"sqlite:///{fresh_db}"
+    import backend.database as database
+
+    monkeypatch.setattr(database, "SQLALCHEMY_DATABASE_URL", url)
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.upgrade(config, "head")
+
+    inspector = inspect(create_engine(url))
+    assert {"users", "organizations", "declarations", "audit_events"}.issubset(
+        set(inspector.get_table_names())
+    )
+    assert "version" in {column["name"] for column in inspector.get_columns("declarations")}
+    assert "correlation_id" in {column["name"] for column in inspector.get_columns("audit_events")}

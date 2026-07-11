@@ -179,25 +179,37 @@ Issued work orders:
 
 ## Tranche: T2 Domain Integrity and Persistence (WO-KBCV-T2-20260711)
 
-- **Status**: IN_PROGRESS
-- **Phase**: BUILD
+- **Status**: CLOSED — Gate 2 reviewer evidence complete
+- **Phase**: REVIEW
 - **Risk Level**: R2
 
-### Work started
+### What was done
 
 - Removed runtime `create_all()` from the FastAPI application.
 - Added Alembic baseline/T2 migration chain for fresh and legacy SQLite paths.
 - Added optimistic versions to vessel, crew and declaration aggregates.
 - Added correlation id propagation and authoritative audit metadata.
 - Added transaction rollback in database dependencies and expanded regression
-  coverage for stale updates, audit metadata and fresh migration bootstrap.
+  coverage for stale updates, audit metadata and fresh/legacy migration paths.
+- Standardized database constraint conflicts as `409 Conflict` and proved that
+  a failed vessel write rolls back an organization created in the same request.
+- Added Pydantic v2 model cleanup, validation boundaries, SQLAlchemy domain
+  relationships and CHANGES_REQUESTED resubmission state reset.
+- Connected optimistic versions to frontend edit requests.
 
-### Open Gate 2 work
+### Gate 2 evidence
 
-- Complete remaining endpoint transaction/error normalization.
-- Complete workflow/audit relationship and state-table hardening.
-- Review constraints and migration matrix before closure.
+- Tests: `50 passed, 0 failed`.
+- Fresh database migration to head: PASS.
+- Legacy T0/T1 SQLite migration upgrade/downgrade rehearsal: PASS.
+- Atomic rollback, stale-write conflict, workflow transition/resubmission and
+  audit correlation tests: PASS.
+- `git diff --check`: PASS.
+- CVF Workspace Doctor after core reconciliation: PASS 17/17.
+- Closure commits: `aa4c609`, `1b48cd5`, `0b80908`; manifest pin refresh is
+  committed with this closure record.
 
 ### Next governed move
 
-Continue T2 BUILD; do not start T3 until Gate 2 is reviewer-approved.
+T3 — Files, Imports and Reports is now eligible for R2 BUILD approval. T4/T5
+remain gated by their preceding work orders; T6 remains externally blocked.

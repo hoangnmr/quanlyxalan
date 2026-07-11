@@ -3,7 +3,7 @@
 ## Control block
 
 - Work order: `WO-KBCV-T2-20260711`
-- Status: READY FOR ASSIGNMENT — BUILD requires human R2 approval
+- Status: CLOSED — Gate 2 evidence recorded in `docs/AGENT_HANDOFF.md`
 - Depends on: T1 corrective commit `0215b43`
 - Risk: R2 / Priority: P0
 - CVF phase on assignment: BUILD

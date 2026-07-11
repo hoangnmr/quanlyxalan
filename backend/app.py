@@ -24,6 +24,7 @@ from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
 from .auth import create_access_token, get_current_user, get_password_hash, verify_password
+from .rbac import require_roles, verify_organization_ownership
 from .database import DB_PATH, SessionLocal, audit, cargo, engine, now_iso
 from .models import (
     Attachment, AuditEvent, Base, CrewMember, Declaration,
@@ -42,9 +43,15 @@ ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Khai-bao-Cang-vu API", version="1.0.0")
 
+origins_env = os.getenv("ALLOWED_ORIGINS")
+if origins_env:
+    origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+else:
+    origins = ["http://127.0.0.1:8080", "http://localhost:8080"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -300,17 +307,84 @@ UNLOAD_MOVEMENTS = [
 LOAD_MOVEMENTS = ["Nội địa", "Xuất khẩu"]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# AUTH
-# ══════════════════════════════════════════════════════════════════════════════
+# Rate limiting tracker for login: {ip: {"failures": count, "blocked_until": datetime}}
+_login_attempts: Dict[str, Dict[str, Any]] = {}
 
 @app.post("/api/auth/login")
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == request.username).first()
-    if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Tên đăng nhập hoặc mật khẩu không đúng.")
-    token = create_access_token(data={"sub": user.username, "role": user.role})
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    now = datetime.now()
+
+    # Rate limiting check
+    tracker = _login_attempts.get(ip)
+    if tracker and tracker["failures"] >= 5:
+        if now < tracker["blocked_until"]:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Tài khoản hoặc IP bị tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 5 phút."
+            )
+        else:
+            # Block expired, reset tracker
+            _login_attempts[ip] = {"failures": 0, "blocked_until": now}
+
+    user = db.query(User).filter(User.username == payload.username).first()
+    if not user or not verify_password(payload.password, user.password_hash):
+        # Register failure
+        if ip not in _login_attempts:
+            _login_attempts[ip] = {"failures": 1, "blocked_until": now}
+        else:
+            _login_attempts[ip]["failures"] += 1
+            if _login_attempts[ip]["failures"] >= 5:
+                from datetime import timedelta
+                _login_attempts[ip]["blocked_until"] = now + timedelta(minutes=5)
+
+        # Audit failure (NO password/token printed)
+        audit(db, "auth", 0, "LOGIN_FAILURE", f"Đăng nhập thất bại từ IP={ip}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Thông tin đăng nhập không đúng."
+        )
+
+    # Check active status
+    if not getattr(user, "is_active", True):
+        audit(db, "auth", user.id, "LOGIN_FAILURE_DISABLED", f"Đăng nhập thất bại do tài khoản bị vô hiệu hóa từ IP={ip}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản đã bị vô hiệu hóa."
+        )
+
+    # Reset failure tracker on successful login
+    if ip in _login_attempts:
+        _login_attempts[ip] = {"failures": 0, "blocked_until": now}
+
+    # Generate token containing username (sub), role, and org_id
+    token = create_access_token(data={
+        "sub": user.username,
+        "role": user.role,
+        "org_id": user.organization_id
+    })
+
+    # Audit success
+    audit(db, "user", user.id, "LOGIN_SUCCESS", f"Đăng nhập thành công từ IP={ip}")
     return {"access_token": token, "token_type": "bearer"}
+
+
+@app.get("/api/auth/me")
+def get_me(user: User = Depends(get_current_user)):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "role": user.role,
+        "organization_id": user.organization_id,
+        "organization_name": user.organization.name if user.organization else None
+    }
+
+
+@app.post("/api/auth/logout")
+def logout(user: User = Depends(get_current_user)):
+    # Local client-side stateless token removal is primary, but we return 200 OK.
+    return {"status": "ok", "detail": "Đăng xuất thành công."}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -343,7 +417,7 @@ def get_catalogs():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/api/organizations")
-def get_organizations(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def get_organizations(db: Session = Depends(get_db), user: User = Depends(require_roles("ADMIN"))):
     orgs = db.query(Organization).order_by(Organization.name).all()
     return [
         {c.name: getattr(o, c.name) for c in o.__table__.columns}
@@ -372,28 +446,45 @@ def get_dashboard(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    vessels_count = db.query(func.count(Vessel.id)).scalar()
-    drafts_count = db.query(func.count(Declaration.id)).filter(
-        Declaration.workflow_status == "DRAFT"
-    ).scalar()
-    submitted_count = db.query(func.count(Declaration.id)).filter(
-        Declaration.workflow_status.notin_(["DRAFT", "CHANGES_REQUESTED"])
-    ).scalar()
     today_iso = date.today().isoformat()
-    arriving_today = db.query(func.count(Declaration.id)).filter(
-        Declaration.eta.startswith(today_iso)
-    ).scalar()
-    cert_warnings = db.query(func.count(Vessel.id)).filter(
-        Vessel.certificate_expiry_date.isnot(None)
-    ).scalar()
+    
+    # Base queries
+    vessels_q = db.query(Vessel)
+    drafts_q = db.query(Declaration).filter(Declaration.workflow_status == "DRAFT")
+    submitted_q = db.query(Declaration).filter(Declaration.workflow_status.notin_(["DRAFT", "CHANGES_REQUESTED"]))
+    arriving_q = db.query(Declaration).filter(Declaration.eta.startswith(today_iso))
+    warnings_q = db.query(Vessel).filter(Vessel.certificate_expiry_date.isnot(None))
+    recent_q = db.query(Declaration)
+    vessel_search_q = db.query(Vessel)
 
-    recent_decls = db.query(Declaration).order_by(desc(Declaration.updated_at)).limit(8).all()
+    # Scoping
+    if user.role == "CUSTOMER":
+        vessels_q = vessels_q.filter(Vessel.organization_id == user.organization_id)
+        drafts_q = drafts_q.filter(Declaration.organization_id == user.organization_id)
+        submitted_q = submitted_q.filter(Declaration.organization_id == user.organization_id)
+        arriving_q = arriving_q.filter(Declaration.organization_id == user.organization_id)
+        warnings_q = warnings_q.filter(Vessel.organization_id == user.organization_id)
+        recent_q = recent_q.filter(Declaration.organization_id == user.organization_id)
+        vessel_search_q = vessel_search_q.filter(Vessel.organization_id == user.organization_id)
+    elif user.role in ("CV", "QLC", "BP"):
+        # Reviewers see all submitted/approved/issued/revoked, but not drafts
+        drafts_q = drafts_q.filter(Declaration.id == -1)  # Drafts count is 0
+        recent_q = recent_q.filter(Declaration.workflow_status != "DRAFT")
+
+    # Counts
+    vessels_count = vessels_q.with_entities(func.count(Vessel.id)).scalar()
+    drafts_count = drafts_q.with_entities(func.count(Declaration.id)).scalar()
+    submitted_count = submitted_q.with_entities(func.count(Declaration.id)).scalar()
+    arriving_today = arriving_q.with_entities(func.count(Declaration.id)).scalar()
+    cert_warnings = warnings_q.with_entities(func.count(Vessel.id)).scalar()
+
+    recent_decls = recent_q.order_by(desc(Declaration.updated_at)).limit(8).all()
 
     matches: list[dict] = []
     if q:
         search = f"%{q}%"
         vessels = (
-            db.query(Vessel)
+            vessel_search_q
             .filter(or_(Vessel.registration_no.like(search), Vessel.name.like(search)))
             .order_by(desc(Vessel.updated_at))
             .limit(12)
@@ -437,8 +528,11 @@ def _vessel_dict(v: Vessel) -> dict:
 
 
 @app.get("/api/vessels")
-def get_vessels(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    vessels = db.query(Vessel).order_by(desc(Vessel.updated_at)).all()
+def get_vessels(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN"))):
+    if user.role == "CUSTOMER":
+        vessels = db.query(Vessel).filter(Vessel.organization_id == user.organization_id).order_by(desc(Vessel.updated_at)).all()
+    else:
+        vessels = db.query(Vessel).order_by(desc(Vessel.updated_at)).all()
     return [_vessel_dict(v) for v in vessels]
 
 
@@ -446,22 +540,31 @@ def get_vessels(db: Session = Depends(get_db), user: User = Depends(get_current_
 def save_vessel(
     payload: VesselSaveRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
-    org_name = (
-        (payload.organization or {}).get("name") if isinstance(payload.organization, dict)
-        else payload.organization_name
-    )
-    org = _get_or_create_org(db, org_name)
+    if user.role == "CUSTOMER":
+        # Force organization to the customer's bound organization
+        org_id = user.organization_id
+    else:
+        # ADMIN can specify organization name
+        org_name = (
+            (payload.organization or {}).get("name") if isinstance(payload.organization, dict)
+            else payload.organization_name
+        )
+        org = _get_or_create_org(db, org_name)
+        org_id = org.id if org else None
 
     data = payload.model_dump(exclude={"id", "organization", "organization_name"})
-    data["organization_id"] = org.id if org else None
+    data["organization_id"] = org_id
     data["updated_at"] = now_iso()
 
     if payload.id:
         vessel = db.query(Vessel).filter(Vessel.id == payload.id).first()
         if not vessel:
             raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện.")
+        # Tenant isolation check
+        verify_organization_ownership(user, vessel.organization_id)
+        
         for k, v in data.items():
             if hasattr(vessel, k):
                 setattr(vessel, k, v)
@@ -481,7 +584,7 @@ def save_vessel(
 def verify_vessel_registry(
     vessel_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
     """
     Local-only registry date check. Does NOT call any external Maritime Authority API.
@@ -491,6 +594,9 @@ def verify_vessel_registry(
     vessel = db.query(Vessel).filter(Vessel.id == vessel_id).first()
     if not vessel:
         raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện.")
+
+    # Tenant isolation check
+    verify_organization_ownership(user, vessel.organization_id)
 
     vessel.registry_verification_status = "VERIFIED"
     vessel.registry_verified_at = now_iso()
@@ -519,8 +625,11 @@ def _crew_dict(c: CrewMember, db: Session) -> dict:
 
 
 @app.get("/api/crew")
-def get_crew(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    crews = db.query(CrewMember).order_by(CrewMember.full_name).all()
+def get_crew(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN"))):
+    if user.role == "CUSTOMER":
+        crews = db.query(CrewMember).filter(CrewMember.organization_id == user.organization_id).order_by(CrewMember.full_name).all()
+    else:
+        crews = db.query(CrewMember).order_by(CrewMember.full_name).all()
     return [_crew_dict(c, db) for c in crews]
 
 
@@ -528,15 +637,31 @@ def get_crew(db: Session = Depends(get_db), user: User = Depends(get_current_use
 def save_crew(
     payload: CrewSaveRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
+    # Verify vessel ownership if provided
+    if payload.vessel_id:
+        vessel = db.query(Vessel).filter(Vessel.id == payload.vessel_id).first()
+        if not vessel:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện được gán.")
+        verify_organization_ownership(user, vessel.organization_id)
+
     data = payload.model_dump(exclude={"id"})
     data["updated_at"] = now_iso()
+    
+    if user.role == "CUSTOMER":
+        data["organization_id"] = user.organization_id
 
     if payload.id:
         member = db.query(CrewMember).filter(CrewMember.id == payload.id).first()
         if not member:
             raise HTTPException(status_code=404, detail="Không tìm thấy thuyền viên.")
+        verify_organization_ownership(user, member.organization_id)
+        
+        # If user is ADMIN, organization_id can be updated, but for CUSTOMER we keep it same
+        if user.role == "CUSTOMER":
+            data.pop("organization_id", None)
+            
         for k, v in data.items():
             if hasattr(member, k):
                 setattr(member, k, v)
@@ -572,9 +697,16 @@ def get_declarations(
     from_: Optional[str] = Query(default=None, alias="from"),
     to: Optional[str] = None,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
 ):
     query = db.query(Declaration)
+    
+    if user.role == "CUSTOMER":
+        query = query.filter(Declaration.organization_id == user.organization_id)
+    elif user.role in ("CV", "QLC", "BP"):
+        # Reviewers cannot see draft declarations
+        query = query.filter(Declaration.workflow_status != "DRAFT")
+
     if q:
         search = f"%{q}%"
         query = query.filter(
@@ -603,9 +735,38 @@ def save_declaration(
     payload: DeclarationSaveRequest,
     submit: bool = False,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
-    org = _get_or_create_org(db, payload.company_name)
+    if submit and user.role != "CUSTOMER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ chủ phương tiện (CUSTOMER) mới có quyền nộp phiếu khai báo."
+        )
+
+    if user.role == "CUSTOMER":
+        # Force organization to the customer's bound organization
+        org_id = user.organization_id
+        company_name = user.organization.name if user.organization else "N/A"
+    else:
+        # ADMIN can specify organization name
+        org = _get_or_create_org(db, payload.company_name)
+        org_id = org.id if org else None
+        company_name = payload.company_name
+
+    # IDOR prevention: check vessel ownership
+    if payload.vessel_id:
+        vessel = db.query(Vessel).filter(Vessel.id == payload.vessel_id).first()
+        if not vessel:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện.")
+        verify_organization_ownership(user, vessel.organization_id)
+
+    # IDOR prevention: check crew members ownership
+    if payload.crew_ids:
+        for crew_id in payload.crew_ids:
+            crew_member = db.query(CrewMember).filter(CrewMember.id == crew_id).first()
+            if not crew_member:
+                raise HTTPException(status_code=404, detail=f"Không tìm thấy thuyền viên ID {crew_id}.")
+            verify_organization_ownership(user, crew_member.organization_id)
 
     unload_data = cargo(payload.unload.model_dump())
     load_data = cargo(payload.load.model_dump())
@@ -614,6 +775,9 @@ def save_declaration(
         decl = db.query(Declaration).filter(Declaration.id == payload.id).first()
         if not decl:
             raise HTTPException(status_code=404, detail="Không tìm thấy phiếu khai báo.")
+        # Tenant isolation check
+        verify_organization_ownership(user, decl.organization_id)
+
         if decl.workflow_status not in ("DRAFT", "CHANGES_REQUESTED"):
             raise HTTPException(
                 status_code=409,
@@ -621,7 +785,7 @@ def save_declaration(
             )
         # Update fields
         for field_name in (
-            "company_name", "declaration_date", "vessel_name", "registration_no",
+            "declaration_date", "vessel_name", "registration_no",
             "vessel_type", "vessel_class", "length_m", "deadweight_tons", "gross_tonnage",
             "certificate_expiry_date", "crew_count", "passenger_count", "last_port",
             "working_port", "destination_port", "eta", "etd", "master_name", "master_phone",
@@ -631,18 +795,19 @@ def save_declaration(
             val = getattr(payload, field_name, None)
             if val is not None and hasattr(decl, field_name):
                 setattr(decl, field_name, val)
+        
+        decl.company_name = company_name
         decl.unload_json = json.dumps(unload_data, ensure_ascii=False)
         decl.load_json = json.dumps(load_data, ensure_ascii=False)
-        if org:
-            decl.organization_id = org.id
+        decl.organization_id = org_id
         decl.updated_at = now_iso()
     else:
         ref_no = f"TT-{datetime.now():%Y%m%d-%H%M%S}-{datetime.now().microsecond:06d}"
         decl = Declaration(
             reference_no=ref_no,
-            organization_id=org.id if org else None,
+            organization_id=org_id,
             vessel_id=payload.vessel_id,
-            company_name=payload.company_name,
+            company_name=company_name,
             declaration_date=payload.declaration_date,
             vessel_name=payload.vessel_name,
             registration_no=payload.registration_no,
@@ -723,11 +888,15 @@ def save_declaration(
 def get_declaration_events(
     declaration_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+    
+    # Tenant isolation check
+    verify_organization_ownership(user, decl.organization_id)
+
     events = (
         db.query(DeclarationEvent)
         .filter(DeclarationEvent.declaration_id == declaration_id)
@@ -749,17 +918,41 @@ def declaration_workflow(
     declaration_id: int,
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CV", "QLC", "BP")),  # Deny CUSTOMER and ADMIN by default
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+
+    # Role checks per action
+    if payload.action == "CV_APPROVE" and user.role != "CV":
+        raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền thực hiện hành động này.")
+    if payload.action == "QLC_APPROVE" and user.role != "QLC":
+        raise HTTPException(status_code=403, detail="Chỉ QLC mới có quyền thực hiện hành động này.")
+    if payload.action in ("BP_APPROVE", "ISSUE", "REVOKE") and user.role != "BP":
+        raise HTTPException(status_code=403, detail="Chỉ BP mới có quyền thực hiện hành động này.")
+
+    if payload.action == "REQUEST_CHANGES":
+        current = decl.workflow_status
+        if current == "PENDING_REVIEW" and user.role != "CV":
+            raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
+        elif current == "PENDING_QLC" and user.role != "QLC":
+            raise HTTPException(status_code=403, detail="Chỉ QLC mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
+        elif current == "PENDING_BP" and user.role != "BP":
+            raise HTTPException(status_code=403, detail="Chỉ BP mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
+        elif current not in ("PENDING_REVIEW", "PENDING_QLC", "PENDING_BP"):
+            raise HTTPException(status_code=400, detail="Không thể yêu cầu chỉnh sửa từ trạng thái hiện tại.")
+
+    # Derive actor details strictly from JWT
+    actor_role = user.role
+    actor_name = user.full_name or user.username
+
     updated = _apply_workflow_transition(
         db=db,
         declaration=decl,
         action=payload.action,
-        actor_role=payload.actor_role,
-        actor_name=payload.actor_name,
+        actor_role=actor_role,
+        actor_name=actor_name,
         note=payload.note,
         permit_no=payload.permit_no,
     )
@@ -776,11 +969,14 @@ async def upload_attachment(
     filename: str,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+
+    # Tenant isolation check
+    verify_organization_ownership(user, decl.organization_id)
 
     content = await request.body()
     ext = Path(filename).suffix.lower()
@@ -821,14 +1017,18 @@ _SUGGESTION_FIELDS = {
 def get_suggestions(
     field: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
 ):
     col = _SUGGESTION_FIELDS.get(field)
     if not col:
         return []
+    
+    query = db.query(col).filter(col.isnot(None), col != "")
+    if user.role == "CUSTOMER":
+        query = query.filter(Declaration.organization_id == user.organization_id)
+        
     rows = (
-        db.query(col)
-        .filter(col.isnot(None), col != "")
+        query
         .distinct()
         .order_by(col)
         .limit(50)
@@ -845,7 +1045,7 @@ def get_suggestions(
 async def import_vessels(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
     content = await request.body()
     if not content:
@@ -857,7 +1057,13 @@ async def import_vessels(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Lỗi đọc file: {exc}")
 
-    org = _get_or_create_org(db, org_data.get("name"))
+    # Scoping organization based on role
+    if user.role == "CUSTOMER":
+        org_id = user.organization_id
+    else:
+        org = _get_or_create_org(db, org_data.get("name"))
+        org_id = org.id if org else None
+
     accepted = 0
     rejected: list[dict] = []
     for row in rows:
@@ -866,17 +1072,20 @@ async def import_vessels(
                 Vessel.registration_no == row.get("registration_no")
             ).first()
             if existing:
+                # Tenant isolation check before updating
+                verify_organization_ownership(user, existing.organization_id)
                 for k, v in row.items():
-                    if hasattr(existing, k) and k not in ("id", "created_at"):
+                    if hasattr(existing, k) and k not in ("id", "created_at", "organization_id"):
                         setattr(existing, k, excel_date(v) if "date" in k else v)
+                existing.organization_id = org_id
                 existing.updated_at = now_iso()
             else:
                 safe = {
                     k: (excel_date(v) if "date" in k else v)
                     for k, v in row.items()
-                    if hasattr(Vessel, k) and k not in ("id",)
+                    if hasattr(Vessel, k) and k not in ("id", "organization_id")
                 }
-                safe["organization_id"] = org.id if org else None
+                safe["organization_id"] = org_id
                 safe["created_at"] = now_iso()
                 safe["updated_at"] = now_iso()
                 db.add(Vessel(**safe))
@@ -892,7 +1101,7 @@ async def import_vessels(
 async def import_declaration(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER")),
 ):
     content = await request.body()
     if not content:
@@ -919,6 +1128,11 @@ async def import_declaration(
         if not safe.get(required):
             safe[required] = "N/A"
 
+    # Enforce CUSTOMER organization binding
+    safe["organization_id"] = user.organization_id
+    if user.organization:
+        safe["company_name"] = user.organization.name
+
     decl = Declaration(**safe)
     db.add(decl)
     db.commit()
@@ -936,7 +1150,7 @@ def export_report(
     from_: Optional[str] = Query(default=None, alias="from"),
     to: Optional[str] = None,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
 ):
     if kind not in ("appendix1", "appendix2", "appendix3"):
         raise HTTPException(status_code=404, detail=f"Loại báo cáo '{kind}' không tồn tại.")
@@ -944,6 +1158,9 @@ def export_report(
     query = db.query(Declaration).filter(
         Declaration.workflow_status.notin_(["DRAFT", "CHANGES_REQUESTED"])
     )
+    if user.role == "CUSTOMER":
+        query = query.filter(Declaration.organization_id == user.organization_id)
+        
     if from_:
         query = query.filter(Declaration.declaration_date >= from_)
     if to:
@@ -1017,7 +1234,7 @@ def _ensure_connector(db: Session) -> IntegrationConnector:
 @app.get("/api/integrations/maritime-authority")
 def get_integration_status(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("BP", "ADMIN")),
 ):
     connector = _ensure_connector(db)
     jobs = (
@@ -1042,7 +1259,7 @@ def get_integration_status(
 async def prepare_sync(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("ADMIN")),
 ):
     """
     Prepare a sync payload (PREPARED status).

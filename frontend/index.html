@@ -41,7 +41,11 @@
       <header class="topbar">
         <button id="menu-toggle" class="icon-button mobile-only" aria-label="Mở menu">☰</button>
         <div><span class="eyebrow">CỔNG THÔNG TIN KHÁCH HÀNG</span><strong id="page-context">Tổng quan khai báo</strong></div>
-        <div class="topbar-actions"><span id="api-state" class="state-badge pending">Đang kết nối</span></div>
+        <div class="topbar-actions">
+          <span id="user-display" style="font-size: 0.85rem; color: var(--text-muted); margin-right: 12px;"></span>
+          <button id="logout-button" class="ghost-button" style="display: none; margin-right: 12px;">Đăng xuất</button>
+          <span id="api-state" class="state-badge pending">Đang kết nối</span>
+        </div>
       </header>
 
       <main id="main-content">
@@ -102,7 +106,7 @@
 
   <dialog id="declaration-dialog" class="modal wide"><form id="declaration-form"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Tự lưu trên trình duyệt</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div><div id="declaration-fields"></div><div class="review-strip"><div><strong>Kiểm tra trước khi nộp</strong><p>Dấu * là bắt buộc. Phiếu đã nộp được khóa để bảo toàn báo cáo.</p></div><div><button type="submit" class="outline-button" value="draft" id="save-draft">Lưu nháp</button><button type="submit" class="primary-button" value="submit" id="submit-declaration">Kiểm tra & nộp</button></div></div></form></dialog>
 
-  <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2 id="workflow-title">Chi tiết phiếu</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div><div id="workflow-summary" class="workflow-summary"></div><div id="workflow-timeline" class="timeline"></div><form id="workflow-form" class="workflow-form"><label>Thao tác<select name="action" required><option value="">Chọn</option><option value="CV_APPROVE">CV duyệt</option><option value="QLC_APPROVE">QLC duyệt</option><option value="BP_APPROVE">BP duyệt</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option><option value="ISSUE">Ban hành giấy phép</option><option value="REVOKE">Thu hồi giấy phép</option></select></label><label>Vai trò<select name="actor_role" required><option value="CV">CV</option><option value="QLC">QLC</option><option value="BP">BP</option></select></label><label>Người xử lý<input name="actor_name" required placeholder="Họ tên cán bộ"></label><label>Số giấy phép<input name="permit_no" placeholder="Tự sinh nếu để trống"></label><label class="span-full">Ghi chú / lý do<textarea name="note" placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung hoặc thu hồi"></textarea></label><button class="primary-button" type="submit">Ghi nhận thao tác</button></form></dialog>
+  <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2 id="workflow-title">Chi tiết phiếu</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div><div id="workflow-summary" class="workflow-summary"></div><div id="workflow-timeline" class="timeline"></div><form id="workflow-form" class="workflow-form"><label>Thao tác<select name="action" required><option value="">Chọn</option><option value="CV_APPROVE">CV duyệt</option><option value="QLC_APPROVE">QLC duyệt</option><option value="BP_APPROVE">BP duyệt</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option><option value="ISSUE">Ban hành giấy phép</option><option value="REVOKE">Thu hồi giấy phép</option></select></label><label>Số giấy phép<input name="permit_no" placeholder="Tự sinh nếu để trống"></label><label class="span-full">Ghi chú / lý do<textarea name="note" placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung hoặc thu hồi"></textarea></label><button class="primary-button" type="submit">Ghi nhận thao tác</button></form></dialog>
 
   <dialog id="login-dialog" class="modal">
     <form id="login-form">

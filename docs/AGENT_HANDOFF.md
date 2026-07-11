@@ -100,3 +100,48 @@ Work order issued: `docs/WORK_ORDER_T1_IDENTITY_RBAC_TENANT_ISOLATION.md`
 7. ✅ `git diff --check`: PASS after reviewer cleanup
 8. ✅ Human owner authorized commit
 9. ✅ CVF doctor re-run at handoff: PASS 17/17
+
+---
+
+## Tranche: T1 Identity, RBAC and Tenant Isolation (WO-KBCV-T1-20260711)
+
+- **Status**: CLOSED — Gate 1 PASSED and committed
+- **Date**: 2026-07-11
+- **Phase**: FREEZE
+- **Risk Level**: R2
+
+### What was done (T1)
+
+| Task | Status |
+|------|--------|
+| T1 — ADR and Identity Model | ✅ DONE — `docs/ADR-002-SESSION-DESIGN.md`, added `organization_id` & `is_active` to `User` |
+| T2 — Secret and Login Hardening | ✅ DONE — fail-fast key check, timezone-aware expiry, IP-based login rate limit, admin bootstrap script |
+| T3 — Server-side Authorization | ✅ DONE — role verification, tenant isolation ownership checks, workflow actor derived from JWT, ADMIN workflow lock |
+| T4 — Data Migration (Alembic) | ✅ DONE — initialized Alembic, custom batch migration for SQLite, upgrade/downgrade rehearsal |
+| T5 — Frontend Contract | ✅ DONE — loaded user from `/api/auth/me`, logout button, removed client actor name/role input, role-aware UI toggles |
+| T6 — Security Tests | ✅ DONE — matrix-driven tests in `tests/test_rbac.py` + updated T0 suite to use role headers |
+| T7 — Documentation and Handoff | ✅ DONE — updated `docs/API_CONTRACT.md`, created `docs/SECURITY_BOUNDARY.md` and `docs/USER_BOOTSTRAP.md`, generated Web Evidence Bridge |
+
+### Test results (Gate 1 verification)
+
+```
+40 passed, 0 failed — 19.68s
+Python 3.13.12 | pytest 8.2.0
+```
+
+### Next governed move
+
+**T2 — Batch Pipeline & Data Pipeline recovery** (refer to [EA_EVALUATION_ROADMAP.md](file:///d:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu/docs/EA_EVALUATION_ROADMAP.md)):
+1. Secure Excel parsing (mitigate zip bomb, XML external entity, data conversion bounds).
+2. Establish formal schema enforcement during imports.
+3. Align report generation bounds and formats.
+
+### Human review closure record
+
+1. ✅ Tests: `40 passed, 0 failed`
+2. ✅ Gate 1: tenant isolation, RBAC matrix, Rate limit, and token validation PASS (verified by test suite)
+3. ✅ Frontend user display, role constraints, and logout integration PASS
+4. ✅ Database migrations (Alembic) upgrade and downgrade PASS
+5. ✅ CVF doctor re-run: PASS 17/17
+6. ✅ Workspace Web Evidence Bridge generated PASS
+7. ✅ Security and user bootstrap docs created PASS

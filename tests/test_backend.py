@@ -26,10 +26,9 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.models import Base
+from backend.models import Base, User, Organization
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
-from backend.models import User
 from backend.app import app, get_db
 
 # ── Create all tables in test DB ──────────────────────────────────────────────
@@ -52,15 +51,34 @@ app.dependency_overrides[get_db] = _override_get_db
 def _seed_user() -> None:
     db = SessionLocal()
     try:
-        if not db.query(User).filter(User.username == "testuser").first():
-            db.add(User(
-                username="testuser",
-                password_hash=get_password_hash("testpass"),
-                full_name="Test User",
-                role="ADMIN",
-                created_at=now_iso(),
-            ))
+        # Seed test organization first
+        org = db.query(Organization).filter(Organization.name == "Test Org").first()
+        if not org:
+            org = Organization(name="Test Org", tax_code="123456", created_at=now_iso(), updated_at=now_iso())
+            db.add(org)
             db.commit()
+            db.refresh(org)
+        
+        # Seed users
+        user_data = [
+            ("testuser", "ADMIN", None),
+            ("customeruser", "CUSTOMER", org.id),
+            ("cvuser", "CV", None),
+            ("qlcuser", "QLC", None),
+            ("bpuser", "BP", None),
+        ]
+        for username, role, org_id in user_data:
+            if not db.query(User).filter(User.username == username).first():
+                db.add(User(
+                    username=username,
+                    password_hash=get_password_hash("testpass"),
+                    full_name=f"{role} User",
+                    role=role,
+                    organization_id=org_id,
+                    is_active=1,
+                    created_at=now_iso(),
+                ))
+        db.commit()
     finally:
         db.close()
 
@@ -78,6 +96,38 @@ def client():
 @pytest.fixture(scope="module")
 def auth_headers(client):
     res = client.post("/api/auth/login", json={"username": "testuser", "password": "testpass"})
+    assert res.status_code == 200, f"Login failed: {res.text}"
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="module")
+def customer_headers(client):
+    res = client.post("/api/auth/login", json={"username": "customeruser", "password": "testpass"})
+    assert res.status_code == 200, f"Login failed: {res.text}"
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="module")
+def cv_headers(client):
+    res = client.post("/api/auth/login", json={"username": "cvuser", "password": "testpass"})
+    assert res.status_code == 200, f"Login failed: {res.text}"
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="module")
+def qlc_headers(client):
+    res = client.post("/api/auth/login", json={"username": "qlcuser", "password": "testpass"})
+    assert res.status_code == 200, f"Login failed: {res.text}"
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="module")
+def bp_headers(client):
+    res = client.post("/api/auth/login", json={"username": "bpuser", "password": "testpass"})
     assert res.status_code == 200, f"Login failed: {res.text}"
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -289,11 +339,11 @@ def test_declaration_draft_create(client, auth_headers):
     assert "reference_no" in data
 
 
-def test_declaration_submit(client, auth_headers):
+def test_declaration_submit(client, customer_headers):
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
-        headers=auth_headers,
+        headers=customer_headers,
     )
     assert res.status_code == 200
     data = res.json()
@@ -305,14 +355,14 @@ def test_declaration_submit(client, auth_headers):
 # 6. TEU CALCULATIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_teu_calculations(client, auth_headers):
+def test_teu_calculations(client, customer_headers):
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(unload={
             "cont20_full": 2, "cont20_empty": 1,
             "cont40_full": 3, "cont40_empty": 1,
         }),
-        headers=auth_headers,
+        headers=customer_headers,
     )
     assert res.status_code == 200
     unload = res.json()["unload"]
@@ -325,11 +375,11 @@ def test_teu_calculations(client, auth_headers):
 # 7. WORKFLOW — ORDERED TRANSITION
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_ordered_workflow_transition(client, auth_headers):
+def test_ordered_workflow_transition(client, customer_headers, cv_headers, qlc_headers, bp_headers):
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
-        headers=auth_headers,
+        headers=customer_headers,
     )
     assert res.status_code == 200
     decl_id = res.json()["id"]
@@ -337,27 +387,27 @@ def test_ordered_workflow_transition(client, auth_headers):
     # Try BP before CV — must fail
     res2 = client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "Sai thứ tự",
-    }, headers=auth_headers)
+    }, headers=bp_headers)
     assert res2.status_code == 400
 
     # CV approve
     res3 = client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "CV_APPROVE", "actor_role": "CV", "actor_name": "Cán bộ CV",
-    }, headers=auth_headers)
+    }, headers=cv_headers)
     assert res3.status_code == 200
     assert res3.json()["workflow_status"] == "PENDING_QLC"
 
     # QLC approve
     res4 = client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "QLC_APPROVE", "actor_role": "QLC", "actor_name": "Quản lý",
-    }, headers=auth_headers)
+    }, headers=qlc_headers)
     assert res4.status_code == 200
     assert res4.json()["workflow_status"] == "PENDING_BP"
 
     # BP approve
     res5 = client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "Ban phép",
-    }, headers=auth_headers)
+    }, headers=bp_headers)
     assert res5.status_code == 200
     assert res5.json()["workflow_status"] == "APPROVED"
 
@@ -365,32 +415,32 @@ def test_ordered_workflow_transition(client, auth_headers):
     res6 = client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "ISSUE", "actor_role": "BP", "actor_name": "Ban phép",
         "permit_no": "53/GP-TT",
-    }, headers=auth_headers)
+    }, headers=bp_headers)
     assert res6.status_code == 200
     issued = res6.json()
     assert issued["workflow_status"] == "ISSUED"
     assert issued["permit_no"] == "53/GP-TT"
 
     # Events timeline: SUBMIT + CV + QLC + BP + ISSUE = 5
-    res7 = client.get(f"/api/declarations/{decl_id}/events", headers=auth_headers)
+    res7 = client.get(f"/api/declarations/{decl_id}/events", headers=cv_headers)
     assert res7.status_code == 200
     assert len(res7.json()) == 5
 
 
-def test_skip_workflow_stage_rejected(client, auth_headers):
+def test_skip_workflow_stage_rejected(client, customer_headers, cv_headers, bp_headers):
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
-        headers=auth_headers,
+        headers=customer_headers,
     )
     decl_id = res.json()["id"]
     client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "CV_APPROVE", "actor_role": "CV", "actor_name": "CV",
-    }, headers=auth_headers)
+    }, headers=cv_headers)
     # Skip QLC → BP should fail
     res2 = client.post(f"/api/declarations/{decl_id}/workflow", json={
         "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "BP skip",
-    }, headers=auth_headers)
+    }, headers=bp_headers)
     assert res2.status_code == 400
 
 
@@ -398,19 +448,19 @@ def test_skip_workflow_stage_rejected(client, auth_headers):
 # 8. SUBMITTED RECORD PROTECTION
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_submitted_record_edit_protection(client, auth_headers):
+def test_submitted_record_edit_protection(client, customer_headers):
     reg_no = _reg()
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(registration_no=reg_no),
-        headers=auth_headers,
+        headers=customer_headers,
     )
     decl_id = res.json()["id"]
     res2 = client.post("/api/declarations", json={
         **_minimal_declaration(registration_no=reg_no),
         "id": decl_id,
         "vessel_name": "HACKED",
-    }, headers=auth_headers)
+    }, headers=customer_headers)
     assert res2.status_code == 409
 
 
@@ -560,20 +610,20 @@ def test_prepare_sync(client, auth_headers):
 # 14. CREW SNAPSHOT ON DECLARATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_crew_certificate_snapshot(client, auth_headers):
+def test_crew_certificate_snapshot(client, customer_headers):
     crew_res = client.post("/api/crew", json={
         "full_name": "Snapshot Crew",
         "crew_role": "Thuyền trưởng",
         "professional_certificate_type": "Bằng thuyền trưởng",
         "professional_certificate_no": "SNAP-001",
         "certificate_expiry_date": "2099-01-01",
-    }, headers=auth_headers)
+    }, headers=customer_headers)
     assert crew_res.status_code == 200
     crew_id = crew_res.json()["id"]
 
     res = client.post("/api/declarations?submit=true", json=_minimal_declaration(
         crew_ids=[crew_id],
-    ), headers=auth_headers)
+    ), headers=customer_headers)
     assert res.status_code == 200
     # Crew snapshot was recorded (declaration created with crew_ids)
     assert res.json()["workflow_status"] == "PENDING_REVIEW"

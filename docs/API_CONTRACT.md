@@ -1,69 +1,94 @@
 # API Contract — Khai-bao-Cang-vu
 
 > Generated: 2026-07-11  
-> Tranche: T0 Baseline Recovery (WO-KBCV-T0-20260711)  
+> Tranche: T1 Identity, RBAC & Tenant Isolation (WO-KBCV-T1-20260711)  
 > Backend: FastAPI + SQLAlchemy (SQLite local / PostgreSQL production)  
 > Auth: JWT Bearer (`Authorization: Bearer <token>`)
 
+## Role-Based Access Control & Tenant Scope
+
+This system implements four roles with distinct scopes of operations.
+
+*   **ADMIN**: Global administrator. Has access to all organizations, vessels, crew, and declarations. Restricted from workflow approval actions (`CV_APPROVE`, `QLC_APPROVE`, `BP_APPROVE`, `ISSUE`, `REVOKE`, `REQUEST_CHANGES`).
+*   **CUSTOMER**: Customer representative. Has tenant-isolated access. Can only view/write resources belonging to their `organization_id`.
+*   **CV**: Port Officer (Cảng vụ viên). Global read access to submitted/approved declarations. Allowed to perform `CV_APPROVE` and `REQUEST_CHANGES` on declarations.
+*   **QLC**: Port Manager (Quản lý cảng). Global read access. Allowed to perform `QLC_APPROVE` and `REQUEST_CHANGES` on declarations.
+*   **BP**: Permission Officer (Ban cấp phép). Global read access. Allowed to perform `BP_APPROVE`, `ISSUE`, `REVOKE`, and `REQUEST_CHANGES` on declarations.
+
+---
+
 ## Endpoints
 
-### AUTH
+### AUTH & PROFILE
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| POST | `/api/auth/login` | None | `{username, password}` | `{access_token, token_type}` | ✅ DONE |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| POST | `/api/auth/login` | None | `{username, password}` | `{access_token, token_type}` |
+| GET | `/api/auth/me` | Bearer (Any) | — | `{id, username, full_name, role, organization_id, is_active}` |
+| POST | `/api/auth/logout` | Bearer (Any) | — | `{"detail": "Logged out"}` |
 
-### HEALTH + CATALOGS
+> **Rate Limiting**: Throttling is applied per IP. Over 5 incorrect login attempts within 5 minutes will temporarily lock the source IP.
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/health` | None | — | `{status, database, version}` | ✅ DONE |
-| GET | `/api/catalogs` | None | — | `{vesselTypes, vesselClasses, shellMaterials, cargoTypes, unloadMovements, loadMovements}` | ✅ DONE |
+### HEALTH & CATALOGS
+
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/health` | None | — | `{status, database, version}` |
+| GET | `/api/catalogs` | None | — | `{vesselTypes, vesselClasses, shellMaterials, cargoTypes, unloadMovements, loadMovements}` |
 
 ### ORGANIZATIONS
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/organizations` | Bearer | — | `[Organization]` | ✅ DONE |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/organizations` | BP, ADMIN | — | `[Organization]` |
 
 ### DASHBOARD
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/dashboard?q=` | Bearer | query `q` (optional) | `{stats, recent, matches}` | ✅ DONE |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/dashboard?q=` | Any | query `q` (optional) | `{stats, recent, matches}` |
+
+*   **Tenant Constraint**: If `CUSTOMER`, stats and matches are strictly filtered to the user's `organization_id`. Others see global stats.
 
 ### VESSELS
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/vessels` | Bearer | — | `[Vessel]` | ✅ DONE |
-| POST | `/api/vessels` | Bearer | `VesselSaveRequest` | `Vessel` | ✅ DONE |
-| POST | `/api/vessels/{id}/verify-registry` | Bearer | — | `Vessel` | ✅ DONE (local only) |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/vessels` | Any | — | `[Vessel]` |
+| POST | `/api/vessels` | CUSTOMER, ADMIN | `VesselSaveRequest` | `Vessel` |
+| POST | `/api/vessels/{id}/verify-registry` | CUSTOMER, ADMIN | — | `Vessel` |
 
-> **Note (ADR-001)**: Registry verification at `/api/vessels/{id}/verify-registry` is local-only in T0.
-> It checks the internal certificate date and records `source=local`. Real Maritime Authority
-> registry API integration is deferred to T6 pending official API contract.
+*   **Tenant Constraint**: If `CUSTOMER`, GET only returns vessels belonging to the user's `organization_id`. POST validates that the vessel belongs to the user's `organization_id` or creates it bound to their organization. Registry verification is constrained to own organization's vessels.
+*   **Verification Note**: Verification checks internal registry certificates locally and logs `source=local`.
 
 ### CREW
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/crew` | Bearer | — | `[CrewMember]` | ✅ DONE |
-| POST | `/api/crew` | Bearer | `CrewSaveRequest` | `CrewMember` | ✅ DONE |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/crew` | Any | — | `[CrewMember]` |
+| POST | `/api/crew` | CUSTOMER, ADMIN | `CrewSaveRequest` | `CrewMember` |
 
-### DECLARATIONS
+*   **Tenant Constraint**: If `CUSTOMER`, resources are strictly filtered to the user's `organization_id`. Write operations verify the target vessel and crew belong to the user's organization.
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/declarations` | Bearer | query filters | `[Declaration]` | ✅ DONE |
-| POST | `/api/declarations?submit=false` | Bearer | `DeclarationSaveRequest` | `Declaration` | ✅ DONE |
-| POST | `/api/declarations?submit=true` | Bearer | `DeclarationSaveRequest` | `Declaration` (workflow_status=PENDING_REVIEW) | ✅ DONE |
-| POST | `/api/declarations/{id}/attachments?filename=` | Bearer | raw file body | `Attachment` | ✅ DONE |
-| GET | `/api/declarations/{id}/events` | Bearer | — | `[DeclarationEvent]` | ✅ DONE |
-| POST | `/api/declarations/{id}/workflow` | Bearer | `WorkflowActionRequest` | `Declaration` | ✅ DONE |
+### DECLARATIONS & WORKFLOW
 
-#### Workflow state machine
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/declarations` | Any | query filters | `[Declaration]` |
+| POST | `/api/declarations?submit=false` | CUSTOMER, ADMIN | `DeclarationSaveRequest` | `Declaration` |
+| POST | `/api/declarations?submit=true` | CUSTOMER | `DeclarationSaveRequest` | `Declaration` |
+| POST | `/api/declarations/{id}/attachments` | CUSTOMER, ADMIN | raw file body | `Attachment` |
+| GET | `/api/declarations/{id}/events` | Any | — | `[DeclarationEvent]` |
+| POST | `/api/declarations/{id}/workflow` | CV, QLC, BP | `WorkflowActionRequest` | `Declaration` |
 
+*   **Tenant Constraint**: If `CUSTOMER`, GET/POST/attachments are strictly restricted to own organization's declarations.
+*   **Workflow Constraints**:
+    *   Only `CUSTOMER` is allowed to submit a declaration (`submit=true`).
+    *   `ADMIN` is denied from workflow actions.
+    *   `CV`, `QLC`, `BP` are restricted to their specific actions (see below).
+    *   Actor name and role are derived strictly from the authenticated JWT session, ignoring client-supplied payloads to guarantee audit trail integrity.
+
+#### Workflow State Machine
 ```
 DRAFT → PENDING_REVIEW  (on submit=true)
 PENDING_REVIEW → PENDING_QLC  (CV_APPROVE)
@@ -76,37 +101,39 @@ any → REVOKED  (REVOKE, requires note)
 
 ### SUGGESTIONS
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/suggestions?field=` | Bearer | `field` ∈ {last_port, working_port, destination_port, master_name} | `[string]` | ✅ DONE |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/suggestions?field=`| Any | `field` ∈ {last_port, working_port, destination_port, master_name} | `[string]` |
 
-### IMPORT
+*   **Tenant Constraint**: Suggestions are computed over the user's tenant scope if `CUSTOMER`.
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| POST | `/api/import/vessels` | Bearer | XLSX body | `{accepted, rejected}` | ✅ DONE |
-| POST | `/api/import/declaration` | Bearer | XLSX body | `{accepted, rejected, id}` | ✅ DONE |
+### DATA IMPORT
 
-> XLSX files are validated by magic bytes (PK\x03\x04) before parsing.
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| POST | `/api/import/vessels` | CUSTOMER, ADMIN | XLSX body | `{accepted, rejected}` |
+| POST | `/api/import/declaration`| CUSTOMER, ADMIN | XLSX body | `{accepted, rejected, id}` |
+
+*   **Tenant Constraint**: Imported vessels/declarations are automatically bound to the logged-in customer's `organization_id`.
 
 ### REPORTS
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/reports/appendix1?from=&to=` | Bearer | date range | XLSX download | ✅ DONE |
-| GET | `/api/reports/appendix2?from=&to=` | Bearer | date range | XLSX download | ✅ DONE |
-| GET | `/api/reports/appendix3?from=&to=` | Bearer | date range | XLSX download | ✅ DONE |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/reports/appendix1` | CV, QLC, BP, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix2` | CV, QLC, BP, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix3` | CV, QLC, BP, ADMIN | date range | XLSX download |
+
+*   **Role Constraint**: CUSTOMER is denied access to report generation.
 
 ### INTEGRATIONS
 
-| Method | Path | Auth | Request | Response | Status |
-|--------|------|------|---------|----------|--------|
-| GET | `/api/integrations/maritime-authority` | Bearer | — | `{connector, jobs}` | ✅ DONE |
-| POST | `/api/integrations/prepare-sync` | Bearer | `{from, to}` | `{id, recordCount, status}` | ✅ DONE (PREPARED only) |
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/integrations/maritime-authority` | BP, ADMIN | — | `{connector, jobs}` |
+| POST | `/api/integrations/prepare-sync` | ADMIN | `{from, to}` | `{id, recordCount, status}` |
 
-> **IMPORTANT**: `/api/integrations/prepare-sync` creates a `PREPARED` SyncJob but does **not**
-> send any data to external systems. External sync is out of scope until T6 (requires official
-> Maritime Authority API contract, credentials, sandbox and data-sharing approval).
+---
 
 ## Attachment rules
 
@@ -119,12 +146,6 @@ any → REVOKED  (REVOKE, requires note)
 ## Error shape
 
 All errors return JSON: `{"detail": "<message>"}` (FastAPI standard).
-
-## Disabled / deferred features
-
-| Feature | Status | Reason |
-|---------|--------|--------|
-| Real registry API verification | DISABLED (returns local only) | No official API contract (T6) |
-| External Maritime Authority sync send | DISABLED (prepare-only) | No credentials or sandbox (T6) |
-| RBAC / tenant isolation | PARTIAL (auth exists, authorization gaps noted) | Deferred to T1 |
-| HTTPS / security headers | DEFERRED | Production ops concern (T4) |
+*   **401 Unauthorized**: User is unauthenticated (missing or invalid token).
+*   **403 Forbidden**: User is authenticated but lacks required role or tries to access another tenant's resource.
+*   **429 Too Many Requests**: Request blocked by rate-limiting.

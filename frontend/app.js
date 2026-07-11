@@ -371,6 +371,24 @@ async function openWorkflow(id) {
   $('#workflow-summary').innerHTML = `<article><small>LOẠI PHIẾU</small><strong>${declaration.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</strong></article><article><small>TRẠNG THÁI</small><strong>${workflowLabel(declaration.workflow_status)}</strong></article><article><small>GIẤY PHÉP</small><strong>${esc(declaration.permit_no || 'Chưa ban hành')}</strong></article><article><small>DUYỆT</small><span class="approval-dots">${approvalDot(declaration.cv_approval, 'CV')}${approvalDot(declaration.qlc_approval, 'QLC')}${approvalDot(declaration.bp_approval, 'BP')}</span></article>`;
   const events = await api(`/api/declarations/${id}/events`);
   $('#workflow-timeline').innerHTML = events.length ? events.map(event => `<article><span></span><div><strong>${workflowLabel(event.to_status)} · ${esc(event.actor_name)}</strong><small>${esc(event.actor_role)} · ${fmtDate(event.created_at)}</small><p>${esc(event.note || event.action)}</p></div></article>`).join('') : empty('Chưa có lịch sử', 'Dấu vết sẽ xuất hiện khi phiếu được xử lý.');
+  
+  // Dynamic action dropdown based on user role
+  const select = $('#workflow-form select[name="action"]');
+  const role = state.currentUser ? state.currentUser.role : '';
+  let html = '<option value="">Chọn</option>';
+  if (role === 'CV') {
+    html += '<option value="CV_APPROVE">CV duyệt</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option>';
+  } else if (role === 'QLC') {
+    html += '<option value="QLC_APPROVE">QLC duyệt</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option>';
+  } else if (role === 'BP') {
+    html += '<option value="BP_APPROVE">BP duyệt</option><option value="ISSUE">Ban hành giấy phép</option><option value="REVOKE">Thu hồi giấy phép</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option>';
+  }
+  select.innerHTML = html;
+  
+  // Hide workflow action form for customers / admins
+  const showForm = ['CV', 'QLC', 'BP'].includes(role);
+  $('#workflow-form').style.display = showForm ? 'block' : 'none';
+  
   $('#workflow-dialog').showModal();
 }
 
@@ -434,6 +452,48 @@ async function init() {
   $('#menu-toggle').onclick = () => $('.sidebar').classList.toggle('open');
   $('#theme-toggle').onclick = () => { const root = document.documentElement; const next = root.dataset.theme === 'dark' ? 'light' : 'dark'; root.dataset.theme = next; localStorage.setItem('tanthuan-theme', next); };
   document.documentElement.dataset.theme = localStorage.getItem('tanthuan-theme') || 'dark';
+  
+  // Setup logout handler
+  $('#logout-button').onclick = async () => {
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch (_) {}
+    localStorage.removeItem('token');
+    state.currentUser = null;
+    location.reload();
+  };
+
+  // Load current user profile first (authentication barrier)
+  try {
+    state.currentUser = await api('/api/auth/me');
+    $('#user-display').textContent = `${state.currentUser.full_name} (${state.currentUser.role})`;
+    $('#logout-button').style.display = 'inline-block';
+    
+    // Role-based UI visibility constraints
+    const isCustomer = state.currentUser.role === 'CUSTOMER';
+    const isAdmin = state.currentUser.role === 'ADMIN';
+    const isReviewer = ['CV', 'QLC', 'BP'].includes(state.currentUser.role);
+    
+    $$('[data-action="new-declaration"]').forEach(btn => btn.style.display = isReviewer ? 'none' : 'inline-block');
+    const addVesselBtn = $('#add-vessel');
+    if (addVesselBtn) addVesselBtn.style.display = isReviewer ? 'none' : 'inline-block';
+    const addCrewBtn = $('#add-crew');
+    if (addCrewBtn) addCrewBtn.style.display = isReviewer ? 'none' : 'inline-block';
+    
+    const importNav = $('nav a[href="#import"]');
+    if (importNav) importNav.style.display = (isCustomer || isAdmin) ? 'block' : 'none';
+    
+    const reportsNav = $('nav a[href="#reports"]');
+    if (reportsNav) reportsNav.style.display = isCustomer ? 'none' : 'block';
+
+  } catch (err) {
+    state.currentUser = null;
+    $('#user-display').textContent = '';
+    $('#logout-button').style.display = 'none';
+    $('#login-dialog').showModal();
+    return;
+  }
+
   $$('[data-route-link]').forEach(button => button.onclick = () => location.hash = button.dataset.routeLink);
   $$('[data-action="new-declaration"]').forEach(button => button.onclick = () => openDeclaration());
   $('#add-vessel').onclick = () => openVessel();

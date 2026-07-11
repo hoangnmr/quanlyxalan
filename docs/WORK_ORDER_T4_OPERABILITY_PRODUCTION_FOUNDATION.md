@@ -3,7 +3,7 @@
 ## Control block
 
 - Work order: `WO-KBCV-T4-20260711`
-- Status: PLANNED — local profile approved; starts only after Gate 3
+- Status: LOCAL_GATE_PASS — production Gate 4 remains blocked on infrastructure
 - Depends on: T3 CLOSED
 - Risk: R2 / Priority: P1
 - CVF phase on assignment: BUILD then REVIEW

@@ -256,3 +256,34 @@ remain gated by their preceding work orders; T6 remains externally blocked.
 
 T4 local implementation is eligible. Production Gate 4 remains unavailable
 until hosting/domain/staging owners are assigned.
+
+---
+
+## Tranche: T4 Operability and Production Foundation
+
+- **Status**: LOCAL_GATE_PASS
+- **Phase**: REVIEW
+- **Risk Level**: R2
+
+### Local evidence
+
+- GitHub Actions quality workflow: format, compile, test and secret-pattern gate.
+- Structured rotating local JSON logs and `/api/ready` database readiness check.
+- Local SQLite backup, checksum manifest, integrity check, restore tool and
+  30 daily/12 monthly/1 annual retention tooling.
+- MinIO/S3-compatible adapter is opt-in through environment configuration;
+  default remains local quarantine storage.
+- ADMIN operations dashboard covers operations, workflow, fleet, imports,
+  backup/storage and security aggregates.
+- Tests: 63 passed, 0 failed; Doctor: PASS 17/17.
+
+### Production blockers retained
+
+- Hosting, domain, TLS/reverse proxy and staging environment.
+- Real MinIO endpoint/secret provisioning, email/Teams configuration.
+- Staging migration/smoke/rollback and real restore drill under named owners.
+
+### Next governed move
+
+T5 product professionalization may begin in local scope. T6 remains manual
+adapter-ready; external activation remains blocked.

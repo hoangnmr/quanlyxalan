@@ -169,6 +169,13 @@ def test_health(client):
     res = client.get("/api/health")
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
+    assert res.json()["storage"] == "LOCAL_QUARANTINE"
+
+
+def test_readiness(client):
+    res = client.get("/api/ready")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ready"
 
 
 def test_static_frontend(client):
@@ -737,6 +744,7 @@ def test_all_frontend_routes_registered():
     required_paths = [
         "/api/auth/login",
         "/api/health",
+        "/api/ready",
         "/api/catalogs",
         "/api/dashboard",
         "/api/organizations",

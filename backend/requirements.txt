@@ -9,3 +9,4 @@ python-multipart>=0.0.9
 alembic>=1.13.1
 openpyxl>=3.1.2
 aiofiles>=23.2.1
+minio>=7.2.0

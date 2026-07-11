@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
-from sqlalchemy import desc, func, or_
+from sqlalchemy import desc, func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,8 +30,8 @@ from .auth import create_access_token, get_current_user, get_password_hash, veri
 from .integrations import maritime_authority_adapter, registry_adapter
 from .logging_config import configure_local_logging
 from .rbac import require_roles, verify_organization_ownership
-from .storage import LocalQuarantineStorage, ScannerNotConfigured
-from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, now_iso
+from .storage import ScannerNotConfigured, get_attachment_storage
+from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, engine, now_iso
 from .models import (
     Attachment, AuditEvent, Base, CrewMember, Declaration,
     DeclarationCrew, DeclarationEvent, ImportJob, IntegrationConnector, Organization,
@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 access_logger = configure_local_logging(ROOT)
 ATTACHMENT_DIR = ROOT / "data" / "attachments"
 ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
-attachment_storage = LocalQuarantineStorage(ATTACHMENT_DIR / "quarantine")
+attachment_storage = get_attachment_storage(ATTACHMENT_DIR / "quarantine")
 attachment_scanner = ScannerNotConfigured()
 
 # ── App ────────────────────────────────────────────────────────────────────────
@@ -506,7 +506,17 @@ def logout(user: User = Depends(get_current_user)):
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "database": "sqlite-sqlalchemy", "version": "1.0.0"}
+    return {"status": "ok", "database": "sqlite-sqlalchemy", "storage": attachment_storage.backend_name, "version": "1.0.0"}
+
+
+@app.get("/api/ready")
+def readiness_check():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "ok", "storage": attachment_storage.backend_name}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database readiness check failed.") from exc
 
 
 # ══════════════════════════════════════════════════════════════════════════════

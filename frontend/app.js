@@ -16,7 +16,7 @@ async function api(path, options = {}) {
   }
   const response = await fetch(path, options);
   if (response.status === 401 && path !== '/api/auth/login') {
-    $('#login-dialog').showModal();
+    showLoginDialog('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
     throw new Error('Vui lòng đăng nhập.');
   }
   const type = response.headers.get('content-type') || '';
@@ -47,6 +47,43 @@ function setSubmitting(form, submitter, pending, pendingLabel = 'Đang xử lý�
     }
   });
   if (pending && submitter) submitter.textContent = pendingLabel;
+}
+
+function setLoginFeedback(message = '') {
+  const feedback = $('#login-feedback');
+  feedback.hidden = !message;
+  feedback.textContent = message;
+}
+
+function showLoginDialog(message = '') {
+  setLoginFeedback(message);
+  const dialog = $('#login-dialog');
+  if (!dialog.open) dialog.showModal();
+  requestAnimationFrame(() => $('input[name="username"]', dialog)?.focus());
+}
+
+function bindLoginForm() {
+  const form = $('#login-form');
+  if (!form || form.dataset.bound === 'true') return;
+  form.dataset.bound = 'true';
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    setLoginFeedback();
+    if (!form.reportValidity()) return;
+    setSubmitting(form, event.submitter, true, 'Đang xác thực…');
+    try {
+      const result = await api('/api/auth/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(values(form)),
+      });
+      localStorage.setItem('token', result.access_token);
+      $('#login-dialog').close();
+      toast('Đăng nhập thành công.');
+      init();
+    } catch (error) {
+      setLoginFeedback(error.message || 'Không thể đăng nhập. Vui lòng thử lại.');
+    } finally { setSubmitting(form, event.submitter, false); }
+  });
 }
 
 function optionList(items = [], selected = '') {
@@ -568,10 +605,14 @@ async function prepareSync() {
 }
 
 async function init() {
-  window.addEventListener('hashchange', route);
+  if (!window.__tanThuanRouteBound) {
+    window.addEventListener('hashchange', route);
+    window.__tanThuanRouteBound = true;
+  }
   $('#menu-toggle').onclick = () => $('.sidebar').classList.toggle('open');
   $('#theme-toggle').onclick = () => { const root = document.documentElement; const next = root.dataset.theme === 'dark' ? 'light' : 'dark'; root.dataset.theme = next; localStorage.setItem('tanthuan-theme', next); };
   document.documentElement.dataset.theme = localStorage.getItem('tanthuan-theme') || 'dark';
+  bindLoginForm();
 
   // Setup logout handler
   $('#logout-button').onclick = async () => {
@@ -610,7 +651,7 @@ async function init() {
     state.currentUser = null;
     $('#user-display').textContent = '';
     $('#logout-button').style.display = 'none';
-    $('#login-dialog').showModal();
+    showLoginDialog();
     return;
   }
 
@@ -631,24 +672,6 @@ async function init() {
   $('#declaration-form').addEventListener('submit', saveDeclaration);
   $('#workflow-form').addEventListener('submit', saveWorkflow);
   $('#in-app-certificate-reminders').addEventListener('change', saveNotificationPreferences);
-
-  const loginForm = $('#login-form');
-  if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try {
-        const res = await api('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values(loginForm))
-        });
-        localStorage.setItem('token', res.access_token);
-        $('#login-dialog').close();
-        toast('Đăng nhập thành công');
-        init(); // reload all data
-      } catch (error) { toast(error.message, true); }
-    });
-  }
 
   $('#add-crew').onclick = () => openCrew();
   $$('[data-close-dialog]').forEach(button => button.onclick = () => document.getElementById(button.dataset.closeDialog).close());

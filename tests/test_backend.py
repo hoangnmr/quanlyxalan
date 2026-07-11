@@ -205,8 +205,11 @@ def test_static_frontend(client):
     assert 'id="toast-region" class="toast-region" role="status"' in res.text
     assert 'id="in-app-certificate-reminders"' in res.text
     assert 'id="certificate-reminder"' in res.text
+    assert 'id="login-dialog" class="modal login-dialog"' in res.text
     app_js = client.get("/app.js").text
     assert "function setSubmitting(" in app_js
+    assert "function bindLoginForm()" in app_js
+    assert "bindLoginForm();" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
 
 

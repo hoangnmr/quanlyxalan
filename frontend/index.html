@@ -113,24 +113,24 @@
 
   <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2 id="workflow-title">Chi tiết phiếu</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div><div id="workflow-summary" class="workflow-summary"></div><div id="workflow-timeline" class="timeline"></div><form id="workflow-form" class="workflow-form"><label>Thao tác<select name="action" required><option value="">Chọn</option><option value="CV_APPROVE">CV duyệt</option><option value="QLC_APPROVE">QLC duyệt</option><option value="BP_APPROVE">BP duyệt</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option><option value="ISSUE">Ban hành giấy phép</option><option value="REVOKE">Thu hồi giấy phép</option></select></label><label>Số giấy phép<input name="permit_no" placeholder="Tự sinh nếu để trống"></label><label class="span-full">Ghi chú / lý do<textarea name="note" placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung hoặc thu hồi"></textarea></label><button class="primary-button" type="submit">Ghi nhận thao tác</button></form></dialog>
 
-  <dialog id="login-dialog" class="modal">
+  <dialog id="login-dialog" class="modal login-dialog" aria-labelledby="login-title" aria-describedby="login-description">
     <form id="login-form">
-      <div class="modal-header">
-        <div>
-          <p class="eyebrow">BẢO MẬT HỆ THỐNG</p>
-          <h2>Đăng nhập</h2>
-        </div>
+      <div class="login-hero">
+        <span class="login-logo-frame"><img src="/assets/csg-logo.jpg" alt="Cảng Sài Gòn"></span>
+        <p class="eyebrow">CỔNG THÔNG TIN VẬN HÀNH</p>
+        <h2 id="login-title">Cảng Tân Thuận</h2>
+        <p id="login-description">Đăng nhập để quản lý khai báo, phương tiện và luồng phê duyệt.</p>
       </div>
-      <div class="form-grid">
-        <label class="span-full">Tên đăng nhập
-          <input type="text" name="username" required autocomplete="username">
+      <div class="login-form-content">
+        <p id="login-feedback" class="login-feedback" role="alert" hidden></p>
+        <label>Tên đăng nhập
+          <input type="text" name="username" required autocomplete="username" autofocus placeholder="Nhập tên đăng nhập">
         </label>
-        <label class="span-full">Mật khẩu
-          <input type="password" name="password" required autocomplete="current-password">
+        <label>Mật khẩu
+          <input type="password" name="password" required autocomplete="current-password" placeholder="Nhập mật khẩu">
         </label>
-      </div>
-      <div class="modal-actions">
-        <button type="submit" class="primary-button full">Đăng nhập</button>
+        <button type="submit" class="primary-button full login-submit">Đăng nhập vào hệ thống <span aria-hidden="true">→</span></button>
+        <p class="login-security-note">Phiên đăng nhập được bảo vệ và mọi thao tác quan trọng đều được ghi nhận.</p>
       </div>
     </form>
   </dialog>

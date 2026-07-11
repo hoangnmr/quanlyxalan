@@ -134,6 +134,7 @@ async function loadDashboard(query = '') {
       ['CẢNH BÁO CHỨNG CHỈ', data.stats.certificateWarnings, 'Hết hạn hoặc còn dưới 30 ngày'],
     ];
     $('#stats').innerHTML = cards.map(card => `<article class="stat-card"><p>${card[0]}</p><strong>${card[1]}</strong><small>${card[2]}</small></article>`).join('');
+    $('#demo-data-notice').hidden = !data.demo_mode;
     state.dashboardCertificateWarnings = data.stats.certificateWarnings;
     renderNotificationPreferences(state.dashboardCertificateWarnings);
     renderAttentionQueue(data.attention);

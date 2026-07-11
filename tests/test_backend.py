@@ -26,10 +26,10 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organization
+from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organization, Vessel
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
-from backend.app import app, get_db
+from backend.app import app, get_db, DEMO_ORGANIZATION_TAX_CODE, remove_demo_data_for_real_input
 from backend.xlsx_io import read_workbook
 
 # ── Create all tables in test DB ──────────────────────────────────────────────
@@ -205,12 +205,38 @@ def test_static_frontend(client):
     assert 'id="toast-region" class="toast-region" role="status"' in res.text
     assert 'id="in-app-certificate-reminders"' in res.text
     assert 'id="certificate-reminder"' in res.text
+    assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
     app_js = client.get("/app.js").text
     assert "function setSubmitting(" in app_js
     assert "function bindLoginForm()" in app_js
     assert "bindLoginForm();" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
+
+
+def test_real_input_removes_only_sentinel_marked_demo_data():
+    db = SessionLocal()
+    try:
+        demo = Organization(name="Demo sentinel", tax_code=DEMO_ORGANIZATION_TAX_CODE, created_at=now_iso(), updated_at=now_iso())
+        real = Organization(name=f"Real org {_reg()}", tax_code=_reg(), created_at=now_iso(), updated_at=now_iso())
+        db.add_all([demo, real])
+        db.flush()
+        db.add_all([
+            Vessel(organization_id=demo.id, name="Demo vessel", registration_no=_reg(), vessel_type="Sà lan", vessel_class="VR-SII", created_at=now_iso(), updated_at=now_iso()),
+            Vessel(organization_id=real.id, name="Real vessel", registration_no=_reg(), vessel_type="Sà lan", vessel_class="VR-SII", created_at=now_iso(), updated_at=now_iso()),
+        ])
+        db.commit()
+        assert remove_demo_data_for_real_input(db) is True
+        db.commit()
+        assert db.query(Organization).filter(Organization.tax_code == DEMO_ORGANIZATION_TAX_CODE).first() is None
+        assert db.query(Organization).filter(Organization.id == real.id).first() is not None
+        assert db.query(Vessel).filter(Vessel.organization_id == real.id).count() == 1
+        db.query(Vessel).filter(Vessel.organization_id == real.id).delete(synchronize_session=False)
+        db.delete(real)
+        db.commit()
+    finally:
+        db.rollback()
+        db.close()
 
 
 def test_declaration_pagination_contract_is_bounded_and_compatible(client, auth_headers):

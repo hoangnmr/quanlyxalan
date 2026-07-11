@@ -52,6 +52,8 @@ This system implements four roles with distinct scopes of operations.
 *   **Attention Queue**: `attention` is a role-scoped dashboard hint, containing
     only visible statuses and up to five oldest items. It does not grant an
     action; workflow authorization remains enforced by the API.
+*   **Demo Marker**: `demo_mode=true` only when the local sentinel-marked demo
+    dataset is present. The UI must show that it is not operational data.
 
 ### VESSELS
 

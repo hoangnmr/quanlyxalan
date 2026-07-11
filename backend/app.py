@@ -40,6 +40,7 @@ from .models import (
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
 
 IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.0"
+DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
 
 ROOT = Path(__file__).resolve().parents[1]
 access_logger = configure_local_logging(ROOT)
@@ -632,6 +633,36 @@ def _get_or_create_org(db: Session, name: Optional[str]) -> Optional[Organizatio
     return org
 
 
+def is_demo_data_active(db: Session) -> bool:
+    return db.query(Organization.id).filter(
+        Organization.tax_code == DEMO_ORGANIZATION_TAX_CODE
+    ).first() is not None
+
+
+def remove_demo_data_for_real_input(db: Session) -> bool:
+    """Remove only the explicitly marked demo dataset before the first real input."""
+    demo_org = db.query(Organization).filter(
+        Organization.tax_code == DEMO_ORGANIZATION_TAX_CODE
+    ).first()
+    if not demo_org:
+        return False
+
+    declaration_ids = [row[0] for row in db.query(Declaration.id).filter(
+        Declaration.organization_id == demo_org.id
+    ).all()]
+    if declaration_ids:
+        db.query(Attachment).filter(Attachment.declaration_id.in_(declaration_ids)).delete(synchronize_session=False)
+        db.query(DeclarationCrew).filter(DeclarationCrew.declaration_id.in_(declaration_ids)).delete(synchronize_session=False)
+        db.query(DeclarationEvent).filter(DeclarationEvent.declaration_id.in_(declaration_ids)).delete(synchronize_session=False)
+        db.query(Declaration).filter(Declaration.id.in_(declaration_ids)).delete(synchronize_session=False)
+    db.query(CrewMember).filter(CrewMember.organization_id == demo_org.id).delete(synchronize_session=False)
+    db.query(Vessel).filter(Vessel.organization_id == demo_org.id).delete(synchronize_session=False)
+    db.query(AuditEvent).filter(AuditEvent.organization_id == demo_org.id).delete(synchronize_session=False)
+    db.delete(demo_org)
+    db.flush()
+    return True
+
+
 def _attention_queue(db: Session, user: User) -> dict[str, Any]:
     """Return only the actionable/observable queue for the authenticated role."""
     role_rules = {
@@ -745,6 +776,7 @@ def get_dashboard(
         "recent": recent,
         "matches": matches,
         "attention": _attention_queue(db, user),
+        "demo_mode": is_demo_data_active(db),
     }
 
 
@@ -774,6 +806,8 @@ def save_vessel(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
+    if not payload.id:
+        remove_demo_data_for_real_input(db)
     if user.role == "CUSTOMER":
         # Force organization to the customer's bound organization
         org_id = user.organization_id
@@ -1399,6 +1433,8 @@ async def import_vessels(
         result["idempotent"] = True
         result["importJobId"] = prior.id
         return result
+
+    remove_demo_data_for_real_input(db)
 
     accepted = 0
     rejected: list[dict] = []

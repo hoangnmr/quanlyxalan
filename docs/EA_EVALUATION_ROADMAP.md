@@ -140,6 +140,10 @@ Gate 3:
 
 Mục tiêu: triển khai lặp lại được, quan sát được và phục hồi được.
 
+Local-first profile: `docs/T4_LOCAL_OPERATING_PROFILE.md`. Until hosting,
+domain and staging are assigned, T4 can pass a local gate but cannot claim
+production readiness.
+
 - Dockerfile/container runtime non-root và environment configuration.
 - CI: lint, type check, unit, integration, contract, security scan.
 - Structured logs, request/correlation id, metrics, readiness/liveness và alert.
@@ -222,4 +226,3 @@ lấy nguồn lực khỏi P0. T6 bị khóa bởi thẩm quyền và contract b
 - ADR-004: Attachment storage/quarantine provider.
 - ADR-005: Vanilla JS modularization so với React/Vue migration.
 - ADR-006: Reporting template ownership và signed mapping version.
-

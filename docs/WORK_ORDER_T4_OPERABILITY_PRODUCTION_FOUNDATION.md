@@ -3,7 +3,7 @@
 ## Control block
 
 - Work order: `WO-KBCV-T4-20260711`
-- Status: PLANNED — starts only after Gate 3
+- Status: PLANNED — local profile approved; starts only after Gate 3
 - Depends on: T3 CLOSED
 - Risk: R2 / Priority: P1
 - CVF phase on assignment: BUILD then REVIEW
@@ -14,6 +14,10 @@
 Provide reproducible deployment, observability, backup/restore, security
 hardening and CI gates sufficient for a controlled staging environment and a
 future production release decision.
+
+Approved local-first decisions are recorded in
+`docs/T4_LOCAL_OPERATING_PROFILE.md`. Hosting/domain/staging are deferred, so
+the initial implementation may only claim `LOCAL_GATE_PASS`.
 
 ## Required tasks
 

@@ -152,10 +152,18 @@ Final reviewer evidence after remediation:
 
 ### Next governed move
 
-**T2 — Batch Pipeline & Data Pipeline recovery** (refer to [EA_EVALUATION_ROADMAP.md](file:///d:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu/docs/EA_EVALUATION_ROADMAP.md)):
-1. Secure Excel parsing (mitigate zip bomb, XML external entity, data conversion bounds).
-2. Establish formal schema enforcement during imports.
-3. Align report generation bounds and formats.
+**T2 — Domain Integrity and Persistence** is the next authorized design target.
+Work order `WO-KBCV-T2-20260711` is READY FOR ASSIGNMENT but requires human R2
+approval before BUILD. T3–T5 are PLANNED behind their preceding gates. T6 is
+BLOCKED until official external authority prerequisites are available.
+
+Issued work orders:
+
+- `docs/WORK_ORDER_T2_DOMAIN_INTEGRITY_PERSISTENCE.md`
+- `docs/WORK_ORDER_T3_FILES_IMPORTS_REPORTS.md`
+- `docs/WORK_ORDER_T4_OPERABILITY_PRODUCTION_FOUNDATION.md`
+- `docs/WORK_ORDER_T5_PRODUCT_PROFESSIONALIZATION.md`
+- `docs/WORK_ORDER_T6_EXTERNAL_AUTHORITY_INTEGRATIONS.md`
 
 ### Human review closure record
 

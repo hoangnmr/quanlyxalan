@@ -3,7 +3,7 @@
 ## Control block
 
 - Work order: `WO-KBCV-T6-20260711`
-- Status: ADAPTER SCAFFOLD ALLOWED — activation remains externally blocked
+- Status: MANUAL SCAFFOLD COMPLETE — activation deferred under explicit reopen conditions
 - Depends on: T5 CLOSED plus official external prerequisites
 - Risk: R2 minimum; R3 if production transmission or sensitive-data expansion
 - Priority: P2
@@ -22,6 +22,13 @@ All items require named owners and written approval:
 - Test identities/data permitted in the sandbox.
 
 Without these prerequisites, retain `PREPARED` preview-only behavior.
+
+## Deferred activation / reopen condition
+
+The manual-first, no-network adapter scaffold is complete. Reopen BUILD only
+after all mandatory prerequisites above are supplied with named owners and the
+required R2/R3 authorization is recorded. Until then, `PREPARED` is the final
+allowed state and manual operation remains the supported path.
 
 Manual-first adapter scaffolding may be built before these prerequisites. It
 must make no network calls and must not block core workflows. See

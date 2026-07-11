@@ -4,7 +4,30 @@
 > Scope: working tree hiện tại  
 > Assessment phase: REVIEW  
 > Risk: R1 cho tài liệu; thay đổi authentication, dữ liệu và external API là R2  
-> Production readiness: NOT READY
+> Roadmap implementation: COMPLETE FOR LOCAL / MANUAL SCOPE (2026-07-11)
+> Production readiness: DEFERRED — external deployment evidence is not claimed
+
+## Current execution decision
+
+All implementation work that can be completed locally without inventing an
+external authority, production infrastructure or representative-user evidence
+is complete. T0–T3 are closed for local/pilot scope; T4 and T5 have completed
+their local implementation scopes; T6 has completed its manual-first adapter
+scaffold. This is a roadmap closure decision for the implementable scope, not
+a claim that production Gates 4–6 or representative-user Gate 5 have passed.
+
+| Tranche | Current status | Reopen only when |
+|---|---|---|
+| T0 Baseline | CLOSED | A frontend/backend contract regression or a new critical workflow is introduced. |
+| T1 Identity/RBAC | CLOSED | Role matrix, tenant model, token/session model or security policy changes. |
+| T2 Integrity/persistence | CLOSED | New domain rule/schema change, PostgreSQL cutover or migration defect is identified. |
+| T3 Files/imports/reports | CLOSED (local/pilot) | A new template/mapping is approved, scanner provider is supplied, or approved export volume exceeds the synchronous threshold. |
+| T4 Operability | LOCAL SCOPE COMPLETE | Hosting/domain/TLS/staging owners, real MinIO, alert channel or production restore drill are supplied/approved. |
+| T5 Product professionalization | LOCAL SCOPE COMPLETE | Representative-user UAT, browser accessibility review, responsive matrix or reference-device performance evidence is scheduled; or a UX change affects authority/workflow meaning. |
+| T6 External integration | MANUAL SCAFFOLD COMPLETE | Official API version + sandbox, credentials, data-sharing approval, rate/support policy and named owner are supplied. |
+
+The exact local evidence and deferred work are maintained in the tranche work
+orders and `docs/AGENT_HANDOFF.md`.
 
 ## 1. Executive decision
 
@@ -193,7 +216,18 @@ Gate 6:
 - Live provider/API evidence được lưu theo CVF khi có tuyên bố quản trị hoặc
   release-quality integration.
 
-## 5. Priority and dependency
+## 5. Deferred gates and reopen conditions
+
+These are deliberate dependencies, excluded from the completed local/manual
+scope. They must not be silently treated as backlog defects or as passed gates.
+
+| Deferred gate | What is waiting | Objective reopen condition |
+|---|---|---|
+| Production part of T4 | Hosting/domain/TLS/staging, MinIO endpoint, alert delivery, owner-led restore drill | Named owners provide the environment and secrets out of band; staging migration/smoke/rollback and restore evidence can be run. |
+| Evidence part of T5 | Representative users, accessibility reviewer, agreed browser/device and reference dataset | Product owner schedules the protocol in `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` and provides results/approval. |
+| Activation part of T6 | Authority/registry API | Official versioned contract, sandbox endpoint/test identities, credential process, privacy/data-field approval, rate/support rules and R2/R3 approval are available. |
+
+## 6. Priority and dependency
 
 ```text
 T0 Baseline
@@ -208,7 +242,7 @@ T0 Baseline
 T1 và T2 có thể thiết kế song song nhưng phải tích hợp tuần tự. T5 không được
 lấy nguồn lực khỏi P0. T6 bị khóa bởi thẩm quyền và contract bên ngoài.
 
-## 6. Definition of done for every tranche
+## 7. Definition of done for every tranche
 
 - Scope và acceptance criteria được truy vết tới issue/test.
 - Không có secret hoặc production data trong repository/log/evidence.
@@ -218,7 +252,7 @@ lấy nguồn lực khỏi P0. T6 bị khóa bởi thẩm quyền và contract b
 - Commit chỉ chứa thay đổi của tranche.
 - Không tuyên bố CLOSED khi còn test fail, artifact thiếu hoặc gate chưa đạt.
 
-## 7. Open architecture decisions
+## 8. Open architecture decisions
 
 - ADR-001: FastAPI migration strategy và feature parity boundary.
 - ADR-002: JWT bearer so với secure cookie/BFF session.

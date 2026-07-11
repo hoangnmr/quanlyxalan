@@ -292,7 +292,7 @@ adapter-ready; external activation remains blocked.
 
 ## Tranche: T5 Product Professionalization
 
-- **Status**: IN PROGRESS — local accessibility/architecture baseline
+- **Status**: LOCAL SCOPE COMPLETE — Gate 5 evidence deferred
 - **Phase**: BUILD
 - **Risk Level**: R1 (escalate to R2 for role or workflow semantic changes)
 
@@ -321,4 +321,8 @@ adapter-ready; external activation remains blocked.
 
 Representative-user task study, browser-assisted accessibility audit,
 responsive viewport matrix and reference-dataset performance measurements are
-not yet available. Gate 5 is not closed.
+not yet available. Gate 5 is not closed. Reopen T5 only when the product owner
+schedules `docs/T5_GATE5_EVIDENCE_PROTOCOL.md`, supplies the agreed reference
+conditions/results, or authorizes a UX change that affects authority/workflow
+meaning. T6 remains manual-scaffold complete and reopens only on receipt of the
+official authority prerequisites recorded in its work order.

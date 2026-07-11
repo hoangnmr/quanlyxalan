@@ -3,7 +3,7 @@
 ## Control block
 
 - Work order: `WO-KBCV-T5-20260711`
-- Status: IN PROGRESS — local/pilot scope started after T4 LOCAL_GATE_PASS
+- Status: LOCAL SCOPE COMPLETE — Gate 5 evidence deferred under explicit reopen conditions
 - Depends on: T4 CLOSED
 - Risk: R1, elevated to R2 if authorization/workflow semantics change
 - Priority: P2
@@ -88,3 +88,12 @@ commit/Doctor evidence.
   Email/Teams remain intentionally inactive without approved connectors.
 - Open before Gate 5: representative-user protocol/results, browser-assisted
   WCAG audit, responsive matrix and measured performance budget.
+
+## Deferred Gate 5 / reopen condition
+
+This work order is complete for local implementation. Reopen it only when the
+product owner schedules representative-user execution of
+`docs/T5_GATE5_EVIDENCE_PROTOCOL.md`, provides the agreed browser/device and
+reference dataset, or approves a UX change that can affect authority, workflow
+or legal meaning. Gate 5 remains unclaimed until the protocol evidence and
+product-owner/accessibility-reviewer approvals are recorded.

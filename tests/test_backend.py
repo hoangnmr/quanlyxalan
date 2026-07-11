@@ -26,7 +26,7 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.models import AuditEvent, Base, ImportJob, User, Organization
+from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organization
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db
@@ -689,6 +689,38 @@ def test_xlsx_report_appendix2(client, auth_headers):
 def test_xlsx_report_appendix3(client, auth_headers):
     res = client.get("/api/reports/appendix3", headers=auth_headers)
     assert res.status_code == 200
+
+
+def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client, customer_headers):
+    created = client.post(
+        "/api/declarations",
+        json=_minimal_declaration(
+            unload={"cargo_type": "Container", "movement_type": "Nhập khẩu", "cargo_name": "Hàng A", "cont20_full": 2, "tons": 12},
+            load={"cargo_type": "Container", "movement_type": "Xuất khẩu", "cargo_name": "Hàng B", "cont40_full": 1, "tons": 20},
+        ),
+        headers=customer_headers,
+    )
+    declaration_id = created.json()["id"]
+    db = SessionLocal()
+    declaration = db.query(Declaration).filter(Declaration.id == declaration_id).one()
+    declaration.workflow_status = "APPROVED"
+    declaration.status = "SUBMITTED"
+    declaration.actual_arrival_at = "2026-07-11T09:15"
+    declaration.actual_departure_at = "2026-07-11T19:30"
+    db.commit()
+    db.close()
+
+    appendix1 = client.get("/api/reports/appendix1?from=2026-01-01&to=2026-12-31", headers=customer_headers)
+    with zipfile.ZipFile(io.BytesIO(appendix1.content)) as archive:
+        xml1 = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    assert "2026-07-11T09:15" in xml1 and "2026-07-11T19:30" in xml1
+
+    appendix3 = client.get("/api/reports/appendix3?from=2026-01-01&to=2026-12-31", headers=customer_headers)
+    with zipfile.ZipFile(io.BytesIO(appendix3.content)) as archive:
+        xml3 = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    assert "Hàng A" in xml3 and "Hàng B" in xml3
+    assert "12.0 tấn / 2.0 TEU" in xml3
+    assert "20.0 tấn / 2.0 TEU" in xml3
 
 
 def test_report_unknown_kind(client, auth_headers):

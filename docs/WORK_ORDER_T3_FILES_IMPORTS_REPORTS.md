@@ -3,7 +3,7 @@
 ## Control block
 
 - Work order: `WO-KBCV-T3-20260711`
-- Status: IN_PROGRESS — business mapping approved in `docs/REPORT_MAPPING_SPEC.md`
+- Status: CLOSED — Gate 3 local/pilot evidence recorded in `docs/AGENT_HANDOFF.md`
 - Depends on: T2 CLOSED
 - Risk: R2 / Priority: P1
 - CVF phase on assignment: BUILD

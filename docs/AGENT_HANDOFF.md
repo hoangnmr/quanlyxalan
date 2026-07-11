@@ -218,8 +218,8 @@ remain gated by their preceding work orders; T6 remains externally blocked.
 
 ## Tranche: T3 Files, Imports and Reports (WO-KBCV-T3-20260711)
 
-- **Status**: IN_PROGRESS
-- **Phase**: BUILD
+- **Status**: CLOSED — local/pilot Gate 3 PASS
+- **Phase**: REVIEW
 - **Risk Level**: R2
 
 ### Work started
@@ -230,8 +230,29 @@ remain gated by their preceding work orders; T6 remains externally blocked.
 - Attachment validation now rejects unsupported extensions before storage.
 - Added regression fixtures for external relationship and compressed-bomb shapes.
 
-### Open Gate 3 work
+### Completed after initial checkpoint
 
 - Import preview, mapping/template version and idempotency evidence.
-- Attachment quarantine/scanner adapter and production storage boundary.
-- Golden-file report mapping review and large-export job boundary.
+- Attachment quarantine/scanner adapter and local storage boundary.
+- Golden-file report mapping review.
+- Large-export asynchronous execution is deferred to T4 capacity work because
+  the local pilot has no approved threshold or staging load profile.
+
+### Gate 3 closure evidence
+
+- Status: CLOSED for local/pilot scope.
+- Approved mapping: `docs/REPORT_MAPPING_SPEC.md`.
+- Golden dataset: `docs/REPORT_GOLDEN_DATASET.md`.
+- Import preview, mapping version, SHA-256 idempotency and partial acceptance:
+  implemented and tested with repository templates.
+- Attachment checksum, quarantine storage and fail-closed scanner boundary:
+  implemented; files remain QUARANTINED until a scanner is configured.
+- Malicious XLSX/archive boundary tests: PASS.
+- Tests: 58 passed, 0 failed.
+- `git diff --check`: PASS.
+- CVF Workspace Doctor: PASS 17/17.
+
+### Next governed move
+
+T4 local implementation is eligible. Production Gate 4 remains unavailable
+until hosting/domain/staging owners are assigned.

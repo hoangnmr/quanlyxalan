@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import logging
 import os
 import uuid
 from datetime import date, datetime
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from .auth import create_access_token, get_current_user, get_password_hash, verify_password
 from .integrations import maritime_authority_adapter, registry_adapter
+from .logging_config import configure_local_logging
 from .rbac import require_roles, verify_organization_ownership
 from .storage import LocalQuarantineStorage, ScannerNotConfigured
 from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, now_iso
@@ -40,6 +42,7 @@ from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, exc
 IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.0"
 
 ROOT = Path(__file__).resolve().parents[1]
+access_logger = configure_local_logging(ROOT)
 ATTACHMENT_DIR = ROOT / "data" / "attachments"
 ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
 attachment_storage = LocalQuarantineStorage(ATTACHMENT_DIR / "quarantine")
@@ -53,11 +56,17 @@ app = FastAPI(title="Khai-bao-Cang-vu API", version="1.0.0")
 async def add_correlation_id(request: Request, call_next):
     request_id = request.headers.get("X-Correlation-ID", "").strip() or str(uuid.uuid4())
     token = correlation_id.set(request_id[:128])
+    started = datetime.now()
     try:
         response = await call_next(request)
     finally:
         correlation_id.reset(token)
     response.headers["X-Correlation-ID"] = request_id[:128]
+    access_logger.info(
+        "%s %s status=%s duration_ms=%s correlation_id=%s",
+        request.method, request.url.path, response.status_code,
+        int((datetime.now() - started).total_seconds() * 1000), request_id[:128],
+    )
     return response
 
 

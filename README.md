@@ -3,6 +3,10 @@
 Web application for TAN THUAN PORT customer declarations, vessel and crew
 certificate tracking, attachments, and periodic Maritime Administration reporting.
 
+## 📖 Hướng Dẫn Sử Dụng
+
+**Người dùng cuối**: Xem [USER_GUIDE.md](USER_GUIDE.md) để hướng dẫn đầy đủ về các tính năng và cách sử dụng ứng dụng.
+
 ## Requirements
 
 - Python 3.13 or newer
@@ -54,3 +58,10 @@ Use a persistent volume for `data/`, HTTPS through a reverse proxy, and
 environment-supplied secrets (no hardcoded credentials). See `docs/DEPLOYMENT.md`
 and the EA remediation roadmap at `docs/EA_EVALUATION_ROADMAP.md` for the
 full path to production readiness (T0–T6).
+
+1. SECRET_KEY: 
+python -c "import secrets; print(secrets.token_hex(32))"
+
+2. RUN (terminal)
+$env:SECRET_KEY="your-secure-random-secret-key-32-chars-long"
+powershell -ExecutionPolicy Bypass -File scripts\run-dev.ps1 -Port 8081

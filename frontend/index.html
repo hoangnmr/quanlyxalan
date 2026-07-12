@@ -68,7 +68,7 @@
         </section>
 
         <section class="page" data-page="vessels">
-          <div class="page-heading"><div><p class="eyebrow">DANH MỤC DÙNG LẠI</p><p>Dùng lại cho những lượt sau đến cảng.</p></div><button class="primary-button" id="add-vessel">+ Thêm phương tiện</button></div>
+          <div class="page-heading"><div><p class="eyebrow">DANH MỤC DÙNG LẠI</p><p>Phương tiện lần sau đến Cảng không cần kê khai.</p></div><button class="primary-button" id="add-vessel">+ Thêm phương tiện</button></div>
           <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="vessel-search" placeholder="Tìm tên tàu hoặc số đăng ký"></label><span id="vessel-count" class="muted"></span></div><div id="vessel-table" class="table-wrap"></div></section>
         </section>
 
@@ -79,13 +79,13 @@
         </section>
 
         <section class="page" data-page="crew">
-          <div class="page-heading"><div><p class="eyebrow">CREW LIST / CHỨNG CHỈ</p><p>Quản lý thuyền trưởng, thuyền viên và hạn chứng chỉ chuyên môn.</p></div><button class="primary-button" id="add-crew">+ Thêm thuyền viên</button></div>
+          <div class="page-heading"><div><p class="eyebrow">CREW LIST / CHỨNG CHỈ</p><p>Quản lý thông tin thuyền viên.</p></div><button class="primary-button" id="add-crew">+ Thêm thuyền viên</button></div>
           <div id="crew-warning-strip" class="warning-strip"></div>
           <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="crew-search" placeholder="Tìm họ tên, chức danh hoặc số chứng chỉ"></label><span id="crew-count" class="muted"></span></div><div id="crew-table" class="table-wrap"></div></section>
         </section>
 
         <section class="page" data-page="import">
-          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Dùng đúng hai file mẫu đã phát hành để map dữ liệu vào hệ thống.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Dùng hai file mẫu để map dữ liệu vào hệ thống.</p></div></div>
           <div class="import-grid">
             <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Nhập danh sách phương tiện từ <code>Ho_so_phuong_tien_thuy_noi_dia.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" id="import-vessels" accept=".xlsx"></label></section>
             <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Nhập một lượt từ <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
@@ -94,7 +94,7 @@
         </section>
 
         <section class="page" data-page="reports">
-          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><p>Dữ liệu được tổng hợp từ các phiếu đã nộp trong kỳ.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><p>Dữ liệu được tổng hợp từ các phiếu đã thực hiện trong kỳ.</p></div></div>
           <section class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="panel-actions"><div class="segmented period-switch"><button type="button" data-period="week">Tuần</button><button type="button" data-period="month" class="active">Tháng</button><button type="button" data-period="quarter">Quý</button><button type="button" data-period="year">Năm</button></div><button id="export-analytics" type="button" class="outline-button">Xuất Excel</button></div></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
@@ -102,13 +102,13 @@
               <div class="compare-card"><div class="compare-head"><strong>So sánh cùng kỳ</strong><span class="muted" id="compare-sub">—</span></div><table><thead><tr><th>Chỉ tiêu</th><th>Kỳ này</th><th>Cùng kỳ</th><th>+/-</th></tr></thead><tbody id="compare-body"></tbody></table></div>
             </div>
           </section>
-          <section class="panel report-filter"><label>Từ ngày<input id="report-from" type="date"></label><label>Đến ngày<input id="report-to" type="date"></label><p><span class="info-dot">i</span> Chỉ phiếu ở trạng thái <strong>Đã nộp</strong> được đưa vào báo cáo.</p></section>
+          <section class="panel report-filter"><label>Từ ngày<input id="report-from" type="date"></label><label>Đến ngày<input id="report-to" type="date"></label><p><span class="info-dot">i</span> Chỉ phiếu ở trạng thái <strong>Đã duyệt</strong> được đưa vào báo cáo.</p></section>
           <div class="report-grid">
             <article class="panel report-card"><span>PL.01</span><h2>Kế hoạch hoạt động PTTND</h2><p>Kế hoạch theo ngày, vị trí đến/rời, hàng hóa và thuyền trưởng.</p><button class="outline-button" data-report="appendix1">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button" data-report="appendix2">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button" data-report="appendix3">Xuất Excel</button></article>
           </div>
-          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã nộp. Hệ thống chỉ gửi khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói đồng bộ</button></div><div id="sync-jobs" class="table-wrap span-full"></div></section>
+          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Hệ thống tự động gởi thông tin khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói đồng bộ</button></div><div id="sync-jobs" class="table-wrap span-full"></div></section>
         </section>
       </main>
     </div>

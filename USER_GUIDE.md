@@ -4,6 +4,61 @@ Chào mừng đến với hệ thống khai báo cảng vụ của **TAN THUAN P
 
 ---
 
+## 🚀 Các Tính Năng Thông Minh Hỗ Trợ User
+
+Ứng dụng được thiết kế với nhiều **tính năng thông minh** giúp bạn làm việc nhanh chóng và chính xác:
+
+### ✨ **Tự Động Điền Thông Tin (Auto-Suggest)**
+- Khi chọn tàu trong khai báo mới, hệ thống **tự động tìm kiếm khai báo trước đó** của tàu đó
+- Các thông tin như cảng, hàng hóa, thuyền viên sẽ **được điền sẵn**
+- Bạn chỉ cần **kiểm tra & cập nhật** những gì thay đổi
+- ⏱️ **Tiết kiệm thời gian**: Không cần nhập lại toàn bộ thông tin
+
+### ⚠️ **Cảnh Báo Thông Minh (Smart Warnings)**
+- Hệ thống **tự động theo dõi** ngày hết hạn chứng chỉ thuyền viên
+- **Cảnh báo khi sắp hết hạn** (còn < 3 tháng) - bạn có thời gian chuẩn bị
+- **Cảnh báo khi đã hết hạn** - ngăn chặn thuyền viên không thể làm việc
+- Hiển thị rõ ràng trên Dashboard với biểu tượng 🟢🟡🔴
+
+### 🔄 **Quản Lý Trạng Thái Thông Minh (Smart Workflow)**
+- Ứng dụng **chỉ cho phép chỉnh sửa ở trạng thái phù hợp**
+  - DRAFT: Chỉnh sửa tự do
+  - PENDING_REVIEW: Khóa chỉnh sửa (đang chờ xem xét)
+  - CHANGES_REQUESTED: Mở khóa để bạn sửa theo yêu cầu
+  - APPROVED/ISSUED: Khóa hoàn toàn (khai báo cuối cùng)
+- Ngăn chặn sai sót và mất dữ liệu
+
+### 📊 **Báo Cáo Tự Động (Auto-Filtering Reports)**
+- Báo cáo **tự động lọc chỉ các khai báo được phê duyệt**
+- **Loại trừ các nháp** và khai báo chưa hoàn tất
+- Đảm bảo báo cáo luôn chính xác và tuân thủ quy định
+- Hỗ trợ **xuất Excel** và **in PDF** một cú nhấp chuột
+
+### 🔍 **Tìm Kiếm & Lọc Nhanh (Smart Search & Filter)**
+- **Lọc khai báo** theo trạng thái, tàu, ngày tháng
+- **Tìm kiếm nhanh** danh sách tàu và thuyền viên
+- **Phân trang thông minh** cho danh sách lớn
+- Tiết kiệm thời gian tìm kiếm thông tin cần thiết
+
+### ✅ **Xác Thực Dữ Liệu (Smart Validation)**
+- **Kiểm tra tự động** các trường bắt buộc
+- **Cảnh báo lỗi** trước khi gửi khai báo
+- Hỗ trợ **người dùng phát hiện và sửa lỗi** trước khi gửi
+- Giảm lỗi nhập liệu
+
+### 📱 **Giao Diện Thân Thiện (User-Friendly Interface)**
+- **Wizard hướng dẫn từng bước** cho khai báo mới
+- **Thanh điều hướng rõ ràng** dễ tìm chức năng
+- **Thông báo và cảnh báo** trực quan và rõ ràng
+- **Biểu tượng trạng thái** dễ nhận biết ngay tức thì
+
+### 🔐 **Bảo Mật Phiên Đăng Nhập (Session Security)**
+- **Tự động phát hiện hết phiên** và yêu cầu đăng nhập lại
+- **Bảo vệ dữ liệu** khỏi truy cập không được phép
+- **Token xác thực** được mã hóa và bảo mật
+
+---
+
 ## 📋 Mục Lục
 
 1. [Đăng Nhập](#đăng-nhập)

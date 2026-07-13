@@ -326,3 +326,19 @@ schedules `docs/T5_GATE5_EVIDENCE_PROTOCOL.md`, supplies the agreed reference
 conditions/results, or authorizes a UX change that affects authority/workflow
 meaning. T6 remains manual-scaffold complete and reopens only on receipt of the
 official authority prerequisites recorded in its work order.
+
+---
+
+## Session handoff: Recovery UX branch — 2026-07-13
+
+- **Branch**: `recovery/frontend-baseline-20260712`
+- **Implementation commit**: `0b2ba72`
+- **Status**: Implementation complete; browser/UAT evidence and Analytics remain open.
+- **Canonical session handoff**:
+  `docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`
+- **UX issue ledger**:
+  `docs/UX_REEVALUATION_RECOVERY_BRANCH_20260713.md`
+
+Agents continuing this work must use the isolated recovery worktree, preserve
+the untracked Excel files in `templates/`, and must not close Gate 5 without
+real browser/UAT evidence.

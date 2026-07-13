@@ -28,6 +28,35 @@
 - **Analytics và kiểm thử trực quan đa viewport — vẫn chờ bằng chứng riêng.**
   Analytics không được gộp vào tranche sửa workflow/UX này.
 
+## Sổ trạng thái sau thi công
+
+| Mã | Trạng thái hiện tại | Đã xử lý / kết luận | Còn thiếu hoặc cần chờ |
+|---|---|---|---|
+| CRIT-001 | **ĐÃ XỬ LÝ** | Commit `0b2ba72` vô hiệu hóa năm action workflow cũ bằng HTTP 410, chuyển role sang `PORT_STAFF`, đổi `cv_approval` thành `port_approval`, migration dữ liệu cũ và giải phóng phiếu demo id 8. | Cần kiểm tra migration trên bản sao dữ liệu staging trước khi triển khai production; hiện chưa có staging/owner triển khai. |
+| UX-101 | **ĐÍNH CHÍNH — KHÔNG PHẢI LỖI NHƯ BÁO CÁO GỐC** | API thực khớp `vessel_name`; thuyền trưởng có filter `master_name` riêng. Không cần sửa theo đề xuất mở rộng trường tìm kiếm ban đầu. | Tìm kiếm không dấu (`Hai` → `Hải`) chưa có. Chờ Product Owner xác nhận đây có phải yêu cầu nghiệp vụ hay không trước khi mở task mới. |
+| UX-102 | **ĐÍNH CHÍNH — ĐÃ CÓ SẴN** | Phân trang hoạt động khi gửi `page`; `page_size=2` trả đúng hai items và metadata tổng. Response mảng khi không có `page` là tương thích ngược có chủ ý. | Không còn việc code trong checkpoint này. Chỉ cần performance test với tập dữ liệu tham chiếu khi Gate 5 được tổ chức. |
+| UX-103 | **ĐÃ XỬ LÝ** | Audit/runtime dùng “Khách hàng xác nhận gửi phiếu khai báo”; UI và preview bỏ “Nộp/nộp”. | Chờ browser/UAT xác nhận tất cả thông điệp nhìn thấy đúng ngữ cảnh. |
+| UX-104 | **CHƯA ĐÓNG** | Dashboard đã ẩn chức năng theo role và có attention queue theo vai trò. | Chờ task study hoặc UAT với khách hàng và nhân viên Cảng để xác định thứ tự ưu tiên widget; chưa đủ bằng chứng để tái cấu trúc dashboard. |
+| UX-105 | **ĐÃ THI CÔNG, CHỜ BẰNG CHỨNG UX** | Wizard có error summary, `aria-invalid`, mô tả lỗi theo field và focus về lỗi đầu tiên. Static/regression test đã PASS. | Chờ kiểm thử bàn phím thật, screen reader hoặc axe-core trong browser; chưa được dùng kết quả static để đóng Gate 5. |
+| UX-106 | **ĐÃ XỬ LÝ** | “Crew List” đã được Việt hóa trong app và preview. | Chỉ còn rà soát nội dung bằng mắt trong lượt browser/UAT. |
+| UX-107 | **PASS** | Không còn role/stage CV/QLC/BP trong UI hay schema/runtime hiện hành; các tên action cũ chỉ còn trong deny-list và regression test để bảo đảm trả 410. | Không xóa deny-list/test vì đó là hàng rào chống client cũ gọi nhầm. |
+| UX-002 cũ | **ĐÃ XỬ LÝ** | Nhãn được đổi thành “Nháp cục bộ · chưa gửi”, có thời điểm lưu cục bộ khi phát sinh. | Chờ quan sát bằng mắt để xác nhận người dùng hiểu đúng; không được mô tả là đồng bộ server. |
+| UX-004 cũ | **ĐÃ THI CÔNG, CHỜ BẰNG CHỨNG UX** | Native `select multiple` đã được thay bằng checkbox checklist thân thiện bàn phím/mobile. | Chờ browser test ở desktop và mobile, kiểm tra vùng chạm và Tab/Space. |
+| Analytics | **CHƯA XỬ LÝ — NGOÀI TRANCHE** | Đã xác nhận frontend gọi endpoint chưa tồn tại và xử lý 404 bằng toast, không làm vỡ trang. | Cần một tranche riêng gồm định nghĩa chỉ số, API contract, quyền truy cập, dữ liệu tham chiếu và thiết kế biểu đồ trước khi code. |
+| Responsive/Gate 5 | **CHƯA CÓ BẰNG CHỨNG** | CSS breakpoint và cấu trúc responsive tồn tại; unit/static test xanh. | Chờ ảnh và thao tác thật tối thiểu tại 1920×1080, 1366×768, 390×844; cần kiểm thử bàn phím, accessibility và task completion. |
+
+### Điều kiện để tiếp tục
+
+1. **Claude/browser tester** chạy lại đúng worktree và branch ghi trong
+   `docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`; không đánh giá bản `main` hay
+   restore copy.
+2. **Product Owner** quyết định có yêu cầu tìm kiếm không dấu và có cho phép
+   tái cấu trúc thứ tự dashboard dựa trên UAT hay không.
+3. **Analytics** chỉ được mở khi có work order/contract riêng; không ghép vào
+   commit workflow recovery.
+4. **Gate 5** chỉ được đóng sau bằng chứng browser/UAT thực, không dùng static
+   DOM/CSS hay mock làm bằng chứng trải nghiệm hoàn chỉnh.
+
 ## Báo cáo gốc (giữ nguyên để truy vết)
 
 Đánh giá độc lập · Không sửa code · Không commit

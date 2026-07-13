@@ -58,3 +58,10 @@ Implemented in this checkpoint:
 - Next move: run this worktree locally, visually inspect desktop/mobile wizard,
   then either approve RECOVERY-UX-T1 or record layout corrections. Analytics
   must remain a separate tranche.
+
+## Continuation handoff
+
+Agent tiếp theo phải bắt đầu tại
+`docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`. Trạng thái chi tiết từng finding,
+phần đã sửa và điều kiện đang chờ nằm tại
+`docs/UX_REEVALUATION_RECOVERY_BRANCH_20260713.md`.

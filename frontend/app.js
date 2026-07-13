@@ -469,6 +469,7 @@ async function openDeclaration(id = null) {
   }
   loadSuggestions();
   $('#declaration-dialog').showModal();
+  updateLocalDraftStatus(draft ? localStorage.getItem('tanthuan-declaration-draft-saved-at') : null, Boolean(draft));
 }
 
 function applyVesselToForm(vessel) {
@@ -563,9 +564,11 @@ function wizardNavHtml() {
   const dots = DECLARATION_STEPS.map((step, index) => {
     const num = index + 1;
     const tone = num < state.wizardStep ? 'done' : num === state.wizardStep ? 'active' : 'todo';
-    return `<li class="wizard-dot ${tone}" data-wizard-dot="${num}"><span>${num}</span><small>${esc(step.label)}</small></li>`;
+    const locked = num > state.wizardMaxStep;
+    const current = num === state.wizardStep ? ' aria-current="step"' : '';
+    return `<li class="wizard-dot ${tone}"><button type="button" class="wizard-step-button" data-wizard-dot="${num}" aria-label="Bước ${num}: ${esc(step.label)}"${current}${locked ? ' disabled' : ''}><span aria-hidden="true">${num}</span><small>${esc(step.label)}</small></button></li>`;
   }).join('');
-  return `<ol class="wizard-progress">${dots}</ol>
+  return `<nav aria-label="Các bước khai báo"><ol class="wizard-progress">${dots}</ol></nav>
     <div class="wizard-nav">
       <button type="button" class="ghost-button" data-wizard-back ${state.wizardStep === 1 ? 'disabled' : ''}>← Quay lại</button>
       <button type="button" class="primary-button" data-wizard-next ${state.wizardStep === DECLARATION_STEPS.length ? 'disabled' : ''}>Tiếp tục →</button>
@@ -736,8 +739,23 @@ function declarationData() {
   return data;
 }
 
+function updateLocalDraftStatus(savedAt = null, restored = false) {
+  const node = $('#draft-state');
+  if (!node) return;
+  const parsed = savedAt ? new Date(savedAt) : null;
+  const validTime = parsed && !Number.isNaN(parsed.getTime());
+  const time = validTime ? new Intl.DateTimeFormat('vi-VN', {hour: '2-digit', minute: '2-digit'}).format(parsed) : '';
+  const prefix = restored ? 'Đã khôi phục nháp cục bộ' : 'Nháp cục bộ';
+  node.innerHTML = `<span aria-hidden="true">●</span> ${prefix}${time ? ` · lưu lúc ${esc(time)}` : ''} · chưa lưu lên hệ thống`;
+}
+
 function rememberDraft() {
-  try { localStorage.setItem('tanthuan-declaration-draft', JSON.stringify(declarationData())); } catch (_) {}
+  try {
+    const savedAt = new Date().toISOString();
+    localStorage.setItem('tanthuan-declaration-draft', JSON.stringify(declarationData()));
+    localStorage.setItem('tanthuan-declaration-draft-saved-at', savedAt);
+    updateLocalDraftStatus(savedAt);
+  } catch (_) {}
 }
 
 async function saveDeclaration(event) {
@@ -791,6 +809,7 @@ async function saveDeclaration(event) {
       await api(`/api/declarations/${result.id}/attachments?filename=${encodeURIComponent(file.name)}`, {method:'POST', headers:{'Content-Type':file.type || 'application/octet-stream'}, body:file});
     }
     localStorage.removeItem('tanthuan-declaration-draft');
+    localStorage.removeItem('tanthuan-declaration-draft-saved-at');
     $('#declaration-dialog').close();
     toast(`${submit ? 'Phiếu đã được nộp và khóa dữ liệu.' : 'Đã lưu phiếu nháp.'}${files.length ? ` Đã tải ${files.length} file.` : ''}`);
     await loadDeclarations();

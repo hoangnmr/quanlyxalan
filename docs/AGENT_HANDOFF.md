@@ -326,3 +326,45 @@ schedules `docs/T5_GATE5_EVIDENCE_PROTOCOL.md`, supplies the agreed reference
 conditions/results, or authorizes a UX change that affects authority/workflow
 meaning. T6 remains manual-scaffold complete and reopens only on receipt of the
 official authority prerequisites recorded in its work order.
+
+---
+
+## Tranche: T5 UX Remediation (WO-KBCV-T5-UXR-20260713)
+
+- **Status**: IN_PROGRESS — READY FOR CLAUDE BUILD
+- **Phase**: BUILD
+- **Risk Level**: R1; escalate to R2 for authority, workflow or legal mapping
+  changes
+
+### Completed before handoff
+
+- Independent heuristic review and evidence-response documents recorded.
+- API/RBAC evidence reviewed; browser/UAT evidence remains incomplete.
+- Wizard step controls converted to native keyboard-operable buttons with
+  accessible names and current/locked state semantics.
+- Local draft status now states that data is stored on the current device, is
+  not yet saved to the system and includes the local save time.
+- Added static frontend UX regression tests.
+- Local verification: JavaScript syntax PASS; full suite `69 passed`;
+  `git diff --check` PASS.
+
+### Assigned remaining work
+
+Claude must execute `docs/WORK_ORDER_T5_UX_REMEDIATION_20260713.md`: verify the
+P0 changes in a real browser, implement inline error recovery, replace the crew
+multi-select, improve role-focused dashboard hierarchy, standardize terminology
+and collect the missing Gate 5 evidence.
+
+### Active decisions and blockers
+
+- Do not reorder or reinterpret legal form sections A/B/C/D/E/F without product
+  and domain-owner approval.
+- Gate 5 remains OPEN until task study, keyboard/screen-reader evidence,
+  responsive matrix and browser performance traces are complete.
+- Production readiness remains outside this tranche.
+
+### Next governed move
+
+Claude performs R1 BUILD tasks, records before/after evidence, runs the full
+gate and returns the tranche to REVIEW. Stop and request R2 approval if a change
+would affect role authority, workflow semantics or signed report meaning.

@@ -143,7 +143,7 @@
   </div>
 
   <!-- DECLARATION MODAL (contract markup, prefilled demo) -->
-  <dialog id="declaration-dialog" class="modal wide"><form onsubmit="return false"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Tự lưu trên trình duyệt</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div>
+  <dialog id="declaration-dialog" class="modal wide"><form onsubmit="return false"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div id="draft-state" class="draft-state" role="status" aria-live="polite"><span aria-hidden="true">●</span> Nháp cục bộ trên thiết bị này · chưa lưu lên hệ thống</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div>
     <div>
       <section class="form-section"><h3>A. Thông tin chung và phương tiện</h3><div class="section-grid">
         <label>* Loại phiếu<select><option>Vào cảng</option><option>Rời cảng</option></select></label>

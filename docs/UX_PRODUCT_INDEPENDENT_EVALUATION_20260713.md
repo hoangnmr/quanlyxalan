@@ -1,7 +1,9 @@
 # Đánh giá độc lập UX/Product — Khai-báo Cảng-vụ
 
-Ngày: 2026-07-13  
-Vai đánh giá: chuyên gia UX/Product độc lập  
+Ngày: 2026-07-13
+
+Vai đánh giá: chuyên gia UX/Product độc lập
+
 Phạm vi: khả năng hoàn thành công việc, độ dễ học, tải nhận thức, phản hồi lỗi,
 accessibility và trải nghiệm theo vai trò.
 

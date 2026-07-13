@@ -8,6 +8,7 @@ create or vessel import.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -15,9 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal, now_iso
-from backend.models import CrewMember, Declaration, Organization, Vessel
+from backend.auth import get_password_hash
+from backend.models import CrewMember, Declaration, DeclarationEvent, Organization, User, Vessel
 
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "demo123")
 
 
 def cargo(name: str, tons: float, teu: int = 0) -> str:
@@ -62,6 +65,29 @@ def main() -> None:
         db.add(demo)
         db.flush()
 
+        db.add_all([
+            User(
+                username="khachhang",
+                password_hash=get_password_hash(DEMO_PASSWORD),
+                full_name="Khách hàng minh họa",
+                role="CUSTOMER",
+                organization_id=demo.id,
+                is_active=1,
+                created_at=now,
+            ),
+            User(
+                username="nhanviencang",
+                password_hash=get_password_hash(DEMO_PASSWORD),
+                full_name="Nhân viên Cảng minh họa",
+                # CV is retained only as the stored compatibility code. The UI
+                # presents this account as “Nhân viên Cảng”.
+                role="CV",
+                organization_id=None,
+                is_active=1,
+                created_at=now,
+            ),
+        ])
+
         vessels = [
             Vessel(organization_id=demo.id, name="Sà lan SG-168", registration_no="SG-DEMO-168", vessel_type="Sà lan", vessel_class="VR-SII", deadweight_tons=850, cargo_capacity_tons=780, min_crew=4, safety_certificate_no="ATKT-DEMO-168", certificate_expiry_date="2026-08-05", created_at=now, updated_at=now),
             Vessel(organization_id=demo.id, name="Tàu container Tân Thuận 01", registration_no="SG-DEMO-001", vessel_type="Tàu container", vessel_class="VR-SI", deadweight_tons=1200, container_capacity_teu=96, min_crew=6, safety_certificate_no="ATKT-DEMO-001", certificate_expiry_date="2026-12-31", created_at=now, updated_at=now),
@@ -71,19 +97,24 @@ def main() -> None:
         db.add_all(vessels)
         db.flush()
 
-        db.add_all([
-            CrewMember(organization_id=demo.id, vessel_id=vessels[0].id, full_name="Nguyễn Văn Hải", crew_role="Thuyền trưởng", phone="0900 111 168", professional_certificate_type="Thuyền trưởng hạng II", professional_certificate_no="TT-DEMO-001", certificate_expiry_date="2027-02-10", created_at=now, updated_at=now),
-            CrewMember(organization_id=demo.id, vessel_id=vessels[1].id, full_name="Trần Minh Quân", crew_role="Máy trưởng", phone="0900 222 001", professional_certificate_type="Máy trưởng hạng II", professional_certificate_no="MT-DEMO-002", certificate_expiry_date="2026-09-15", created_at=now, updated_at=now),
-            CrewMember(organization_id=demo.id, vessel_id=vessels[2].id, full_name="Lê Quốc Bảo", crew_role="Thuyền phó", phone="0900 333 215", professional_certificate_type="Thuyền phó hạng II", professional_certificate_no="TP-DEMO-003", certificate_expiry_date="2026-07-18", created_at=now, updated_at=now),
-            CrewMember(organization_id=demo.id, vessel_id=vessels[3].id, full_name="Phạm Đức Long", crew_role="Máy phó", phone="0900 444 088", professional_certificate_type="Máy phó hạng III", professional_certificate_no="MP-DEMO-004", certificate_expiry_date="2027-01-30", created_at=now, updated_at=now),
-        ])
+        captain_names = ["Nguyễn Văn Hải", "Trần Minh Quân", "Lê Quốc Bảo", "Phạm Đức Long"]
+        captain_phones = ["0900 111 168", "0900 222 001", "0900 333 215", "0900 444 088"]
+        crew_members = []
+        for index, vessel in enumerate(vessels):
+            crew_members.extend([
+                CrewMember(organization_id=demo.id, vessel_id=vessel.id, full_name=captain_names[index], crew_role="Thuyền trưởng", phone=captain_phones[index], professional_certificate_type="Thuyền trưởng hạng II", professional_certificate_no=f"TT-DEMO-{index + 1:03d}", certificate_expiry_date="2027-02-10", created_at=now, updated_at=now),
+                CrewMember(organization_id=demo.id, vessel_id=vessel.id, full_name=f"Thuyền viên mẫu {index + 1}", crew_role="Thủy thủ", phone=f"0900 555 00{index + 1}", professional_certificate_type="Chứng chỉ nghiệp vụ", professional_certificate_no=f"TV-DEMO-{index + 1:03d}", certificate_expiry_date="2027-06-30", created_at=now, updated_at=now),
+            ])
+        db.add_all(crew_members)
 
-        statuses = ["DRAFT", "PENDING_REVIEW", "PENDING_QLC", "PENDING_BP", "APPROVED", "ISSUED"]
+        statuses = ["DRAFT", "PENDING_REVIEW", "CHANGES_REQUESTED", "APPROVED", "PENDING_REVIEW", "APPROVED"]
         for index, workflow_status in enumerate(statuses, 1):
             vessel = vessels[(index - 1) % len(vessels)]
+            vessel_index = (index - 1) % len(vessels)
             movement = "DEPARTURE" if index % 2 == 0 else "ARRIVAL"
-            db.add(Declaration(
-                reference_no=f"KB-DEMO-202607-{index:03d}", status=workflow_status,
+            declaration = Declaration(
+                reference_no=f"KB-DEMO-202607-{index:03d}",
+                status="DRAFT" if workflow_status == "DRAFT" else "SUBMITTED",
                 workflow_status=workflow_status, organization_id=demo.id, vessel_id=vessel.id,
                 declaration_date="2026-07-11", company_name=demo.name, vessel_name=vessel.name,
                 registration_no=vessel.registration_no, vessel_type=vessel.vessel_type,
@@ -93,17 +124,52 @@ def main() -> None:
                 destination_port="Cảng Hiệp Phước" if movement == "DEPARTURE" else "",
                 eta=f"2026-07-{11 + index:02d}T08:00", etd=f"2026-07-{11 + index:02d}T18:00",
                 unload_json=cargo("Hàng tổng hợp", 80 * index, index if index % 2 else 0),
-                load_json=cargo("Thép cuộn", 65 * index, 0), master_name="Nguyễn Văn Hải",
-                master_phone="0900 111 168", movement_type=movement,
-                cv_approval="APPROVED" if workflow_status in {"PENDING_QLC", "PENDING_BP", "APPROVED", "ISSUED"} else "PENDING",
-                qlc_approval="APPROVED" if workflow_status in {"PENDING_BP", "APPROVED", "ISSUED"} else "PENDING",
-                bp_approval="APPROVED" if workflow_status in {"APPROVED", "ISSUED"} else "PENDING",
-                permit_no=f"GP-DEMO-{index:03d}" if workflow_status == "ISSUED" else "",
-                issued_at=now if workflow_status == "ISSUED" else None,
+                load_json=cargo("Thép cuộn", 65 * index, 0), master_name=captain_names[vessel_index],
+                master_phone=captain_phones[vessel_index], movement_type=movement,
+                cv_approval="APPROVED" if workflow_status == "APPROVED" else "PENDING",
+                qlc_approval="PENDING", bp_approval="PENDING",
+                submitted_at=now if workflow_status != "DRAFT" else None,
                 created_at=now, updated_at=now,
-            ))
+            )
+            db.add(declaration)
+            db.flush()
+            if workflow_status != "DRAFT":
+                db.add(DeclarationEvent(
+                    declaration_id=declaration.id,
+                    action="SUBMIT",
+                    from_status="DRAFT",
+                    to_status="PENDING_REVIEW",
+                    actor_name="Khách hàng minh họa",
+                    actor_role="CUSTOMER",
+                    note="Khách hàng xác nhận gửi phiếu minh họa.",
+                    created_at=now,
+                ))
+            if workflow_status == "CHANGES_REQUESTED":
+                db.add(DeclarationEvent(
+                    declaration_id=declaration.id,
+                    action="REQUEST_CHANGES",
+                    from_status="PENDING_REVIEW",
+                    to_status="CHANGES_REQUESTED",
+                    actor_name="Nhân viên Cảng minh họa",
+                    actor_role="CV",
+                    note="Vui lòng bổ sung bản chụp chứng chỉ an toàn.",
+                    created_at=now,
+                ))
+            elif workflow_status == "APPROVED":
+                db.add(DeclarationEvent(
+                    declaration_id=declaration.id,
+                    action="PORT_APPROVE",
+                    from_status="PENDING_REVIEW",
+                    to_status="APPROVED",
+                    actor_name="Nhân viên Cảng minh họa",
+                    actor_role="CV",
+                    note="Thông tin và chứng từ phù hợp.",
+                    created_at=now,
+                ))
         db.commit()
-        print("Seeded 4 vessels, 4 crew members and 6 demonstration declarations.")
+        print("Seeded demo accounts, 4 vessels, 8 crew members and 6 declarations.")
+        print(f"Customer: khachhang / {DEMO_PASSWORD}")
+        print(f"Port employee: nhanviencang / {DEMO_PASSWORD}")
     except Exception:
         db.rollback()
         raise

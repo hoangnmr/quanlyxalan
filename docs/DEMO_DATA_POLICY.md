@@ -16,3 +16,13 @@ Run locally after migration:
 ```powershell
 python scripts/seed_demo_data.py
 ```
+
+The local-only seed also creates two disposable accounts:
+
+| Purpose | Username | Default password |
+|---|---|---|
+| Customer / vessel owner | `khachhang` | `demo123` |
+| Port employee | `nhanviencang` | `demo123` |
+
+Override the default password with `DEMO_PASSWORD` before running the seed.
+These credentials are for isolated local UI testing only.

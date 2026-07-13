@@ -41,7 +41,7 @@
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-user">
-          <span id="user-display" class="sidebar-user-name">Nguyễn Văn Cảng (CV)</span>
+          <span id="user-display" class="sidebar-user-name">Nguyễn Văn Cảng · Nhân viên Cảng</span>
           <button id="logout-button" class="ghost-button sidebar-logout">Đăng xuất</button>
         </div>
         <small>CVF governed workspace</small>
@@ -82,7 +82,7 @@
           <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Nhắc trong ứng dụng hiển thị cảnh báo hạn chứng chỉ ở dashboard và Crew List. Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input type="checkbox" checked><span>Nhắc trong ứng dụng</span></label></section>
           <div class="warning-strip visible" role="status">Có 3 phương tiện có chứng chỉ hết hạn hoặc sắp hết hạn trong 30 ngày.</div>
           <section class="panel attention-queue"><div class="panel-header"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2>Hàng đợi xử lý (2)</h2></div><button class="soft-button" type="button">Mở danh sách</button></div><div class="attention-list">
-            <article><div><strong>KB-2026-0188</strong><small>Tân Cảng 09 · Chờ CV</small></div><span>6 giờ</span></article>
+            <article><div><strong>KB-2026-0188</strong><small>Tân Cảng 09 · Chờ Cảng xử lý</small></div><span>6 giờ</span></article>
             <article><div><strong>KB-2026-0191</strong><small>Sông Sài Gòn 27 · Cần bổ sung</small></div><span>18 giờ</span></article>
           </div></section>
           <div class="content-grid">
@@ -99,7 +99,7 @@
         <!-- DECLARATIONS -->
         <section class="page" data-page="declarations">
           <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Điều phối phiếu vào, rời cảng</h1><p>Theo dõi khai báo, kiểm tra nhiều cấp, ban hành và lịch sử xử lý.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
-          <section class="panel advanced-filter"><label>Tàu / số đăng ký<input placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select><option>Tất cả</option><option>Vào cảng</option><option>Rời cảng</option></select></label><label>Trạng thái<select><option>Tất cả</option><option>Chờ CV</option><option>Đã duyệt</option></select></label><label>Thuyền trưởng<input placeholder="Họ tên"></label><label>Từ ngày<input type="date"></label><label>Đến ngày<input type="date"></label><button class="ghost-button">Đặt lại</button><span class="muted">42 phiếu</span></section>
+          <section class="panel advanced-filter"><label>Tàu / số đăng ký<input placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select><option>Tất cả</option><option>Vào cảng</option><option>Rời cảng</option></select></label><label>Trạng thái<select><option>Tất cả</option><option>Chờ Cảng xử lý</option><option>Cần bổ sung</option><option>Đã duyệt</option></select></label><label>Thuyền trưởng<input placeholder="Họ tên"></label><label>Từ ngày<input type="date"></label><label>Đến ngày<input type="date"></label><button class="ghost-button">Đặt lại</button><span class="muted">42 phiếu</span></section>
           <section class="panel"><div class="table-wrap" data-declarations></div><div class="pagination" aria-label="Phân trang"><span>Trang 1/3</span><button type="button" disabled>Trước</button><button type="button">Sau</button></div></section>
         </section>
 
@@ -171,17 +171,17 @@
         <label class="attachment-field wide-field">Đính kèm hình ảnh / PDF / Word / Excel<input type="file" multiple><small>Mỗi file tối đa 12 MB. File được lưu cùng phiếu khai báo.</small></label>
       </div></section>
     </div>
-    <div class="review-strip"><div><strong>Kiểm tra trước khi nộp</strong><p>Dấu * là bắt buộc. Phiếu đã nộp được khóa để bảo toàn báo cáo.</p></div><div><button type="button" class="outline-button">Lưu nháp</button><button type="button" class="primary-button">Kiểm tra & nộp</button></div></div>
+    <div class="review-strip"><div><strong>Kiểm tra trước khi xác nhận</strong><p>Dấu * là bắt buộc. Sau khi gửi, Cảng sẽ xem xét và phản hồi.</p></div><div><button type="button" class="outline-button">Lưu nháp</button><button type="button" class="primary-button">Xác nhận & gửi</button></div></div>
   </form></dialog>
 
   <!-- WORKFLOW MODAL -->
   <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2>KB-2026-0188 · Tân Cảng 09</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div>
-    <div class="workflow-summary"><article><small>LOẠI PHIẾU</small><strong>Vào cảng</strong></article><article><small>TRẠNG THÁI</small><strong>Chờ QLC</strong></article><article><small>GIẤY PHÉP</small><strong>Chưa ban hành</strong></article><article><small>DUYỆT</small><span class="approval-dots"><span class="approval approved" title="Cảng vụ viên: Đã duyệt">CV ✓</span><span class="approval" title="Quản lý cảng: Đang chờ">QLC</span><span class="approval" title="Ban cấp phép: Đang chờ">BP</span></span></article></div>
+    <div class="workflow-summary"><article><small>LOẠI PHIẾU</small><strong>Vào cảng</strong></article><article><small>TRẠNG THÁI</small><strong>Chờ Cảng xử lý</strong></article><article><small>PHẢN HỒI</small><strong>Chưa có</strong></article><article><small>XỬ LÝ</small><span class="approval-dots"><span class="approval" title="Nhân viên Cảng đang xem xét"></span></span></article></div>
     <div class="timeline">
-      <article><span></span><div><strong>Chờ CV · Trần Quốc Hải</strong><small>CUSTOMER · 11/07/2026 08:12</small><p>Khách hàng nộp phiếu khai báo lượt vào cảng.</p></div></article>
-      <article><span></span><div><strong>Đã duyệt · Nguyễn Văn Cảng</strong><small>CV · 11/07/2026 09:40</small><p>Cảng vụ viên duyệt hồ sơ, chuyển Quản lý cảng.</p></div></article>
+      <article><span></span><div><strong>Chờ Cảng xử lý · Trần Quốc Hải</strong><small>Khách hàng / Chủ phương tiện · 11/07/2026 08:12</small><p>Khách hàng xác nhận gửi phiếu khai báo lượt vào cảng.</p></div></article>
+      <article><span></span><div><strong>Đã duyệt · Nguyễn Văn Cảng</strong><small>Nhân viên Cảng · 11/07/2026 09:40</small><p>Nhân viên Cảng đã đối chiếu và duyệt hồ sơ.</p></div></article>
     </div>
-    <form class="workflow-form" onsubmit="return false"><label>Thao tác<select><option>Chọn</option><option>QLC duyệt</option><option>Yêu cầu bổ sung</option></select></label><label>Số giấy phép<input placeholder="Tự sinh nếu để trống"></label><label class="span-full">Ghi chú / lý do<textarea placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung hoặc thu hồi"></textarea></label><button class="primary-button" type="button">Ghi nhận thao tác</button></form>
+    <form class="workflow-form" onsubmit="return false"><label>Thao tác<select><option>Chọn</option><option>Xác nhận duyệt</option><option>Yêu cầu bổ sung</option></select></label><label class="span-full">Ghi chú / lý do<textarea placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung"></textarea></label><button class="primary-button" type="button">Gửi phản hồi</button></form>
   </dialog>
 
   <!-- LOGIN DIALOG -->
@@ -220,17 +220,17 @@
       const cls = state === 'approved' ? 'approval approved' : state === 'rejected' ? 'approval rejected' : 'approval';
       return `<span class="${cls}">${label}${state === 'approved' ? ' ✓' : ''}</span>`;
     }
-    const legend = '<div class="approval-legend"><strong>Tiến trình duyệt:</strong><span>CV = Cảng vụ viên</span><span>QLC = Quản lý cảng</span><span>BP = Ban cấp phép</span><span class="approval-legend-state">Xanh = đã duyệt · Xám = chờ</span></div>';
+    const legend = '<div class="approval-legend"><strong>Trạng thái xử lý:</strong><span class="approval-legend-state">Xanh = đã duyệt · Xám = đang chờ Cảng</span></div>';
 
     const declRows = [
-      ['KB-2026-0188','Vào cảng · —','Tân Cảng 09','SG-4821 · Trần Quốc Hải','Cần Thơ → Tân Thuận','11/07/2026 14:00',['approved','pending','pending'],'draft','Chờ QLC'],
+      ['KB-2026-0188','Vào cảng · —','Tân Cảng 09','SG-4821 · Trần Quốc Hải','Cần Thơ → Tân Thuận','11/07/2026 14:00',['pending'],'draft','Chờ Cảng xử lý'],
       ['KB-2026-0187','Rời cảng · GP-1183','Sông Sài Gòn 27','SG-1207 · Lê Minh Đức','Tân Thuận → Vũng Tàu','11/07/2026 09:30',['approved','approved','approved'],'submitted','Đã ban hành'],
-      ['KB-2026-0185','Vào cảng · —','Phú Mỹ 14','VT-3390 · Phạm Văn Sơn','Vũng Tàu → Tân Thuận','10/07/2026 22:10',['approved','approved','pending'],'draft','Chờ BP'],
+      ['KB-2026-0185','Vào cảng · —','Phú Mỹ 14','VT-3390 · Phạm Văn Sơn','Vũng Tàu → Tân Thuận','10/07/2026 22:10',['pending'],'draft','Chờ Cảng xử lý'],
       ['KB-2026-0182','Rời cảng · —','Đồng Nai 05','DN-2214 · Võ Thành Long','Tân Thuận → Mỹ Tho','10/07/2026 16:45',['rejected','pending','pending'],'danger','Đã thu hồi'],
     ];
     function declTable(editable) {
-      return legend + '<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Tiến trình duyệt<small>CV → QLC → BP</small></th><th>Trạng thái</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
-        declRows.map(r => `<tr><td data-label="Mã / Loại"><strong>${r[0]}</strong><br><small>${r[1]}</small></td><td data-label="Phương tiện">${r[2]}<br><small>${r[3]}</small></td><td data-label="Hành trình">${r[4]}</td><td data-label="Thời gian">${r[5]}</td><td data-label="Tiến trình duyệt"><span class="approval-dots">${dot(r[6][0],'CV')}${dot(r[6][1],'QLC')}${dot(r[6][2],'BP')}</span></td><td data-label="Trạng thái"><span class="table-badge ${r[7]}">${r[8]}</span></td>${editable ? '<td data-label="Thao tác"><button>Mở phiếu</button> · <button>Chi tiết</button></td>' : ''}</tr>`).join('') +
+      return legend + '<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Cảng xử lý</th><th>Trạng thái</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        declRows.map(r => `<tr><td data-label="Mã / Loại"><strong>${r[0]}</strong><br><small>${r[1]}</small></td><td data-label="Phương tiện">${r[2]}<br><small>${r[3]}</small></td><td data-label="Hành trình">${r[4]}</td><td data-label="Thời gian">${r[5]}</td><td data-label="Cảng xử lý"><span class="approval-dots">${dot(r[6][0],'')}</span></td><td data-label="Trạng thái"><span class="table-badge ${r[7]}">${r[8]}</span></td>${editable ? '<td data-label="Thao tác"><button>Mở phiếu</button> · <button>Chi tiết</button></td>' : ''}</tr>`).join('') +
         '</tbody></table>';
     }
     document.querySelector('[data-recent]').innerHTML = declTable(false);

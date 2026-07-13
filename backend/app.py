@@ -151,6 +151,11 @@ def certificate_status(value: Optional[str], warning_days: int = 30) -> str:
 
 # ── Workflow state machine ─────────────────────────────────────────────────────
 WORKFLOW_TRANSITIONS: dict[str, dict[str, str]] = {
+    # Current port-enterprise flow: customer confirms the declaration, then a
+    # port employee either approves it or requests changes.  The legacy staged
+    # actions remain readable for historical records during migration, but are
+    # no longer presented by the application UI.
+    "PORT_APPROVE":      {"from": "PENDING_REVIEW",  "to": "APPROVED"},
     "CV_APPROVE":        {"from": "PENDING_REVIEW",  "to": "PENDING_QLC"},
     "QLC_APPROVE":       {"from": "PENDING_QLC",     "to": "PENDING_BP"},
     "BP_APPROVE":        {"from": "PENDING_BP",       "to": "APPROVED"},
@@ -183,7 +188,7 @@ def _apply_workflow_transition(
     from_status = current
     declaration.workflow_status = new_status
 
-    if action == "CV_APPROVE":
+    if action in ("PORT_APPROVE", "CV_APPROVE"):
         declaration.cv_approval = "APPROVED"
     elif action == "QLC_APPROVE":
         declaration.qlc_approval = "APPROVED"
@@ -1258,7 +1263,13 @@ def declaration_workflow(
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
 
-    # Role checks per action
+    # CV is the legacy stored role code for a port employee.  PORT_APPROVE is
+    # the only approval action exposed by the current application workflow.
+    if payload.action == "PORT_APPROVE" and user.role != "CV":
+        raise HTTPException(status_code=403, detail="Chỉ nhân viên Cảng mới có quyền xác nhận duyệt.")
+
+    # Legacy role checks are retained temporarily so historical records and
+    # existing installations can be migrated without corrupting audit trails.
     if payload.action == "CV_APPROVE" and user.role != "CV":
         raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền thực hiện hành động này.")
     if payload.action == "QLC_APPROVE" and user.role != "QLC":

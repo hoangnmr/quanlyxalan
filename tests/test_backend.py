@@ -14,6 +14,7 @@ import io
 import os
 import tempfile
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -137,7 +138,7 @@ def bp_headers(client):
 # ── Helper ────────────────────────────────────────────────────────────────────
 def _reg() -> str:
     """Generate a unique registration number."""
-    return f"SG-T0-{time.time_ns()}"
+    return f"SG-T0-{uuid.uuid4().hex}"
 
 
 def _minimal_declaration(**overrides) -> dict:
@@ -213,7 +214,10 @@ def test_static_frontend(client):
     assert "function bindLoginForm()" in app_js
     assert "bindLoginForm();" in app_js
     assert "Tiến trình duyệt" in app_js
-    assert "CV = Cảng vụ viên" in app_js
+    assert "Nhân viên Cảng" in app_js
+    assert "CV = Cảng vụ viên" not in app_js
+    assert "Theo các bước CV · QLC · BP" not in app_js
+    assert "PORT_APPROVE" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
 
 
@@ -548,8 +552,45 @@ def test_teu_calculations(client, customer_headers):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. WORKFLOW — ORDERED TRANSITION
+# 7. WORKFLOW — CURRENT PORT FLOW + LEGACY COMPATIBILITY
 # ══════════════════════════════════════════════════════════════════════════════
+
+def test_port_employee_can_approve_directly_or_request_changes(client, customer_headers, cv_headers, qlc_headers):
+    approved_source = client.post(
+        "/api/declarations?submit=true",
+        json=_minimal_declaration(),
+        headers=customer_headers,
+    )
+    declaration_id = approved_source.json()["id"]
+
+    denied = client.post(
+        f"/api/declarations/{declaration_id}/workflow",
+        json={"action": "PORT_APPROVE"},
+        headers=qlc_headers,
+    )
+    assert denied.status_code == 403
+
+    approved = client.post(
+        f"/api/declarations/{declaration_id}/workflow",
+        json={"action": "PORT_APPROVE", "note": "Thông tin phù hợp"},
+        headers=cv_headers,
+    )
+    assert approved.status_code == 200
+    assert approved.json()["workflow_status"] == "APPROVED"
+    assert approved.json()["cv_approval"] == "APPROVED"
+
+    changes_source = client.post(
+        "/api/declarations?submit=true",
+        json=_minimal_declaration(),
+        headers=customer_headers,
+    )
+    requested = client.post(
+        f"/api/declarations/{changes_source.json()['id']}/workflow",
+        json={"action": "REQUEST_CHANGES", "note": "Cần bổ sung chứng từ"},
+        headers=cv_headers,
+    )
+    assert requested.status_code == 200
+    assert requested.json()["workflow_status"] == "CHANGES_REQUESTED"
 
 def test_ordered_workflow_transition(client, customer_headers, cv_headers, qlc_headers, bp_headers):
     res = client.post(

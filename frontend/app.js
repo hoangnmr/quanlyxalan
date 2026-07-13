@@ -23,7 +23,16 @@ async function api(path, options = {}) {
   }
   const type = response.headers.get('content-type') || '';
   const body = type.includes('json') ? await response.json() : await response.blob();
-  if (!response.ok) throw new Error(body.detail || body.error || 'Yêu cầu không thành công.');
+  if (!response.ok) {
+    const details = body?.detail || body?.error;
+    const message = Array.isArray(details)
+      ? details.map(item => item?.msg || String(item)).join('; ')
+      : details || 'Yêu cầu không thành công.';
+    const error = new Error(message);
+    error.status = response.status;
+    error.details = details;
+    throw error;
+  }
   return body;
 }
 
@@ -129,7 +138,7 @@ function pageName(route) {
 }
 
 function roleLabel(role) {
-  return ({CUSTOMER:'Khách hàng', CV:'Nhân viên Cảng', QLC:'Quản lý cảng (chỉ xem)', BP:'Ban cấp phép (chỉ xem)', ADMIN:'Quản trị hệ thống'})[role] || role;
+  return ({CUSTOMER:'Khách hàng / Chủ phương tiện', CV:'Nhân viên Cảng', QLC:'Nhân viên Cảng', BP:'Nhân viên Cảng', ADMIN:'Quản trị hệ thống'})[role] || role;
 }
 
 function route() {
@@ -153,7 +162,7 @@ async function loadDashboard(query = '') {
     const cards = [
       ['PHƯƠNG TIỆN', data.stats.vessels, 'Hồ sơ đang lưu'],
       ['PHIẾU NHÁP', data.stats.drafts, 'Chờ khách hoàn tất'],
-      ['ĐÃ NỘP', data.stats.submitted, 'Có thể đưa vào báo cáo'],
+      ['ĐÃ XÁC NHẬN GỬI', data.stats.submitted, 'Đang chờ Cảng xử lý hoặc đã duyệt'],
       ['DỰ KIẾN ĐẾN HÔM NAY', data.stats.arrivingToday, 'Theo ETA đã khai'],
       ['CẢNH BÁO CHỨNG CHỈ', data.stats.certificateWarnings, 'Hết hạn hoặc còn dưới 30 ngày'],
     ];
@@ -166,7 +175,7 @@ async function loadDashboard(query = '') {
       const admin = await api('/api/admin/operations-summary');
       const adminCards = [
         ['PHIẾU ĐÃ DUYỆT', admin.operations.approved, `${admin.operations.tons.toLocaleString('vi-VN')} tấn · ${admin.operations.teu.toLocaleString('vi-VN')} TEU`],
-        ['CHỜ XỬ LÝ', admin.operations.pending, 'Theo các bước CV · QLC · BP'],
+        ['CHỜ CẢNG XỬ LÝ', admin.operations.pending, 'Nhân viên Cảng xem xét hồ sơ'],
         ['CẢNH BÁO CHỨNG CHỈ', admin.fleet.certificateWarnings, `${admin.fleet.vessels} phương tiện`],
         ['IMPORT', admin.imports.jobs, `${admin.imports.rejectedRows} dòng bị từ chối`],
         ['BACKUP', admin.storage.backups, admin.storage.latestBackup || 'Chưa có backup'],
@@ -440,9 +449,9 @@ function refreshCrewOptions(vesselId) {
 
 const DECLARATION_STEPS = [
   { label: 'Phương tiện' },
-  { label: 'Thuyền trưởng & thuyền viên' },
   { label: 'Hành trình' },
   { label: 'Hàng hóa' },
+  { label: 'Thuyền trưởng & thuyền viên' },
   { label: 'Đính kèm' },
   { label: 'Xem lại & Gửi' },
 ];
@@ -563,9 +572,11 @@ function wizardNavHtml() {
   const dots = DECLARATION_STEPS.map((step, index) => {
     const num = index + 1;
     const tone = num < state.wizardStep ? 'done' : num === state.wizardStep ? 'active' : 'todo';
-    return `<li class="wizard-dot ${tone}" data-wizard-dot="${num}"><span>${num}</span><small>${esc(step.label)}</small></li>`;
+    const locked = num > state.wizardMaxStep;
+    const current = num === state.wizardStep ? ' aria-current="step"' : '';
+    return `<li class="wizard-dot ${tone}"><button type="button" class="wizard-step-button" data-wizard-dot="${num}" aria-label="Bước ${num}: ${esc(step.label)}"${current}${locked ? ' disabled' : ''}><span aria-hidden="true">${num}</span><small>${esc(step.label)}</small></button></li>`;
   }).join('');
-  return `<ol class="wizard-progress">${dots}</ol>
+  return `<nav class="wizard-progress-wrap" aria-label="Các bước khai báo"><ol class="wizard-progress">${dots}</ol></nav>
     <div class="wizard-nav">
       <button type="button" class="ghost-button" data-wizard-back ${state.wizardStep === 1 ? 'disabled' : ''}>← Quay lại</button>
       <button type="button" class="primary-button" data-wizard-next ${state.wizardStep === DECLARATION_STEPS.length ? 'disabled' : ''}>Tiếp tục →</button>
@@ -599,7 +610,7 @@ function reviewSummaryHtml(d) {
     <div class="attachment-field"><strong>Thuyền viên đi theo</strong><p>${crewTotal} người</p></div>
     <div class="attachment-field"><strong>Hành trình</strong><p>${esc(d.last_port || '')} → ${esc(d.working_port || '')}${d.destination_port ? ` → ${esc(d.destination_port)}` : ''}</p></div>
   </div>
-  <p class="muted">Kiểm tra kỹ thông tin trước khi bấm "Kiểm tra & nộp". Phiếu đã nộp được khóa để bảo toàn báo cáo.</p></section>`;
+  <p class="muted">Kiểm tra kỹ thông tin trước khi bấm “Xác nhận & gửi”. Sau khi gửi, thông tin được khóa trong khi Cảng xem xét.</p></section>`;
 }
 
 function renderDeclarationWizard() {
@@ -624,28 +635,21 @@ function renderDeclarationWizard() {
         </div>
         <label id="declaration-vessel-label" ${isNew ? 'hidden' : ''}>* Chọn hồ sơ phương tiện<select name="vessel_id" id="declaration-vessel" ${isNew ? '' : 'required'}><option value="">Chọn phương tiện</option>${state.vessels.map(v => `<option value="${v.id}" ${Number(d.vessel_id) === v.id ? 'selected' : ''}>${esc(v.name)} — ${esc(v.registration_no)}</option>`).join('')}</select></label>
         <div id="vessel-suggestion" class="wide-field" ${isNew ? 'hidden' : ''}></div>
-        ${field('vessel_name','Tên phương tiện',d.vessel_name,'text','required')}
-        ${field('registration_no','Số đăng ký',d.registration_no,'text','required')}
-        ${selectField('vessel_type','Loại phương tiện',state.catalogs.vesselTypes,d.vessel_type,'required')}
-        ${selectField('vessel_class','Cấp phương tiện',state.catalogs.vesselClasses,d.vessel_class,'required')}
-        ${field('length_m','Chiều dài (m)',d.length_m,'number','step="0.01" min="0"')}
-        ${field('deadweight_tons','Trọng tải toàn phần',d.deadweight_tons,'number','step="0.01" min="0"')}
-        ${field('gross_tonnage','Dung tích (GT)',d.gross_tonnage,'number','step="0.01" min="0"')}
-        ${field('certificate_expiry_date','Hạn GCN ATKT & BVMT',d.certificate_expiry_date,'date')}
-        ${field('crew_count','Số thuyền viên',d.crew_count,'number','min="0"')}
+        ${field('vessel_name','Tên phương tiện',d.vessel_name,'text',isNew ? 'required' : 'required readonly class="locked-field"')}
+        ${field('registration_no','Số đăng ký',d.registration_no,'text',isNew ? 'required' : 'required readonly class="locked-field"')}
+        ${selectField('vessel_type','Loại phương tiện',state.catalogs.vesselTypes,d.vessel_type,isNew ? 'required' : 'required data-locked="true" tabindex="-1" class="locked-field"')}
+        ${selectField('vessel_class','Cấp phương tiện',state.catalogs.vesselClasses,d.vessel_class,isNew ? 'required' : 'required data-locked="true" tabindex="-1" class="locked-field"')}
+        ${field('length_m','Chiều dài (m)',d.length_m,'number',isNew ? 'step="0.01" min="0"' : 'step="0.01" min="0" readonly class="locked-field"')}
+        ${field('deadweight_tons','Trọng tải toàn phần',d.deadweight_tons,'number',isNew ? 'step="0.01" min="0"' : 'step="0.01" min="0" readonly class="locked-field"')}
+        ${field('gross_tonnage','Dung tích (GT)',d.gross_tonnage,'number',isNew ? 'step="0.01" min="0"' : 'step="0.01" min="0" readonly class="locked-field"')}
+        ${field('certificate_expiry_date','Hạn GCN ATKT & BVMT',d.certificate_expiry_date,'date',isNew ? '' : 'readonly class="locked-field"')}
+        ${field('crew_count','Số thuyền viên tối thiểu',d.crew_count,'number',isNew ? 'min="0"' : 'min="0" readonly class="locked-field"')}
         ${field('passenger_count','Số hành khách',d.passenger_count,'number','min="0"')}
+        <div class="record-lock-note wide-field" ${isNew ? 'hidden' : ''}><strong>Thông tin hồ sơ phương tiện chỉ đọc</strong><span>Chọn đúng phương tiện để hệ thống tự điền. Khi hồ sơ thay đổi, Quản trị viên cập nhật tại mục Hồ sơ phương tiện.</span></div>
         <p class="muted wide-field" ${isNew ? '' : 'hidden'}>Hồ sơ phương tiện mới sẽ được lưu vào hệ thống khi phiếu được nộp, để lần sau có thể chọn lại theo ID.</p>
       </div></section>
     </div>
     <div class="wizard-step" data-step="2" ${state.wizardStep === 2 ? '' : 'hidden'}>
-      <section class="form-section"><h3>E. Thuyền trưởng và thuyền viên</h3><div class="section-grid">
-        <label class="wide-field" ${isNew ? 'hidden' : ''}>Chọn thuyền trưởng / thuyền viên<select name="crew_ids" id="declaration-crew" multiple ${isNew ? 'hidden' : 'size="4"'}>${isNew ? '' : crewOptionsHtml(d.vessel_id, [...(d.crew || []).map(item => item.id), ...(assignedCaptain ? [assignedCaptain.id] : [])])}</select></label>
-        ${isNew
-          ? `<div class="wide-field">${newCrewRowsHtml()}</div>`
-          : `<div class="attachment-field wide-field"><strong>Thuyền trưởng theo phương tiện</strong><p id="assigned-captain">${masterName ? `${esc(masterName)}${masterPhone ? ` · ${esc(masterPhone)}` : ''}` : 'Chưa gán Thuyền trưởng cho phương tiện này.'}</p><small>Thuyền trưởng được lấy tự động từ Danh sách thuyền viên theo ID phương tiện.</small></div>`}
-      </div></section>
-    </div>
-    <div class="wizard-step" data-step="3" ${state.wizardStep === 3 ? '' : 'hidden'}>
       <section class="form-section"><h3>B. Hành trình</h3><div class="section-grid">
         ${field('last_port','Cảng rời cuối cùng',d.last_port,'text','required list="ports-list"')}
         ${field('working_port','Cảng / cầu bến đến làm hàng',d.working_port,'text','required list="ports-list"')}
@@ -657,9 +661,17 @@ function renderDeclarationWizard() {
         <datalist id="ports-list"></datalist>
       </div></section>
     </div>
-    <div class="wizard-step" data-step="4" ${state.wizardStep === 4 ? '' : 'hidden'}>
+    <div class="wizard-step" data-step="3" ${state.wizardStep === 3 ? '' : 'hidden'}>
       ${cargoFields('unload','C. Hàng hóa dỡ tại cảng',d.unload || {},false)}
       ${cargoFields('load','D. Hàng hóa xếp tại cảng',d.load || {},true)}
+    </div>
+    <div class="wizard-step" data-step="4" ${state.wizardStep === 4 ? '' : 'hidden'}>
+      <section class="form-section"><h3>E. Thuyền trưởng và thuyền viên</h3><div class="section-grid">
+        <label class="wide-field" ${isNew ? 'hidden' : ''}>Chọn thuyền trưởng / thuyền viên<select name="crew_ids" id="declaration-crew" multiple ${isNew ? 'hidden' : 'size="4"'}>${isNew ? '' : crewOptionsHtml(d.vessel_id, [...(d.crew || []).map(item => item.id), ...(assignedCaptain ? [assignedCaptain.id] : [])])}</select></label>
+        ${isNew
+          ? `<div class="wide-field">${newCrewRowsHtml()}</div>`
+          : `<div class="attachment-field wide-field"><strong>Thuyền trưởng theo phương tiện</strong><p id="assigned-captain">${masterName ? `${esc(masterName)}${masterPhone ? ` · ${esc(masterPhone)}` : ''}` : 'Chưa gán Thuyền trưởng cho phương tiện này.'}</p><small>Thuyền trưởng được lấy tự động từ Danh sách thuyền viên theo ID phương tiện.</small></div>`}
+      </div></section>
     </div>
     <div class="wizard-step" data-step="5" ${state.wizardStep === 5 ? '' : 'hidden'}>
       <section class="form-section"><h3>Đính kèm hồ sơ</h3><div class="section-grid">
@@ -745,7 +757,7 @@ async function saveDeclaration(event) {
   const form = $('#declaration-form');
   const submit = event.submitter?.value === 'submit';
   if (submit && state.wizardStep !== DECLARATION_STEPS.length) {
-    toast('Vui lòng hoàn tất tất cả các bước trước khi nộp phiếu.', true);
+    toast('Vui lòng hoàn tất tất cả các bước trước khi xác nhận gửi.', true);
     return;
   }
   if (!form.reportValidity()) return;
@@ -754,7 +766,7 @@ async function saveDeclaration(event) {
     toast('Phương tiện chưa có Thuyền trưởng kèm số điện thoại. Hãy gán trong Danh sách thuyền viên trước khi lập phiếu.', true);
     return;
   }
-  setSubmitting(form, event.submitter, true, submit ? 'Đang nộp…' : 'Đang lưu…');
+  setSubmitting(form, event.submitter, true, submit ? 'Đang xác nhận…' : 'Đang lưu…');
   try {
     if (isNewVessel) {
       const newVessel = await api('/api/vessels', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
@@ -792,7 +804,7 @@ async function saveDeclaration(event) {
     }
     localStorage.removeItem('tanthuan-declaration-draft');
     $('#declaration-dialog').close();
-    toast(`${submit ? 'Phiếu đã được nộp và khóa dữ liệu.' : 'Đã lưu phiếu nháp.'}${files.length ? ` Đã tải ${files.length} file.` : ''}`);
+    toast(`${submit ? 'Phiếu đã được xác nhận gửi đến Cảng.' : 'Đã lưu phiếu nháp.'}${files.length ? ` Đã tải ${files.length} file.` : ''}`);
     await loadDeclarations();
     await loadDashboard();
   } catch (error) { toast(error.message, true); }
@@ -831,7 +843,7 @@ async function openWorkflow(id) {
   $('#workflow-risks').innerHTML = '';
   api(`/api/declarations/${id}/risks`).then(renderWorkflowRisks).catch(() => {});
   const events = await api(`/api/declarations/${id}/events`);
-  $('#workflow-timeline').innerHTML = events.length ? events.map(event => `<article><span></span><div><strong>${workflowLabel(event.to_status)} · ${esc(event.actor_name)}</strong><small>${esc(event.actor_role)} · ${fmtDate(event.created_at)}</small><p>${esc(event.note || event.action)}</p></div></article>`).join('') : empty('Chưa có lịch sử', 'Dấu vết sẽ xuất hiện khi phiếu được xử lý.');
+  $('#workflow-timeline').innerHTML = events.length ? events.map(event => `<article><span></span><div><strong>${workflowLabel(event.to_status)} · ${esc(event.actor_name)}</strong><small>${esc(roleLabel(event.actor_role))} · ${fmtDate(event.created_at)}</small><p>${esc(event.note || event.action)}</p></div></article>`).join('') : empty('Chưa có lịch sử', 'Dấu vết sẽ xuất hiện khi phiếu được xử lý.');
 
   // The port-side confirmation gate is a single action, only role CV may act
   const select = $('#workflow-form select[name="action"]');

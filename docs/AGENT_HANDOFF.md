@@ -331,8 +331,8 @@ official authority prerequisites recorded in its work order.
 
 ## Tranche: T5 UX Remediation (WO-KBCV-T5-UXR-20260713)
 
-- **Status**: IN_PROGRESS — READY FOR CLAUDE BUILD
-- **Phase**: BUILD
+- **Status**: LOCAL IMPLEMENTATION COMPLETE — GATE 5 OPEN
+- **Phase**: REVIEW
 - **Risk Level**: R1; escalate to R2 for authority, workflow or legal mapping
   changes
 
@@ -348,23 +348,27 @@ official authority prerequisites recorded in its work order.
 - Local verification: JavaScript syntax PASS; full suite `69 passed`;
   `git diff --check` PASS.
 
-### Assigned remaining work
+### Completed implementation
 
-Claude must execute `docs/WORK_ORDER_T5_UX_REMEDIATION_20260713.md`: verify the
-P0 changes in a real browser, implement inline error recovery, replace the crew
-multi-select, improve role-focused dashboard hierarchy, standardize terminology
-and collect the missing Gate 5 evidence.
+- Reordered the owner-approved wizard flow to A -> B -> C/D -> E -> attachments
+  -> F without changing legal section meaning.
+- Added inline field and persistent form-level error recovery.
+- Replaced the crew multi-select with a keyboard/touch checklist and repaired
+  the prior-trip crew suggestion path.
+- Added role dashboard layout, standardized terminology and static regression
+  coverage.
 
 ### Active decisions and blockers
 
-- Do not reorder or reinterpret legal form sections A/B/C/D/E/F without product
-  and domain-owner approval.
+- The current A -> B -> C/D -> E -> attachments -> F order is product-owner
+  approved. Do not change legal section meaning without new approval.
 - Gate 5 remains OPEN until task study, keyboard/screen-reader evidence,
   responsive matrix and browser performance traces are complete.
 - Production readiness remains outside this tranche.
 
 ### Next governed move
 
-Claude performs R1 BUILD tasks, records before/after evidence, runs the full
-gate and returns the tranche to REVIEW. Stop and request R2 approval if a change
-would affect role authority, workflow semantics or signed report meaning.
+Wait for the deferred browser task study, keyboard/screen-reader evidence,
+responsive matrix and browser performance traces. Gate 5 remains OPEN. Stop and
+request R2 approval if later work affects role authority, workflow semantics or
+signed report meaning.

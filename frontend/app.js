@@ -23,7 +23,16 @@ async function api(path, options = {}) {
   }
   const type = response.headers.get('content-type') || '';
   const body = type.includes('json') ? await response.json() : await response.blob();
-  if (!response.ok) throw new Error(body.detail || body.error || 'Yêu cầu không thành công.');
+  if (!response.ok) {
+    const details = body?.detail || body?.error;
+    const message = Array.isArray(details)
+      ? details.map(item => item?.msg || String(item)).join('; ')
+      : details || 'Yêu cầu không thành công.';
+    const error = new Error(message);
+    error.status = response.status;
+    error.details = details;
+    throw error;
+  }
   return body;
 }
 
@@ -544,10 +553,10 @@ function applyVesselSuggestion() {
     if (data.cargo_type && form.elements[`${prefix}_cargo_type`]) form.elements[`${prefix}_cargo_type`].value = data.cargo_type;
     if (data.movement_type && form.elements[`${prefix}_movement_type`]) form.elements[`${prefix}_movement_type`].value = data.movement_type;
   });
-  const crewSelect = $('#declaration-crew');
-  if (crewSelect && suggestion.crew_ids?.length) {
-    [...crewSelect.options].forEach(option => {
-      if (suggestion.crew_ids.includes(Number(option.value))) option.selected = true;
+  const crewContainer = $('#declaration-crew-container');
+  if (crewContainer && suggestion.crew_ids?.length) {
+    crewContainer.querySelectorAll('[name="crew_ids"]').forEach(input => {
+      input.checked = suggestion.crew_ids.includes(Number(input.value));
     });
   }
   rememberDraft();
@@ -569,22 +578,24 @@ function activeStepFields(step) {
   return $$(`.wizard-step[data-step="${step}"] input, .wizard-step[data-step="${step}"] select, .wizard-step[data-step="${step}"] textarea`, $('#declaration-fields'));
 }
 
-function showStepErrors(invalidFields) {
+function showStepErrors(invalidFields, heading = 'Vui lòng kiểm tra các thông tin sau:') {
   const container = $('#step-error-summary');
   if (!container) return;
   if (!invalidFields.length) { container.hidden = true; return; }
   container.hidden = false;
-  container.innerHTML = `<strong>Vui lòng điền đầy đủ thông tin bắt buộc:</strong><ul>${invalidFields.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`;
+  container.innerHTML = `<strong>${esc(heading)}</strong><ul>${invalidFields.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`;
   requestAnimationFrame(() => container.focus());
 }
 
-function showFieldError(name, message) {
-  const form = $('#declaration-form');
-  if (!form) return;
-  const input = form.elements[name];
+function fieldErrorKey(input) {
+  const raw = input.name || input.id || `${input.dataset.crewField || 'field'}-${input.dataset.crewRow || '0'}`;
+  return raw.replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+function showFieldError(input, message) {
   if (!input) return;
   input.setAttribute('aria-invalid', 'true');
-  const errorId = `field-err-${name}`;
+  const errorId = `field-err-${fieldErrorKey(input)}`;
   input.setAttribute('aria-describedby', errorId);
   let errorEl = document.getElementById(errorId);
   if (!errorEl) {
@@ -594,17 +605,14 @@ function showFieldError(name, message) {
     input.closest('label')?.appendChild(errorEl);
   }
   errorEl.textContent = message;
-  input.addEventListener('input', () => clearFieldError(name), { once: true });
+  input.addEventListener('input', () => clearFieldError(input), { once: true });
 }
 
-function clearFieldError(name) {
-  const form = $('#declaration-form');
-  if (!form) return;
-  const input = form.elements[name];
+function clearFieldError(input) {
   if (!input) return;
   input.removeAttribute('aria-invalid');
   input.removeAttribute('aria-describedby');
-  const errorEl = document.getElementById(`field-err-${name}`);
+  const errorEl = document.getElementById(`field-err-${fieldErrorKey(input)}`);
   if (errorEl) errorEl.remove();
 }
 
@@ -618,6 +626,9 @@ function validateStep(step) {
       if (!firstInvalid) firstInvalid = el;
       const label = el.closest('label')?.childNodes[0]?.textContent?.trim().replace(/^\*\s*/, '') || el.name;
       invalid.push(label);
+      showFieldError(el, el.validationMessage || 'Thông tin không hợp lệ.');
+    } else {
+      clearFieldError(el);
     }
   }
   if (invalid.length) {
@@ -626,6 +637,22 @@ function validateStep(step) {
     return false;
   }
   showStepErrors([]);
+  return true;
+}
+
+function validateWizardForm() {
+  for (let step = 1; step <= DECLARATION_STEPS.length; step += 1) {
+    const hasInvalidField = activeStepFields(step).some(el => (
+      !el.disabled && el.type !== 'hidden' && !el.hidden && !el.checkValidity()
+    ));
+    if (!hasInvalidField) continue;
+    if (state.wizardStep !== step) {
+      captureWizardFormState();
+      state.wizardStep = step;
+      renderDeclarationWizard();
+    }
+    return validateStep(step);
+  }
   return true;
 }
 
@@ -844,7 +871,7 @@ async function saveDeclaration(event) {
     toast('Vui lòng hoàn tất tất cả các bước trước khi nộp phiếu.', true);
     return;
   }
-  if (!form.reportValidity()) return;
+  if (!validateWizardForm()) return;
   const isNewVessel = state.declarationVesselMode === 'new';
   if (!isNewVessel && (!form.elements.master_name.value || !form.elements.master_phone.value)) {
     toast('Phương tiện chưa có Thuyền trưởng kèm số điện thoại. Hãy gán trong Danh sách thuyền viên trước khi lập phiếu.', true);
@@ -895,7 +922,10 @@ async function saveDeclaration(event) {
     toast(`${submit ? 'Phiếu đã được nộp và khóa dữ liệu.' : 'Đã lưu phiếu nháp.'}${files.length ? ` Đã tải ${files.length} file.` : ''}`);
     await loadDeclarations();
     await loadDashboard();
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    showStepErrors([error.message], `Không thể ${submit ? 'nộp' : 'lưu'} phiếu:`);
+    toast(error.message, true);
+  }
   finally { setSubmitting(form, event.submitter, false); }
 }
 

@@ -74,7 +74,7 @@
           <div id="stats" class="stat-grid" aria-live="polite">
             <article class="stat-card"><p>PHƯƠNG TIỆN</p><strong>128</strong><small>Hồ sơ đang lưu</small></article>
             <article class="stat-card"><p>PHIẾU NHÁP</p><strong>7</strong><small>Chờ khách hoàn tất</small></article>
-            <article class="stat-card"><p>ĐÃ NỘP</p><strong>42</strong><small>Có thể đưa vào báo cáo</small></article>
+            <article class="stat-card"><p>ĐÃ DUYỆT</p><strong>42</strong><small>Có thể đưa vào báo cáo</small></article>
             <article class="stat-card"><p>DỰ KIẾN ĐẾN HÔM NAY</p><strong>9</strong><small>Theo ETA đã khai</small></article>
             <article class="stat-card"><p>CẢNH BÁO CHỨNG CHỈ</p><strong>3</strong><small>Hết hạn hoặc còn dưới 30 ngày</small></article>
           </div>
@@ -122,7 +122,7 @@
 
         <!-- REPORTS -->
         <section class="page" data-page="reports">
-          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu gửi Cảng vụ</h1><p>Dữ liệu được tổng hợp từ các phiếu đã nộp trong kỳ.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu gửi Cảng vụ</h1><p>Dữ liệu được tổng hợp từ các phiếu đã duyệt trong kỳ.</p></div></div>
           <section class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="segmented period-switch"><button data-period="week">Tuần</button><button data-period="month" class="active">Tháng</button><button data-period="quarter">Quý</button><button data-period="year">Năm</button></div></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
@@ -136,7 +136,7 @@
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button">Xuất Excel</button></article>
           </div>
-          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã nộp. Hệ thống chỉ gửi khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span class="state-badge pending">Chưa cấu hình</span><button class="primary-button">Chuẩn bị gói đồng bộ</button></div><div class="table-wrap span-full" data-sync></div></section>
+          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã duyệt. Hệ thống chỉ gửi khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span class="state-badge pending">Chưa cấu hình</span><button class="primary-button">Chuẩn bị gói đồng bộ</button></div><div class="table-wrap span-full" data-sync></div></section>
         </section>
       </main>
     </div>

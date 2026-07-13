@@ -34,6 +34,9 @@ def test_inline_error_recovery():
     assert "step-error-summary" in app_js
     assert "aria-invalid" in app_js
     assert "field-error" in app_js
+    assert "showFieldError(el," in app_js
+    assert "function validateWizardForm(" in app_js
+    assert "showStepErrors([error.message]" in app_js
 
 
 def test_crew_checklist_replaces_select_multiple():
@@ -45,6 +48,8 @@ def test_crew_checklist_replaces_select_multiple():
     assert 'name="crew_ids"' in app_js
     # declaration-crew-container is used instead of native select in wizard
     assert "declaration-crew-container" in app_js
+    assert "crewContainer.querySelectorAll" in app_js
+    assert "input.checked = suggestion.crew_ids.includes" in app_js
 
 
 def test_role_dashboard_layout():
@@ -80,3 +85,11 @@ def test_wizard_step_order_customer_friendly():
     assert idx_journey < idx_crew, (
         "Hành trình (B) phải đứng trước Thuyền trưởng (E) trong wizard steps"
     )
+
+
+def test_preview_preserves_customer_submit_language():
+    preview_html = (ROOT / "frontend" / "preview.html").read_text(encoding="utf-8")
+
+    assert "Kiểm tra & nộp" in preview_html
+    assert "Khách hàng nộp phiếu" in preview_html
+    assert "Khách hàng duyệt phiếu" not in preview_html

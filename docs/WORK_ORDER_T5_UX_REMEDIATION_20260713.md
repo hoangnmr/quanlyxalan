@@ -4,9 +4,9 @@
 
 - Work order: `WO-KBCV-T5-UXR-20260713`
 - Assignee: Claude
-- Status: READY FOR BUILD
+- Status: LOCAL IMPLEMENTATION COMPLETE — GATE 5 EVIDENCE PENDING
 - Parent: `WO-KBCV-T5-20260711`
-- Phase: BUILD, then REVIEW
+- Phase: REVIEW
 - Risk: R1; escalate to R2 before changing role authority, workflow semantics,
   legal form mapping or report meaning
 - Priority: P0 accessibility/error recovery, then P1 interaction optimization
@@ -121,7 +121,8 @@ Execute the test list in sections 8.1–8.5 of
 
 ## Explicitly deferred / requires owner decision
 
-- Reordering legal sections A/B/C/D/E/F or changing their meaning.
+- Changing the owner-approved order A/B/C-D/E/attachments/F again, or changing
+  the legal meaning of any section.
 - Changing role permissions or workflow transitions.
 - Changing signed report mappings or external authority behavior.
 - Claiming production performance from local SQLite measurements.

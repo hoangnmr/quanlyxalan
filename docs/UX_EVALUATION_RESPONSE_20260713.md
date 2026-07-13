@@ -316,3 +316,26 @@ trường, dữ liệu, role và artifact lặp lại được. Gate 5 vẫn **O
 - task study đạt tiêu chí hoặc có remediation được duyệt;
 - responsive matrix và browser performance evidence hoàn tất;
 - product owner xác nhận quyết định liên quan thứ tự/mapping hồ sơ.
+
+## 9. Implementation checkpoint after owner approval
+
+Status: **LOCAL IMPLEMENTATION COMPLETE — GATE 5 EVIDENCE PENDING**.
+
+- UX-001: IMPLEMENTED — owner approved A -> B -> C/D -> E -> attachments -> F;
+  browser/task-study verification pending.
+- UX-002: IMPLEMENTED — local draft boundary and local save time are explicit;
+  comprehension test pending.
+- UX-003: IMPLEMENTED — wizard steps use native buttons and current-step
+  semantics; keyboard/screen-reader verification pending.
+- UX-004: IMPLEMENTED — crew selection uses a checkbox checklist and the
+  prior-trip suggestion path supports the new control; mobile evidence pending.
+- UX-005: IMPLEMENTED LOCALLY — role dashboard hierarchy/classes added; role
+  task-time evidence pending.
+- UX-006: IMPLEMENTED LOCALLY — primary terminology standardized; final
+  content-language review pending.
+- UX-007: PARTIALLY MITIGATED — wizard reordered, but step-density usability
+  still requires task study before the finding can be closed.
+
+The implementation status above is not Gate 5 closure. Browser task study,
+screen-reader, responsive/zoom and browser performance evidence remain deferred
+by owner direction.

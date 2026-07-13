@@ -260,3 +260,41 @@ lấy nguồn lực khỏi P0. T6 bị khóa bởi thẩm quyền và contract b
 - ADR-004: Attachment storage/quarantine provider.
 - ADR-005: Vanilla JS modularization so với React/Vue migration.
 - ADR-006: Reporting template ownership và signed mapping version.
+
+## 9. Independent evaluation follow-up (2026-07-13)
+
+Mục này ghi nhận các phát hiện 2–6 từ đánh giá độc lập ngày 2026-07-13.
+Mục 1 (fresh-install/test dependency) đã được chủ dự án xử lý và không còn nằm
+trong danh sách ưu tiên dưới đây.
+
+| ID | Phát hiện | Trạng thái | Ưu tiên tiếp theo |
+|---|---|---|---|
+| 2 | Production readiness: hosting/staging, HTTPS, PostgreSQL, backup/restore drill, scanner thật và các điều kiện vận hành bên ngoài | TREO — chưa xử lý được vì còn thiếu môi trường, owner và/hoặc dịch vụ được cấp phép | Giữ làm điều kiện mở lại T4; không chặn các hardening cục bộ bên dưới |
+| 3 | Session security: JWT đang được lưu trong `localStorage`; chưa có cơ chế thu hồi token phía server | OPEN — local/pilot còn chấp nhận được, production chưa đạt | P0: đánh giá secure cookie/BFF hoặc token revocation; bổ sung negative/security tests |
+| 4 | Upload boundary: endpoint đọc toàn bộ request body trước khi xử lý; cần request-size limit và bảo vệ ở reverse proxy | OPEN | P0: giới hạn kích thước ở proxy và ứng dụng; kiểm thử file lớn, timeout và memory pressure |
+| 5 | Maintainability: `backend/app.py` và `frontend/app.js` quá lớn, tăng rủi ro regression khi mở rộng | OPEN | P1: tách module theo domain/route, giữ contract test và không thay đổi semantics workflow |
+| 6 | UX Gate 5: chưa có user study, accessibility audit, responsive matrix và performance traces | OPEN — bằng chứng chưa thu thập | P1 sau các hardening P0; thực hiện theo `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` |
+
+### Execution order
+
+```text
+3 Session security ─┐
+4 Upload boundary ──┼─> local security regression ─> 5 Maintainability
+                    └─────────────────────────────> 6 UX Gate 5 evidence
+
+2 Production readiness: TREO, chỉ mở lại khi điều kiện T4 bên ngoài sẵn sàng.
+```
+
+Acceptance criteria cho đợt ưu tiên này:
+
+- Mục 3: có lựa chọn session được phê duyệt, test token/session negative cases và
+  không làm suy yếu RBAC/tenant isolation.
+- Mục 4: request lớn bị từ chối trước khi tiêu thụ bộ nhớ không giới hạn; có test
+  regression cho kích thước, timeout, loại file và lỗi quét.
+- Mục 5: module hóa không làm thay đổi API contract; toàn bộ regression suite và
+  `git diff --check` phải PASS.
+- Mục 6: hoàn tất task study, accessibility report, responsive matrix và traces;
+  không còn lỗi accessibility mức critical/serious trước khi đóng Gate 5.
+
+Không đánh dấu mục 2 hoặc Gate 4 là CLOSED nếu chưa có bằng chứng môi trường
+staging/production và owner phê duyệt theo các điều kiện ở mục 5.

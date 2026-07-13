@@ -190,3 +190,129 @@ Li element không có native keyboard role. Không có `tabindex="0"` hoặc `ro
 
 *Báo cáo này là heuristic review + automated test, không thay thế task study với người dùng thực.*  
 *Liên kết quản trị: `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` · `docs/EA_EVALUATION_ROADMAP.md`*
+
+---
+
+## 7. Đánh giá độc lập sau khi đối chiếu bằng chứng
+
+Phần này được bổ sung sau khi review lại bằng chứng trong báo cáo. Nó không phủ
+nhận kết quả API/RBAC đã ghi, nhưng hiệu chỉnh mức chắc chắn và thứ tự xử lý.
+
+### 7.1 Kết luận có thể hành động ngay
+
+| Ưu tiên | Hành động đề xuất | Cơ sở | Điều kiện đóng |
+|---|---|---|---|
+| P0 | Thay wizard dots bằng phần tử `<button>` có accessible name, trạng thái bước hiện tại và trạng thái disabled phù hợp | Thiếu keyboard semantics được chứng minh trực tiếp từ mã | Tab tới được từng bước hợp lệ; Enter/Space hoạt động; screen reader đọc tên và trạng thái; regression test PASS |
+| P0 | Phân biệt rõ “nháp cục bộ trên thiết bị” và “nháp đã lưu trên hệ thống”; hiển thị thời điểm/trạng thái lưu | Cơ chế `localStorage` đã được chứng minh, nhưng mức độ người dùng hiểu sai chưa được đo | Reload/đổi bước/đóng mở dialog không làm mất dữ liệu ngoài mô tả; nhãn phản ánh đúng nơi lưu; test comprehension PASS |
+| P0 — cần owner xác nhận | Giữ mã mục hồ sơ A/B/C/D/E/F nếu đây là mapping pháp lý, nhưng sắp xếp hoặc đặt tên bước theo tiến trình người dùng | Sự lệch A→E→B→C/D đã được chứng minh; tác động usability và quyền thay đổi thứ tự chưa được chứng minh | Product/domain owner xác nhận mapping; task study so sánh phương án; không làm sai báo cáo/phụ lục |
+| P1 | Thay native `<select multiple>` bằng danh sách checkbox/searchable picker có trạng thái chứng chỉ và thuyền trưởng rõ ràng | Cấu trúc control đã chứng minh; khó sử dụng thực tế chưa được đo | Mobile/keyboard task PASS; không chọn nhầm; selection được giữ khi quay lại bước |
+| P1 | Tách dashboard theo role và đưa hàng đợi cần xử lý lên trước | Dashboard trộn nhiều widget đã chứng minh; tác động completion time chưa được đo | CV/QLC/BP tìm đúng phiếu trong ngưỡng; CUSTOMER không thấy nhiễu quản trị; ADMIN vẫn truy cập đủ vận hành |
+| P1 | Bổ sung lỗi inline, error summary và focus tới lỗi đầu tiên trong wizard | Báo cáo hiện chưa kiểm chứng giả thuyết về khả năng phục hồi sau lỗi | Kịch bản lỗi ở từng bước được hoàn thành không trợ giúp; screen reader đọc được lỗi; dữ liệu đã nhập không mất |
+
+### 7.2 Hiệu chỉnh mức bằng chứng hiện tại
+
+- `UX-003` có bằng chứng code-level đủ mạnh để xác nhận lỗi keyboard semantics;
+  vẫn cần browser + screen reader test để xác nhận hành vi sau khi sửa.
+- `UX-001` xác nhận được sự lệch thứ tự nhãn, nhưng mức **serious** đối với người
+  dùng chưa được chứng minh bằng task study. Không tự ý đổi thứ tự các mục hồ sơ
+  nếu chưa có domain/product owner xác nhận.
+- `UX-002` xác nhận được nháp chỉ nằm trong `localStorage`, nhưng mức độ người
+  dùng hiểu nhầm chưa được chứng minh. Nên sửa wording sớm vì thay đổi nhỏ và giảm
+  rủi ro kỳ vọng sai.
+- `UX-004`, `UX-005`, `UX-006`, `UX-007` vẫn là heuristic findings; chưa được
+  nâng thành lỗi hành vi người dùng.
+- Performance hiện chứng minh **API local với dataset rất nhỏ**, không chứng minh
+  browser rendering, mobile/network performance hoặc tải gần production.
+
+## 8. Phần còn thiếu — yêu cầu Claude test bổ sung
+
+### 8.1 P0 — Keyboard, screen reader và error recovery
+
+1. Dùng keyboard-only hoàn tất một khai báo: mở wizard, chuyển bước, quay lại,
+   chọn thuyền viên, đính kèm file, xem lại và nộp.
+2. Ghi video hoặc chuỗi screenshot/focus trace cho wizard dots. Kiểm tra Tab,
+   Shift+Tab, Enter, Space và focus visible.
+3. Chạy NVDA hoặc screen reader tương đương cho: tên bước, bước hiện tại, lỗi
+   bắt buộc, toast, busy state, dialog và bảng.
+4. Tạo lỗi tại mỗi bước, đặc biệt lỗi nằm ngoài viewport. Ghi nhận focus đi đâu,
+   lỗi có còn hiển thị hay tự biến mất, và dữ liệu đã nhập có bị mất không.
+5. Thử đóng/mở dialog, reload trang và đăng nhập trên browser khác để xác minh
+   chính xác ranh giới của nháp cục bộ so với nháp server.
+
+Evidence bắt buộc: browser/version, account role, viewport, từng phím đã dùng,
+screenshot/video, expected/actual và severity.
+
+### 8.2 P0 — Task study và comprehension test
+
+Tối thiểu một người đại diện cho mỗi role CUSTOMER, CV, QLC, BP và ADMIN; ưu
+tiên người không tham gia phát triển ứng dụng.
+
+- CUSTOMER: tạo mới, lưu nháp, quay lại, sửa lỗi và nộp phiếu.
+- CV: tìm phiếu chờ CV và yêu cầu bổ sung.
+- QLC: tìm và duyệt đúng phiếu chờ QLC.
+- BP: tìm, duyệt/cấp phép và kiểm tra timeline.
+- ADMIN: tìm attention queue, vận hành và backup mà không nhầm với nghiệp vụ.
+
+Đặt câu hỏi comprehension riêng:
+
+- “Tự lưu trên trình duyệt” theo bạn dữ liệu đang nằm ở đâu?
+- Nếu đổi máy hoặc xóa dữ liệu trình duyệt, nháp còn hay mất?
+- A/E/B/C/D/F có ý nghĩa gì và bước tiếp theo bạn dự đoán là gì?
+- Công việc nào trên dashboard cần bạn xử lý ngay?
+
+Thu thập thời gian, completion without assistance, số lỗi, số lần quay lại, số
+lần hỏi “tiếp theo làm gì?”, confidence 1–5 và câu nói nguyên văn ngắn.
+
+### 8.3 P1 — Responsive và mobile interaction
+
+Chạy tại 375×667, 768×1024 và 1440×900; thêm zoom 200% và reduced motion.
+
+- kiểm tra overflow ngang, sidebar, modal, sticky footer và bàn phím ảo;
+- chọn nhiều thuyền viên trên touch/mobile;
+- bảng responsive phải giữ được nhãn và hành động;
+- nút chính không bị che, mất hoặc nằm ngoài viewport;
+- focus không bị kẹt sau khi đóng dialog.
+
+### 8.4 P1 — Performance cần đo lại
+
+Các khoảng trống của phép đo hiện tại:
+
+- báo cáo ghi database khoảng 5 records nhưng đo endpoint với page size 25;
+  chưa chứng minh render thực tế 25 dòng;
+- draft save mới có 2 mẫu và là HTTP API timing, chưa phải click-to-visible UI;
+- chưa có browser render trace, cache state, CPU/device profile hoặc network
+  profile;
+- asset size chưa tính external font/network dependencies và chưa ghi rõ
+  compressed transfer size so với uncompressed resource size.
+
+Claude cần bổ sung:
+
+1. Seed ít nhất 25 phiếu hiển thị được cho role đang test và ghi row counts.
+2. Đo ba mẫu, lấy median cho browser render 25 dòng sau API.
+3. Đo ba mẫu click “Lưu nháp” tới thông báo/trạng thái nhìn thấy được.
+4. Đo dashboard và danh sách ở cold cache và warm cache.
+5. Ghi total transferred bytes gồm document, JS, CSS, font và ảnh; tách rõ
+   compressed/uncompressed.
+6. Nếu có thể, chạy thêm một mobile throttling profile; không dùng kết quả local
+   warm API để suy rộng thành production performance.
+
+### 8.5 P1 — RBAC/role UX cần mở rộng
+
+RBAC hiện đã chứng minh một số denial cơ bản, chưa phải ma trận đầy đủ. Test thêm:
+
+- CUSTOMER A không đọc/sửa dữ liệu CUSTOMER B;
+- CV chỉ làm hành động CV, QLC chỉ làm hành động QLC, BP chỉ làm hành động BP;
+- ADMIN bị từ chối thay đổi workflow;
+- action bị ẩn trên UI nhưng request trực tiếp vẫn bị API từ chối;
+- sau 403/409/422, UI giải thích được lỗi và giữ dữ liệu/ngữ cảnh;
+- attention queue của từng role chỉ chứa trạng thái role đó có quyền xử lý.
+
+### 8.6 Điều kiện đánh giá lại
+
+Chỉ cập nhật severity hoặc đóng finding khi evidence có expected/actual, môi
+trường, dữ liệu, role và artifact lặp lại được. Gate 5 vẫn **OPEN** cho tới khi:
+
+- không còn accessibility finding mức critical/serious;
+- task study đạt tiêu chí hoặc có remediation được duyệt;
+- responsive matrix và browser performance evidence hoàn tất;
+- product owner xác nhận quyết định liên quan thứ tự/mapping hồ sơ.

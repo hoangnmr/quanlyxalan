@@ -151,23 +151,16 @@ def certificate_status(value: Optional[str], warning_days: int = 30) -> str:
 
 # ── Workflow state machine ─────────────────────────────────────────────────────
 WORKFLOW_TRANSITIONS: dict[str, dict[str, str]] = {
-    # Current port-enterprise flow: customer confirms the declaration, then a
-    # port employee either approves it or requests changes.  The legacy staged
-    # actions remain readable for historical records during migration, but are
-    # no longer presented by the application UI.
     "PORT_APPROVE":      {"from": "PENDING_REVIEW",  "to": "APPROVED"},
-    "CV_APPROVE":        {"from": "PENDING_REVIEW",  "to": "PENDING_QLC"},
-    "QLC_APPROVE":       {"from": "PENDING_QLC",     "to": "PENDING_BP"},
-    "BP_APPROVE":        {"from": "PENDING_BP",       "to": "APPROVED"},
-    "ISSUE":             {"from": "APPROVED",         "to": "ISSUED"},
-    "REQUEST_CHANGES":   {"from": None,               "to": "CHANGES_REQUESTED"},
-    "REVOKE":            {"from": None,               "to": "REVOKED"},
+    "REQUEST_CHANGES":   {"from": "PENDING_REVIEW",  "to": "CHANGES_REQUESTED"},
 }
+
+RETIRED_WORKFLOW_ACTIONS = frozenset({"CV_APPROVE", "QLC_APPROVE", "BP_APPROVE", "ISSUE", "REVOKE"})
 
 
 def _apply_workflow_transition(
     db: Session, declaration: Declaration, action: str, actor_role: str,
-    actor_name: str, actor_user_id: int, note: str = "", permit_no: str = ""
+    actor_name: str, actor_user_id: int, note: str = ""
 ) -> Declaration:
     rule = WORKFLOW_TRANSITIONS.get(action)
     if not rule:
@@ -181,26 +174,15 @@ def _apply_workflow_transition(
             detail=f"Không thể thực hiện '{action}' từ trạng thái '{current}'. "
                    f"Cần trạng thái '{required_from}'.",
         )
-    if action in ("REQUEST_CHANGES", "REVOKE") and not note.strip():
+    if action == "REQUEST_CHANGES" and not note.strip():
         raise HTTPException(status_code=400, detail="Cần nhập lý do cho thao tác này.")
 
     new_status = rule["to"]
     from_status = current
     declaration.workflow_status = new_status
 
-    if action in ("PORT_APPROVE", "CV_APPROVE"):
-        declaration.cv_approval = "APPROVED"
-    elif action == "QLC_APPROVE":
-        declaration.qlc_approval = "APPROVED"
-    elif action == "BP_APPROVE":
-        declaration.bp_approval = "APPROVED"
-    elif action == "ISSUE":
-        if not permit_no.strip():
-            raise HTTPException(status_code=400, detail="Cần cung cấp permit_no khi phát hành.")
-        declaration.permit_no = permit_no.strip()
-        declaration.issued_at = now_iso()
-    elif action == "REVOKE":
-        declaration.revoked_at = now_iso()
+    if action == "PORT_APPROVE":
+        declaration.port_approval = "APPROVED"
 
     declaration.updated_at = now_iso()
     declaration.version += 1
@@ -396,7 +378,6 @@ class DeclarationSaveRequest(BaseModel):
 class WorkflowActionRequest(BaseModel):
     action: str
     note: str = ""
-    permit_no: str = ""
 
 
 class PrepareSyncRequest(BaseModel):
@@ -602,7 +583,7 @@ def admin_operations_summary(
     year_start = date(today.year, 1, 1).isoformat()
     declaration_query = db.query(Declaration).filter(Declaration.declaration_date >= year_start)
     declarations = declaration_query.all()
-    approved = [item for item in declarations if item.workflow_status in {"APPROVED", "ISSUED"}]
+    approved = [item for item in declarations if item.workflow_status == "APPROVED"]
     pending = [item for item in declarations if item.workflow_status.startswith("PENDING_")]
     tons = teu = 0.0
     for item in approved:
@@ -672,10 +653,8 @@ def _attention_queue(db: Session, user: User) -> dict[str, Any]:
     """Return only the actionable/observable queue for the authenticated role."""
     role_rules = {
         "CUSTOMER": (["DRAFT", "CHANGES_REQUESTED"], "Phiếu cần khách hàng hoàn tất hoặc bổ sung"),
-        "CV": (["PENDING_REVIEW"], "Phiếu chờ chuyên viên kiểm tra"),
-        "QLC": (["PENDING_QLC"], "Phiếu chờ quản lý chất lượng phê duyệt"),
-        "BP": (["PENDING_BP"], "Phiếu chờ bộ phận phát hành phê duyệt"),
-        "ADMIN": (["PENDING_REVIEW", "PENDING_QLC", "PENDING_BP"], "Theo dõi các phiếu đang chờ xử lý"),
+        "PORT_STAFF": (["PENDING_REVIEW"], "Phiếu chờ nhân viên Cảng xem xét"),
+        "ADMIN": (["PENDING_REVIEW"], "Theo dõi các phiếu đang chờ Cảng xử lý"),
     }
     statuses, label = role_rules.get(user.role, ([], ""))
     if not statuses:
@@ -733,8 +712,8 @@ def get_dashboard(
         warnings_q = warnings_q.filter(Vessel.organization_id == user.organization_id)
         recent_q = recent_q.filter(Declaration.organization_id == user.organization_id)
         vessel_search_q = vessel_search_q.filter(Vessel.organization_id == user.organization_id)
-    elif user.role in ("CV", "QLC", "BP"):
-        # Reviewers see all submitted/approved/issued/revoked, but not drafts
+    elif user.role == "PORT_STAFF":
+        # Port employees see all non-draft declarations.
         drafts_q = drafts_q.filter(Declaration.id == -1)  # Drafts count is 0
         recent_q = recent_q.filter(Declaration.workflow_status != "DRAFT")
 
@@ -797,7 +776,7 @@ def _vessel_dict(v: Vessel) -> dict:
 
 
 @app.get("/api/vessels")
-def get_vessels(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN"))):
+def get_vessels(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN"))):
     if user.role == "CUSTOMER":
         vessels = db.query(Vessel).filter(Vessel.organization_id == user.organization_id).order_by(desc(Vessel.updated_at)).all()
     else:
@@ -911,7 +890,7 @@ def _crew_dict(c: CrewMember, db: Session) -> dict:
 
 
 @app.get("/api/crew")
-def get_crew(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN"))):
+def get_crew(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN"))):
     if user.role == "CUSTOMER":
         crews = db.query(CrewMember).filter(CrewMember.organization_id == user.organization_id).order_by(CrewMember.full_name).all()
     else:
@@ -999,13 +978,13 @@ def get_declarations(
     sort: str = Query(default="updated_at"),
     direction: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     query = db.query(Declaration)
 
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
-    elif user.role in ("CV", "QLC", "BP"):
+    elif user.role == "PORT_STAFF":
         # Reviewers cannot see draft declarations
         query = query.filter(Declaration.workflow_status != "DRAFT")
 
@@ -1064,7 +1043,7 @@ def save_declaration(
     if submit and user.role != "CUSTOMER":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ chủ phương tiện (CUSTOMER) mới có quyền nộp phiếu khai báo."
+            detail="Chỉ khách hàng/chủ phương tiện (CUSTOMER) mới có quyền xác nhận gửi phiếu khai báo."
         )
 
     if user.role == "CUSTOMER":
@@ -1107,7 +1086,7 @@ def save_declaration(
         if decl.workflow_status not in ("DRAFT", "CHANGES_REQUESTED"):
             raise HTTPException(
                 status_code=409,
-                detail="Không thể chỉnh sửa phiếu đã nộp. Dùng luồng REQUEST_CHANGES để điều chỉnh.",
+                detail="Không thể chỉnh sửa phiếu đã xác nhận gửi. Dùng luồng REQUEST_CHANGES để điều chỉnh.",
             )
         # Update fields
         for field_name in (
@@ -1184,9 +1163,7 @@ def save_declaration(
 
     if submit:
         if payload.id and decl.workflow_status == "CHANGES_REQUESTED":
-            decl.cv_approval = "PENDING"
-            decl.qlc_approval = "PENDING"
-            decl.bp_approval = "PENDING"
+            decl.port_approval = "PENDING"
         decl.workflow_status = "PENDING_REVIEW"
         decl.status = "SUBMITTED"
         decl.submitted_at = now_iso()
@@ -1199,7 +1176,7 @@ def save_declaration(
             actor_role=user.role,
             actor_user_id=user.id,
             correlation_id=correlation_id.get(),
-            note="Nộp phiếu khai báo",
+            note="Khách hàng xác nhận gửi phiếu khai báo.",
             created_at=now_iso(),
         )
         db.add(event)
@@ -1227,7 +1204,7 @@ def save_declaration(
 def get_declaration_events(
     declaration_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
@@ -1257,36 +1234,17 @@ def declaration_workflow(
     declaration_id: int,
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CV", "QLC", "BP")),  # Deny CUSTOMER and ADMIN by default
+    user: User = Depends(require_roles("PORT_STAFF")),
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
 
-    # CV is the legacy stored role code for a port employee.  PORT_APPROVE is
-    # the only approval action exposed by the current application workflow.
-    if payload.action == "PORT_APPROVE" and user.role != "CV":
-        raise HTTPException(status_code=403, detail="Chỉ nhân viên Cảng mới có quyền xác nhận duyệt.")
-
-    # Legacy role checks are retained temporarily so historical records and
-    # existing installations can be migrated without corrupting audit trails.
-    if payload.action == "CV_APPROVE" and user.role != "CV":
-        raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền thực hiện hành động này.")
-    if payload.action == "QLC_APPROVE" and user.role != "QLC":
-        raise HTTPException(status_code=403, detail="Chỉ QLC mới có quyền thực hiện hành động này.")
-    if payload.action in ("BP_APPROVE", "ISSUE", "REVOKE") and user.role != "BP":
-        raise HTTPException(status_code=403, detail="Chỉ BP mới có quyền thực hiện hành động này.")
-
-    if payload.action == "REQUEST_CHANGES":
-        current = decl.workflow_status
-        if current == "PENDING_REVIEW" and user.role != "CV":
-            raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
-        elif current == "PENDING_QLC" and user.role != "QLC":
-            raise HTTPException(status_code=403, detail="Chỉ QLC mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
-        elif current == "PENDING_BP" and user.role != "BP":
-            raise HTTPException(status_code=403, detail="Chỉ BP mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
-        elif current not in ("PENDING_REVIEW", "PENDING_QLC", "PENDING_BP"):
-            raise HTTPException(status_code=400, detail="Không thể yêu cầu chỉnh sửa từ trạng thái hiện tại.")
+    if payload.action in RETIRED_WORKFLOW_ACTIONS:
+        raise HTTPException(
+            status_code=410,
+            detail="Hành động thuộc quy trình cũ đã ngừng hỗ trợ. Dùng PORT_APPROVE hoặc REQUEST_CHANGES.",
+        )
 
     # Derive actor details strictly from JWT
     actor_role = user.role
@@ -1300,7 +1258,6 @@ def declaration_workflow(
         actor_name=actor_name,
         actor_user_id=user.id,
         note=payload.note,
-        permit_no=payload.permit_no,
     )
     audit(
         db, "DECLARATION", declaration_id, payload.action,
@@ -1373,7 +1330,7 @@ _SUGGESTION_FIELDS = {
 def get_suggestions(
     field: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     col = _SUGGESTION_FIELDS.get(field)
     if not col:
@@ -1591,7 +1548,7 @@ def export_report(
     from_: Optional[str] = Query(default=None, alias="from"),
     to: Optional[str] = None,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     if kind not in ("appendix1", "appendix2", "appendix3"):
         raise HTTPException(status_code=404, detail=f"Loại báo cáo '{kind}' không tồn tại.")
@@ -1616,7 +1573,7 @@ def export_report(
         raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.")
 
     query = db.query(Declaration).filter(
-        Declaration.workflow_status.in_(["APPROVED", "ISSUED"])
+        Declaration.workflow_status == "APPROVED"
     )
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
@@ -1707,7 +1664,7 @@ def _ensure_connector(db: Session) -> IntegrationConnector:
 @app.get("/api/integrations/maritime-authority")
 def get_integration_status(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("BP", "ADMIN")),
+    user: User = Depends(require_roles("ADMIN")),
 ):
     connector = _ensure_connector(db)
     jobs = (
@@ -1745,7 +1702,7 @@ async def prepare_sync(
     to = body.get("to")
 
     query = db.query(Declaration).filter(
-        Declaration.workflow_status == "ISSUED"
+        Declaration.workflow_status == "APPROVED"
     )
     if from_:
         query = query.filter(Declaration.declaration_date >= from_)
@@ -1755,7 +1712,7 @@ async def prepare_sync(
 
     payload_data = [
         {"reference_no": d.reference_no, "vessel_name": d.vessel_name,
-         "permit_no": d.permit_no, "issued_at": d.issued_at}
+         "workflow_status": d.workflow_status}
         for d in decls
     ]
 

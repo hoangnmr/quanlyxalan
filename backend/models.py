@@ -13,7 +13,7 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     full_name = Column(String, default="")
-    role = Column(String, default="CUSTOMER")  # ADMIN, CV, QLC, BP, CUSTOMER
+    role = Column(String, default="CUSTOMER")  # ADMIN, PORT_STAFF, CUSTOMER
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     is_active = Column(Integer, nullable=False, default=1)  # Using Integer (0 or 1) as SQLite boolean
     notification_preferences_json = Column(Text, nullable=False, default='{"in_app_certificate_reminders": true}')
@@ -108,12 +108,7 @@ class Declaration(Base):
     actual_arrival_at = Column(String)
     actual_departure_at = Column(String)
     workflow_status = Column(String, nullable=False, default="DRAFT")
-    cv_approval = Column(String, nullable=False, default="PENDING")
-    qlc_approval = Column(String, nullable=False, default="PENDING")
-    bp_approval = Column(String, nullable=False, default="PENDING")
-    permit_no = Column(String, nullable=False, default="")
-    issued_at = Column(String)
-    revoked_at = Column(String)
+    port_approval = Column(String, nullable=False, default="PENDING")
     submitted_at = Column(String)
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)

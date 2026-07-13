@@ -59,9 +59,7 @@ try:
         User(username="cust_b", password_hash=get_password_hash("custpass"), full_name="Customer B", role="CUSTOMER", organization_id=org_b.id, is_active=1),
         User(username="cust_no_org", password_hash=get_password_hash("custpass"), full_name="No Org Cust", role="CUSTOMER", organization_id=None, is_active=1),
         User(username="disabled_user", password_hash=get_password_hash("pass"), full_name="Disabled", role="CUSTOMER", organization_id=org_a.id, is_active=0),
-        User(username="user_cv", password_hash=get_password_hash("cvpass"), full_name="CV Officer", role="CV", is_active=1),
-        User(username="user_qlc", password_hash=get_password_hash("qlcpass"), full_name="QLC Officer", role="QLC", is_active=1),
-        User(username="user_bp", password_hash=get_password_hash("bppass"), full_name="BP Officer", role="BP", is_active=1),
+        User(username="user_port", password_hash=get_password_hash("portpass"), full_name="Port Employee", role="PORT_STAFF", is_active=1),
     ]
     db.add_all(users)
     db.commit()
@@ -335,10 +333,9 @@ def test_customer_cannot_update_other_tenant_crew(client):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_workflow_transitions_matrix(client):
-    """Verify that only the exact workflow roles can perform transitions."""
-    headers_cv = get_auth_header(client, "user_cv", "cvpass")
-    headers_qlc = get_auth_header(client, "user_qlc", "qlcpass")
-    headers_bp = get_auth_header(client, "user_bp", "bppass")
+    """Only port employees can make the enterprise review decision."""
+    headers_port = get_auth_header(client, "user_port", "portpass")
+    headers_customer = get_auth_header(client, "cust_a", "custpass")
     headers_admin = get_auth_header(client, "admin", "adminpass")
 
     db = SessionLocal()
@@ -346,50 +343,32 @@ def test_workflow_transitions_matrix(client):
     decl_id = decl.id
     db.close()
 
-    # 1. QLC tries CV_APPROVE -> 403
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_qlc, json={
-        "action": "CV_APPROVE", "actor_role": "QLC", "actor_name": "Spy Officer"
+    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_customer, json={
+        "action": "PORT_APPROVE"
     })
     assert res.status_code == 403
 
-    # 2. ADMIN tries CV_APPROVE (workflow break-glass check) -> 403
     res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_admin, json={
-        "action": "CV_APPROVE", "actor_role": "ADMIN", "actor_name": "Admin"
+        "action": "PORT_APPROVE"
     })
     assert res.status_code == 403
 
-    # 3. CV approves -> 200 (allowed)
     res = client.post(
         f"/api/declarations/{decl_id}/workflow",
-        headers=headers_cv,
+        headers=headers_port,
         json={"action": "CV_APPROVE"},
     )
-    assert res.status_code == 200
-    assert res.json()["workflow_status"] == "PENDING_QLC"
+    assert res.status_code == 410
 
-    # 4. CV tries QLC_APPROVE -> 403
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_cv, json={
-        "action": "QLC_APPROVE", "actor_role": "CV", "actor_name": "CV officer"
-    })
-    assert res.status_code == 403
-
-    # 5. QLC approves -> 200 (allowed)
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_qlc, json={
-        "action": "QLC_APPROVE", "actor_role": "QLC", "actor_name": "QLC officer"
-    })
-    assert res.status_code == 200
-    assert res.json()["workflow_status"] == "PENDING_BP"
-
-    # 6. BP approves -> 200 (allowed)
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_bp, json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "BP officer"
+    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_port, json={
+        "action": "PORT_APPROVE"
     })
     assert res.status_code == 200
     assert res.json()["workflow_status"] == "APPROVED"
 
 def test_actor_identity_audit_protection(client):
     """Verify that client-supplied actor fields are ignored and derived from JWT."""
-    headers_cv = get_auth_header(client, "user_cv", "cvpass")
+    headers_port = get_auth_header(client, "user_port", "portpass")
 
     # We will query another declaration for Org A (let's create a submitted declaration)
     db = SessionLocal()
@@ -424,21 +403,21 @@ def test_actor_identity_audit_protection(client):
     db.close()
 
     # Perform workflow transition and inject fake role & name
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_cv, json={
-        "action": "CV_APPROVE",
-        "actor_role": "BP",  # Fake role
+    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_port, json={
+        "action": "PORT_APPROVE",
+        "actor_role": "ADMIN",  # Fake role
         "actor_name": "Hacker Officer"  # Fake name
     })
     assert res.status_code == 200
 
     # Retrieve events and verify the actual actor from DB
-    res_events = client.get(f"/api/declarations/{decl_id}/events", headers=headers_cv)
+    res_events = client.get(f"/api/declarations/{decl_id}/events", headers=headers_port)
     assert res_events.status_code == 200
     events = res_events.json()
-    cv_approve_event = [e for e in events if e["action"] == "CV_APPROVE"][0]
+    port_approve_event = [e for e in events if e["action"] == "PORT_APPROVE"][0]
 
-    assert cv_approve_event["actor_role"] == "CV"  # derived from JWT user_cv role
-    assert cv_approve_event["actor_name"] == "CV Officer"  # derived from JWT user_cv full_name
+    assert port_approve_event["actor_role"] == "PORT_STAFF"
+    assert port_approve_event["actor_name"] == "Port Employee"
 
 
 def test_unknown_role_and_expired_token_fail_closed(client):
@@ -541,7 +520,7 @@ def test_alembic_t1_upgrade_and_downgrade_rehearsal(monkeypatch, tmp_path):
 
 
 def test_alembic_fresh_database_reaches_t2_head(monkeypatch, tmp_path):
-    """A fresh local database is initialized by migrations, not app startup."""
+    """A fresh local database reaches the current governed schema head."""
     fresh_db = tmp_path / "fresh.db"
     url = f"sqlite:///{fresh_db}"
     import backend.database as database
@@ -554,5 +533,8 @@ def test_alembic_fresh_database_reaches_t2_head(monkeypatch, tmp_path):
     assert {"users", "organizations", "declarations", "audit_events"}.issubset(
         set(inspector.get_table_names())
     )
-    assert "version" in {column["name"] for column in inspector.get_columns("declarations")}
+    declaration_columns = {column["name"] for column in inspector.get_columns("declarations")}
+    assert "version" in declaration_columns
+    assert "port_approval" in declaration_columns
+    assert "cv_approval" not in declaration_columns
     assert "correlation_id" in {column["name"] for column in inspector.get_columns("audit_events")}

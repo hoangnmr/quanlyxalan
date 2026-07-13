@@ -65,9 +65,7 @@ def _seed_user() -> None:
         user_data = [
             ("testuser", "ADMIN", None),
             ("customeruser", "CUSTOMER", org.id),
-            ("cvuser", "CV", None),
-            ("qlcuser", "QLC", None),
-            ("bpuser", "BP", None),
+            ("portstaff", "PORT_STAFF", None),
         ]
         for username, role, org_id in user_data:
             if not db.query(User).filter(User.username == username).first():
@@ -112,24 +110,8 @@ def customer_headers(client):
 
 
 @pytest.fixture(scope="module")
-def cv_headers(client):
-    res = client.post("/api/auth/login", json={"username": "cvuser", "password": "testpass"})
-    assert res.status_code == 200, f"Login failed: {res.text}"
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-@pytest.fixture(scope="module")
-def qlc_headers(client):
-    res = client.post("/api/auth/login", json={"username": "qlcuser", "password": "testpass"})
-    assert res.status_code == 200, f"Login failed: {res.text}"
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-@pytest.fixture(scope="module")
-def bp_headers(client):
-    res = client.post("/api/auth/login", json={"username": "bpuser", "password": "testpass"})
+def port_staff_headers(client):
+    res = client.post("/api/auth/login", json={"username": "portstaff", "password": "testpass"})
     assert res.status_code == 200, f"Login failed: {res.text}"
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -186,13 +168,13 @@ def test_admin_operations_summary(client, auth_headers, customer_headers):
     assert client.get("/api/admin/operations-summary", headers=customer_headers).status_code == 403
 
 
-def test_dashboard_attention_queue_is_role_scoped(client, customer_headers, cv_headers):
+def test_dashboard_attention_queue_is_role_scoped(client, customer_headers, port_staff_headers):
     customer = client.get("/api/dashboard", headers=customer_headers)
     assert customer.status_code == 200
     assert customer.json()["attention"]["label"]
     assert all(item["workflow_status"] in {"DRAFT", "CHANGES_REQUESTED"} for item in customer.json()["attention"]["items"])
 
-    reviewer = client.get("/api/dashboard", headers=cv_headers)
+    reviewer = client.get("/api/dashboard", headers=port_staff_headers)
     assert reviewer.status_code == 200
     assert all(item["workflow_status"] == "PENDING_REVIEW" for item in reviewer.json()["attention"]["items"])
 
@@ -218,6 +200,10 @@ def test_static_frontend(client):
     assert "CV = Cảng vụ viên" not in app_js
     assert "Theo các bước CV · QLC · BP" not in app_js
     assert "PORT_APPROVE" in app_js
+    assert "crew-checklist" in app_js
+    assert "step-error-summary" in app_js
+    assert "port_approval" in app_js
+    assert "cv_approval" not in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
 
 
@@ -552,10 +538,12 @@ def test_teu_calculations(client, customer_headers):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. WORKFLOW — CURRENT PORT FLOW + LEGACY COMPATIBILITY
+# 7. WORKFLOW — CUSTOMER CONFIRMATION + PORT ENTERPRISE REVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_port_employee_can_approve_directly_or_request_changes(client, customer_headers, cv_headers, qlc_headers):
+def test_port_employee_can_approve_directly_or_request_changes(
+    client, customer_headers, port_staff_headers, auth_headers
+):
     approved_source = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -566,18 +554,19 @@ def test_port_employee_can_approve_directly_or_request_changes(client, customer_
     denied = client.post(
         f"/api/declarations/{declaration_id}/workflow",
         json={"action": "PORT_APPROVE"},
-        headers=qlc_headers,
+        headers=auth_headers,
     )
     assert denied.status_code == 403
 
     approved = client.post(
         f"/api/declarations/{declaration_id}/workflow",
         json={"action": "PORT_APPROVE", "note": "Thông tin phù hợp"},
-        headers=cv_headers,
+        headers=port_staff_headers,
     )
     assert approved.status_code == 200
     assert approved.json()["workflow_status"] == "APPROVED"
-    assert approved.json()["cv_approval"] == "APPROVED"
+    assert approved.json()["port_approval"] == "APPROVED"
+    assert "cv_approval" not in approved.json()
 
     changes_source = client.post(
         "/api/declarations?submit=true",
@@ -587,12 +576,12 @@ def test_port_employee_can_approve_directly_or_request_changes(client, customer_
     requested = client.post(
         f"/api/declarations/{changes_source.json()['id']}/workflow",
         json={"action": "REQUEST_CHANGES", "note": "Cần bổ sung chứng từ"},
-        headers=cv_headers,
+        headers=port_staff_headers,
     )
     assert requested.status_code == 200
     assert requested.json()["workflow_status"] == "CHANGES_REQUESTED"
 
-def test_ordered_workflow_transition(client, customer_headers, cv_headers, qlc_headers, bp_headers):
+def test_retired_workflow_actions_return_gone(client, customer_headers, port_staff_headers):
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -601,67 +590,24 @@ def test_ordered_workflow_transition(client, customer_headers, cv_headers, qlc_h
     assert res.status_code == 200
     decl_id = res.json()["id"]
 
-    # Try BP before CV — must fail
-    res2 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "Sai thứ tự",
-    }, headers=bp_headers)
-    assert res2.status_code == 400
+    for action in ("CV_APPROVE", "QLC_APPROVE", "BP_APPROVE", "ISSUE", "REVOKE"):
+        response = client.post(
+            f"/api/declarations/{decl_id}/workflow",
+            json={"action": action, "note": "Hành động cũ"},
+            headers=port_staff_headers,
+        )
+        assert response.status_code == 410
+        assert "ngừng hỗ trợ" in response.json()["detail"]
 
-    # CV approve
-    res3 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "CV_APPROVE", "actor_role": "CV", "actor_name": "Cán bộ CV",
-    }, headers=cv_headers)
-    assert res3.status_code == 200
-    assert res3.json()["workflow_status"] == "PENDING_QLC"
-
-    # QLC approve
-    res4 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "QLC_APPROVE", "actor_role": "QLC", "actor_name": "Quản lý",
-    }, headers=qlc_headers)
-    assert res4.status_code == 200
-    assert res4.json()["workflow_status"] == "PENDING_BP"
-
-    # BP approve
-    res5 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "Ban phép",
-    }, headers=bp_headers)
-    assert res5.status_code == 200
-    assert res5.json()["workflow_status"] == "APPROVED"
-
-    # Issue
-    res6 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "ISSUE", "actor_role": "BP", "actor_name": "Ban phép",
-        "permit_no": "53/GP-TT",
-    }, headers=bp_headers)
-    assert res6.status_code == 200
-    issued = res6.json()
-    assert issued["workflow_status"] == "ISSUED"
-    assert issued["permit_no"] == "53/GP-TT"
-
-    # Events timeline: SUBMIT + CV + QLC + BP + ISSUE = 5
-    res7 = client.get(f"/api/declarations/{decl_id}/events", headers=cv_headers)
-    assert res7.status_code == 200
-    assert len(res7.json()) == 5
+    db = SessionLocal()
+    try:
+        unchanged = db.get(Declaration, decl_id)
+        assert unchanged.workflow_status == "PENDING_REVIEW"
+    finally:
+        db.close()
 
 
-def test_skip_workflow_stage_rejected(client, customer_headers, cv_headers, bp_headers):
-    res = client.post(
-        "/api/declarations?submit=true",
-        json=_minimal_declaration(),
-        headers=customer_headers,
-    )
-    decl_id = res.json()["id"]
-    client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "CV_APPROVE", "actor_role": "CV", "actor_name": "CV",
-    }, headers=cv_headers)
-    # Skip QLC → BP should fail
-    res2 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "BP skip",
-    }, headers=bp_headers)
-    assert res2.status_code == 400
-
-
-def test_changes_requested_resubmission_resets_approval_state(client, customer_headers, cv_headers):
+def test_changes_requested_resubmission_resets_approval_state(client, customer_headers, port_staff_headers):
     created = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -671,7 +617,7 @@ def test_changes_requested_resubmission_resets_approval_state(client, customer_h
     requested = client.post(
         f"/api/declarations/{declaration['id']}/workflow",
         json={"action": "REQUEST_CHANGES", "note": "Thiếu thông tin hàng hóa"},
-        headers=cv_headers,
+        headers=port_staff_headers,
     )
     assert requested.status_code == 200
     assert requested.json()["workflow_status"] == "CHANGES_REQUESTED"
@@ -683,10 +629,12 @@ def test_changes_requested_resubmission_resets_approval_state(client, customer_h
     )
     assert resubmitted.status_code == 200
     assert resubmitted.json()["workflow_status"] == "PENDING_REVIEW"
-    assert resubmitted.json()["cv_approval"] == "PENDING"
+    assert resubmitted.json()["port_approval"] == "PENDING"
 
 
-def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, customer_headers, cv_headers):
+def test_workflow_audit_carries_authoritative_actor_and_correlation_id(
+    client, customer_headers, port_staff_headers
+):
     created = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -696,8 +644,8 @@ def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, c
     correlation = "t2-correlation-test"
     response = client.post(
         f"/api/declarations/{declaration_id}/workflow",
-        json={"action": "CV_APPROVE"},
-        headers={**cv_headers, "X-Correlation-ID": correlation},
+        json={"action": "PORT_APPROVE"},
+        headers={**port_staff_headers, "X-Correlation-ID": correlation},
     )
     assert response.status_code == 200
     assert response.headers["X-Correlation-ID"] == correlation
@@ -707,7 +655,7 @@ def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, c
         audit_event = db.query(AuditEvent).filter(
             AuditEvent.entity_type == "DECLARATION",
             AuditEvent.entity_id == declaration_id,
-            AuditEvent.action == "CV_APPROVE",
+            AuditEvent.action == "PORT_APPROVE",
         ).one()
         assert audit_event.correlation_id == correlation
         assert audit_event.actor_user_id is not None

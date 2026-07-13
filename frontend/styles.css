@@ -174,3 +174,22 @@ form[aria-busy="true"] { cursor: progress; }form[aria-busy="true"] button[type="
 body:has(#login-dialog[open]) .app-shell { visibility: hidden; }
 .login-dialog { width: min(470px, calc(100vw - 32px)); padding: 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--cvf-accent) 34%, var(--cvf-border-strong)); border-radius: 18px; background: var(--cvf-surface); box-shadow: 0 28px 80px rgba(0,0,0,.42); }.login-dialog::backdrop { background: radial-gradient(circle at 18% 14%, color-mix(in srgb, var(--cvf-accent) 28%, transparent), transparent 31%), linear-gradient(135deg, #07111d 0%, #0c1828 55%, #08251f 100%); backdrop-filter: none; }.login-hero { padding: 32px 34px 26px; color: var(--cvf-text-primary); background: linear-gradient(135deg, color-mix(in srgb, var(--cvf-accent) 18%, var(--cvf-surface-elevated)), var(--cvf-surface)); }.login-logo-frame { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 22px; overflow: hidden; border: 1px solid var(--cvf-accent-border); border-radius: 13px; background: #fff; }.login-logo-frame img { width: 42px; height: 42px; object-fit: contain; }.login-hero .eyebrow { margin: 0 0 7px; }.login-hero h2 { margin: 0; font-size: clamp(25px, 5vw, 31px); letter-spacing: -.03em; }.login-hero p:last-child { margin: 10px 0 0; color: var(--cvf-text-secondary); line-height: 1.55; }.login-form-content { display: grid; gap: 16px; padding: 28px 34px 30px; }.login-form-content label { gap: 8px; font-size: 12px; }.login-form-content input { min-height: 46px; }.login-feedback { margin: 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--cvf-danger) 48%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--cvf-danger) 12%, transparent); color: var(--cvf-danger); font-size: 13px; line-height: 1.45; }.login-submit { min-height: 48px; margin-top: 5px; }.login-submit span { margin-left: 8px; font-size: 18px; }.login-security-note { margin: 0; color: var(--cvf-text-muted); font-size: 11px; line-height: 1.5; text-align: center; }
 @media (max-width: 520px) { .login-hero { padding: 27px 23px 22px; }.login-form-content { padding: 23px; }.preference-panel { align-items: flex-start; flex-direction: column; }.toggle-label { white-space: normal; } }
+
+.step-error-summary { margin: 12px 20px 0; padding: 11px 14px; border: 1px solid color-mix(in srgb, var(--cvf-danger) 45%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--cvf-danger) 10%, transparent); color: var(--cvf-danger); font-size: 12px; outline: 0; }
+.step-error-summary strong { display: block; margin-bottom: 5px; }
+.step-error-summary ul { margin: 0; padding-left: 18px; }
+.step-error-summary li { margin-bottom: 3px; }
+.field-error { display: block; margin-top: 3px; color: var(--cvf-danger); font-size: 11px; font-weight: 600; }
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--cvf-danger) !important; }
+
+.crew-checklist { max-height: 300px; margin: 0; padding: 0; overflow-y: auto; border: 1px solid var(--cvf-border-strong); border-radius: 9px; background: var(--cvf-input); list-style: none; }
+.crew-checklist li label { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 13px; cursor: pointer; transition: background 140ms ease; }
+.crew-checklist li + li label { border-top: 1px solid var(--cvf-border); }
+.crew-checklist li label:hover { background: var(--cvf-accent-soft); }
+.crew-checklist input[type="checkbox"] { flex: 0 0 17px; width: 17px; min-height: 17px; accent-color: var(--cvf-accent); cursor: pointer; }
+.crew-name { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--cvf-text-primary); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.crew-role { flex-shrink: 0; color: var(--cvf-text-secondary); font-size: 11px; }
+.crew-badge-captain { flex-shrink: 0; padding: 2px 7px; border-radius: 999px; background: var(--cvf-accent-soft); color: var(--cvf-accent-hover); font-size: 10px; font-weight: 750; }
+.crew-cert { flex-shrink: 0; font-size: 10px; }
+.crew-captain { background: color-mix(in srgb, var(--cvf-accent) 6%, transparent); }
+@media (max-width: 760px) { .crew-checklist { max-height: 220px; }.crew-name { max-width: 120px; } }

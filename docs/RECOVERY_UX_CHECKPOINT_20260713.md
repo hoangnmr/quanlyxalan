@@ -3,7 +3,7 @@
 ## Tranche
 
 - ID: RECOVERY-UX-T1
-- Status: IN_PROGRESS — awaiting human visual review
+- Status: IN_PROGRESS — implementation complete, awaiting human visual review
 - Branch: `recovery/frontend-baseline-20260712`
 - Baseline: `929a8c487c572b7bcad859e237b17da1d494a1db`
 - Worktree: `Khai-bao-Cang-vu-recovery-ux`
@@ -24,14 +24,22 @@ Implemented in this checkpoint:
    selected. Administrators continue to maintain the reusable profile in the
    vehicle-record screen.
 5. Removed visible CV/QLC/BP process stages from the application and preview.
-6. Added the `PORT_APPROVE` transition from `PENDING_REVIEW` directly to
-   `APPROVED`, while preserving legacy transitions temporarily for historical
-   audit/data compatibility.
+6. Reduced the active workflow to customer confirmation followed by one port
+   enterprise review: `PORT_APPROVE` or `REQUEST_CHANGES`.
+7. Retired the legacy CV/QLC/BP/ISSUE/REVOKE API actions with HTTP 410 and
+   added a controlled migration for legacy users, statuses, and columns.
+8. Added inline wizard error summaries with focus recovery and replaced the
+   native multi-select crew control with a keyboard-friendly checklist.
 
 ## Evidence
 
 - CVF workspace enforcement doctor: PASS 17/17.
-- `python -m pytest -q`: PASS 68/68.
+- `python -m pytest -q`: PASS 67/67.
+- Migration `g06f0f000006` reached head on the isolated demo database; roles are
+  `ADMIN`, `CUSTOMER`, `PORT_STAFF`, statuses are canonical, and no legacy
+  declaration columns remain.
+- Live API check: retired `QLC_APPROVE` returned HTTP 410; `PORT_APPROVE`
+  released the previously stuck demo declaration id 8 to `APPROVED`.
 - Backend contract test proves that the port employee can either approve the
   submitted declaration directly or request changes.
 - Static checks contain no visible `Chờ CV`, `Chờ QLC`, `Chờ BP`, or
@@ -43,12 +51,10 @@ Implemented in this checkpoint:
   analytics endpoint that is not present in the historical backend.
 - Live browser screenshot evidence. No in-app browser window was available in
   this session; human visual review remains mandatory before closure.
-- Removal/migration of legacy role and workflow codes from persisted data.
-  They are retained below the UI boundary to avoid an uncontrolled migration.
 
 ## Active risk and next governed move
 
-- Risk: R2 because workflow behavior and authorization are involved.
+- Risk: R2 because workflow behavior, authorization, and data migration are involved.
 - Next move: run this worktree locally, visually inspect desktop/mobile wizard,
   then either approve RECOVERY-UX-T1 or record layout corrections. Analytics
   must remain a separate tranche.

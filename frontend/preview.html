@@ -79,7 +79,7 @@
             <article class="stat-card"><p>CẢNH BÁO CHỨNG CHỈ</p><strong>3</strong><small>Hết hạn hoặc còn dưới 30 ngày</small></article>
           </div>
           <section class="demo-data-notice" role="status"><strong>Dữ liệu minh họa</strong><span>Đây là dữ liệu mẫu để kiểm tra giao diện. Hệ thống sẽ tự gỡ toàn bộ dữ liệu này khi bạn tạo hoặc import phương tiện thực tế đầu tiên.</span></section>
-          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Nhắc trong ứng dụng hiển thị cảnh báo hạn chứng chỉ ở dashboard và Crew List. Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input type="checkbox" checked><span>Nhắc trong ứng dụng</span></label></section>
+          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Nhắc trong ứng dụng hiển thị cảnh báo hạn chứng chỉ ở tổng quan và danh sách thuyền viên. Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input type="checkbox" checked><span>Nhắc trong ứng dụng</span></label></section>
           <div class="warning-strip visible" role="status">Có 3 phương tiện có chứng chỉ hết hạn hoặc sắp hết hạn trong 30 ngày.</div>
           <section class="panel attention-queue"><div class="panel-header"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2>Hàng đợi xử lý (2)</h2></div><button class="soft-button" type="button">Mở danh sách</button></div><div class="attention-list">
             <article><div><strong>KB-2026-0188</strong><small>Tân Cảng 09 · Chờ Cảng xử lý</small></div><span>6 giờ</span></article>
@@ -105,7 +105,7 @@
 
         <!-- CREW -->
         <section class="page" data-page="crew">
-          <div class="page-heading"><div><p class="eyebrow">CREW LIST / CHỨNG CHỈ</p><h1>Danh sách thuyền viên</h1><p>Quản lý thuyền trưởng, thuyền viên và hạn chứng chỉ chuyên môn.</p></div><button class="primary-button">+ Thêm thuyền viên</button></div>
+          <div class="page-heading"><div><p class="eyebrow">THUYỀN VIÊN / CHỨNG CHỈ</p><h1>Danh sách thuyền viên</h1><p>Quản lý thuyền trưởng, thuyền viên và hạn chứng chỉ chuyên môn.</p></div><button class="primary-button">+ Thêm thuyền viên</button></div>
           <div class="warning-strip visible">2 chứng chỉ đã hết hạn hoặc sẽ hết hạn trong 30 ngày. Cần rà soát trước khi phân công chuyến.</div>
           <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input placeholder="Tìm họ tên, chức danh hoặc số chứng chỉ"></label><span class="muted">36 người</span></div><div class="table-wrap" data-crew></div></section>
         </section>
@@ -122,7 +122,7 @@
 
         <!-- REPORTS -->
         <section class="page" data-page="reports">
-          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu gửi Cảng vụ</h1><p>Dữ liệu được tổng hợp từ các phiếu đã nộp trong kỳ.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu hoạt động cảng</h1><p>Dữ liệu được tổng hợp từ các phiếu đã xác nhận gửi trong kỳ.</p></div></div>
           <section class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="segmented period-switch"><button data-period="week">Tuần</button><button data-period="month" class="active">Tháng</button><button data-period="quarter">Quý</button><button data-period="year">Năm</button></div></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
@@ -136,14 +136,14 @@
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button">Xuất Excel</button></article>
           </div>
-          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã nộp. Hệ thống chỉ gửi khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span class="state-badge pending">Chưa cấu hình</span><button class="primary-button">Chuẩn bị gói đồng bộ</button></div><div class="table-wrap span-full" data-sync></div></section>
+          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI DỮ LIỆU</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã xác nhận gửi. Hệ thống chỉ gửi khi có đặc tả API, endpoint và thông tin xác thực chính thức.</p></div><div class="integration-state"><span class="state-badge pending">Chưa cấu hình</span><button class="primary-button">Chuẩn bị gói đồng bộ</button></div><div class="table-wrap span-full" data-sync></div></section>
         </section>
       </main>
     </div>
   </div>
 
   <!-- DECLARATION MODAL (contract markup, prefilled demo) -->
-  <dialog id="declaration-dialog" class="modal wide"><form onsubmit="return false"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Tự lưu trên trình duyệt</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div>
+  <dialog id="declaration-dialog" class="modal wide"><form onsubmit="return false"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Nháp cục bộ · chưa gửi</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div>
     <div>
       <section class="form-section"><h3>A. Thông tin chung và phương tiện</h3><div class="section-grid">
         <label>* Loại phiếu<select><option>Vào cảng</option><option>Rời cảng</option></select></label>

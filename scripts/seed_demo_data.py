@@ -79,9 +79,7 @@ def main() -> None:
                 username="nhanviencang",
                 password_hash=get_password_hash(DEMO_PASSWORD),
                 full_name="Nhân viên Cảng minh họa",
-                # CV is retained only as the stored compatibility code. The UI
-                # presents this account as “Nhân viên Cảng”.
-                role="CV",
+                role="PORT_STAFF",
                 organization_id=None,
                 is_active=1,
                 created_at=now,
@@ -126,8 +124,7 @@ def main() -> None:
                 unload_json=cargo("Hàng tổng hợp", 80 * index, index if index % 2 else 0),
                 load_json=cargo("Thép cuộn", 65 * index, 0), master_name=captain_names[vessel_index],
                 master_phone=captain_phones[vessel_index], movement_type=movement,
-                cv_approval="APPROVED" if workflow_status == "APPROVED" else "PENDING",
-                qlc_approval="PENDING", bp_approval="PENDING",
+                port_approval="APPROVED" if workflow_status == "APPROVED" else "PENDING",
                 submitted_at=now if workflow_status != "DRAFT" else None,
                 created_at=now, updated_at=now,
             )
@@ -151,7 +148,7 @@ def main() -> None:
                     from_status="PENDING_REVIEW",
                     to_status="CHANGES_REQUESTED",
                     actor_name="Nhân viên Cảng minh họa",
-                    actor_role="CV",
+                    actor_role="PORT_STAFF",
                     note="Vui lòng bổ sung bản chụp chứng chỉ an toàn.",
                     created_at=now,
                 ))
@@ -162,7 +159,7 @@ def main() -> None:
                     from_status="PENDING_REVIEW",
                     to_status="APPROVED",
                     actor_name="Nhân viên Cảng minh họa",
-                    actor_role="CV",
+                    actor_role="PORT_STAFF",
                     note="Thông tin và chứng từ phù hợp.",
                     created_at=now,
                 ))

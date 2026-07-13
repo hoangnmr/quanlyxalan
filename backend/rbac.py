@@ -3,7 +3,7 @@ from fastapi import HTTPException, status, Depends
 from .models import User
 from .auth import get_current_user
 
-ROLE_ENUM = {"CUSTOMER", "CV", "QLC", "BP", "ADMIN"}
+ROLE_ENUM = {"CUSTOMER", "PORT_STAFF", "ADMIN"}
 
 class RoleChecker:
     def __init__(self, allowed_roles: List[str]):

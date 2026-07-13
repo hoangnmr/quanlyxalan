@@ -7,13 +7,11 @@
 
 ## Role-Based Access Control & Tenant Scope
 
-This system implements four roles with distinct scopes of operations.
+This system implements three roles with distinct scopes of operations.
 
-*   **ADMIN**: Global administrator. Has access to all organizations, vessels, crew, and declarations. Restricted from workflow approval actions (`CV_APPROVE`, `QLC_APPROVE`, `BP_APPROVE`, `ISSUE`, `REVOKE`, `REQUEST_CHANGES`).
+*   **ADMIN**: Global administrator. Has access to organizations, vessels, crew, declarations, reports, and integration preparation. Restricted from port review decisions.
 *   **CUSTOMER**: Customer representative. Has tenant-isolated access. Can only view/write resources belonging to their `organization_id`.
-*   **CV**: Port Officer (Cảng vụ viên). Global read access to submitted/approved declarations. Allowed to perform `CV_APPROVE` and `REQUEST_CHANGES` on declarations.
-*   **QLC**: Port Manager (Quản lý cảng). Global read access. Allowed to perform `QLC_APPROVE` and `REQUEST_CHANGES` on declarations.
-*   **BP**: Permission Officer (Ban cấp phép). Global read access. Allowed to perform `BP_APPROVE`, `ISSUE`, `REVOKE`, and `REQUEST_CHANGES` on declarations.
+*   **PORT_STAFF**: Nhân viên doanh nghiệp cảng. Can review customer declarations and perform `PORT_APPROVE` or `REQUEST_CHANGES`.
 
 ---
 
@@ -95,7 +93,7 @@ as active choices until their connectors and delivery controls are approved.
 | POST | `/api/declarations?submit=true` | CUSTOMER | `DeclarationSaveRequest` | `Declaration` |
 | POST | `/api/declarations/{id}/attachments` | CUSTOMER, ADMIN | raw file body | `Attachment` |
 | GET | `/api/declarations/{id}/events` | Any | — | `[DeclarationEvent]` |
-| POST | `/api/declarations/{id}/workflow` | CV, QLC, BP | `WorkflowActionRequest` | `Declaration` |
+| POST | `/api/declarations/{id}/workflow` | PORT_STAFF | `WorkflowActionRequest` | `Declaration` |
 
 *   **Tenant Constraint**: If `CUSTOMER`, GET/POST/attachments are strictly restricted to own organization's declarations.
 *   **Paging Contract**: Existing callers without `page` receive the compatible
@@ -106,19 +104,20 @@ as active choices until their connectors and delivery controls are approved.
 *   **Workflow Constraints**:
     *   Only `CUSTOMER` is allowed to submit a declaration (`submit=true`).
     *   `ADMIN` is denied from workflow actions.
-    *   `CV`, `QLC`, `BP` are restricted to their specific actions (see below).
+    *   `PORT_STAFF` can confirm approval or request changes.
     *   Actor name and role are derived strictly from the authenticated JWT session, ignoring client-supplied payloads to guarantee audit trail integrity.
 
 #### Workflow State Machine
 ```
-DRAFT → PENDING_REVIEW  (on submit=true)
-PENDING_REVIEW → PENDING_QLC  (CV_APPROVE)
-PENDING_QLC → PENDING_BP  (QLC_APPROVE)
-PENDING_BP → APPROVED  (BP_APPROVE)
-APPROVED → ISSUED  (ISSUE, requires permit_no)
-any → CHANGES_REQUESTED  (REQUEST_CHANGES, requires note)
-any → REVOKED  (REVOKE, requires note)
+DRAFT → PENDING_REVIEW  (customer confirms and sends)
+PENDING_REVIEW → APPROVED  (PORT_APPROVE)
+PENDING_REVIEW → CHANGES_REQUESTED  (REQUEST_CHANGES, requires note)
+CHANGES_REQUESTED → PENDING_REVIEW  (customer confirms and sends again)
 ```
+
+Legacy actions `CV_APPROVE`, `QLC_APPROVE`, `BP_APPROVE`, `ISSUE`, and
+`REVOKE` are retired and return HTTP `410 Gone`; they cannot move a record into
+an obsolete status.
 
 ### SUGGESTIONS
 
@@ -141,9 +140,9 @@ any → REVOKED  (REVOKE, requires note)
 
 | Method | Path | Allowed Roles | Request | Response |
 |--------|------|---------------|---------|----------|
-| GET | `/api/reports/appendix1` | CUSTOMER, CV, QLC, BP, ADMIN | date range | XLSX download |
-| GET | `/api/reports/appendix2` | CUSTOMER, CV, QLC, BP, ADMIN | date range | XLSX download |
-| GET | `/api/reports/appendix3` | CUSTOMER, CV, QLC, BP, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix1` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix2` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
+| GET | `/api/reports/appendix3` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 
 *   **Tenant Constraint**: CUSTOMER receives only records from its own organization; reviewers and ADMIN receive the operational scope allowed by their role.
 
@@ -151,7 +150,7 @@ any → REVOKED  (REVOKE, requires note)
 
 | Method | Path | Allowed Roles | Request | Response |
 |--------|------|---------------|---------|----------|
-| GET | `/api/integrations/maritime-authority` | BP, ADMIN | — | `{connector, jobs}` |
+| GET | `/api/integrations/maritime-authority` | ADMIN | — | `{connector, jobs}` |
 | POST | `/api/integrations/prepare-sync` | ADMIN | `{from, to}` | `{id, recordCount, status}` |
 
 ---

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.1.0">
+  <link rel="stylesheet" href="/styles.css?v=1.1.1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -87,7 +87,7 @@
         </section>
 
         <section class="page" data-page="import">
-          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Dùng hai file mẫu để map dữ liệu vào hệ thống.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Hệ thống tự nhận diện sheet, hàng tiêu đề và tên cột; file mẫu vẫn được hỗ trợ.</p></div></div>
           <div class="import-grid">
             <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Tự nhận diện sheet, hàng tiêu đề và tên cột. File mẫu hoặc bảng Excel có đủ Tên phương tiện, Số đăng ký, Loại và Cấp phương tiện đều có thể kiểm tra trước khi nhập.</p><label class="file-button">Chọn file<input type="file" id="import-vessels" accept=".xlsx"></label></section>
             <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Tự dò nhãn dữ liệu trong workbook; file mẫu <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code> có đủ dữ liệu là có thể nhập.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
@@ -149,6 +149,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.1.0" defer></script>
+  <script src="/app.js?v=1.1.1" defer></script>
 </body>
 </html>

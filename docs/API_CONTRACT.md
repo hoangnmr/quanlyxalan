@@ -137,7 +137,7 @@ an obsolete status.
 | POST | `/api/import/declaration`| CUSTOMER | XLSX body | `{accepted, rejected, id, mappingVersion, checksum}` |
 
 *   **Tenant Constraint**: Imported vessels/declarations are automatically bound to the logged-in customer's `organization_id`.
-*   **Mapping `KBCV-IMPORT-1.1`**: vessel workbooks are detected by normalized Vietnamese header labels across sheet names and header rows. Required fields are Tên phương tiện, Số đăng ký, Loại phương tiện and Cấp phương tiện. Declaration workbooks are detected by field labels with the published template cells retained as fallback.
+*   **Mapping `KBCV-IMPORT-1.2`**: vessel workbooks are detected by normalized Vietnamese header labels across sheet names and header rows. Required fields are Tên phương tiện, Số đăng ký, Loại phương tiện and Cấp phương tiện. Scalar numeric fields containing multiple certified values (for example `2723.79 / 2912.57`) use the first listed value and preserve the complete source cell in `notes`; preview returns `mappingWarnings`. Declaration workbooks are detected by field labels with the published template cells retained as fallback.
 *   **External link safety**: passive Excel `hyperlink` and `externalLinkPath` relationships are ignored and never fetched. Other external relationship types remain rejected.
 *   **Demo transition**: the sentinel demo dataset is removed on first real create/import. A demo CUSTOMER keeps its organization/user binding while the sentinel is cleared and the real organization profile is applied.
 

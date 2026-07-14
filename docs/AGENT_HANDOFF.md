@@ -354,7 +354,7 @@ readiness vẫn là phạm vi riêng, không được suy diễn là đã đóng
 ## Tranche: Recovery Data, Reporting and Sidebar — 2026-07-14
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Status**: CLOSED — all browser findings and full UAT matrix passed.
+- **Status**: REOPENED — automated fix implemented; browser import retest pending.
 - **Phase**: REVIEW
 - **Risk Level**: R2 (import/data replacement and role-scoped reporting)
 
@@ -367,13 +367,14 @@ Implemented & Verified:
 - Sentinel datamock auto-removal on first real create/import while preserving a
   CUSTOMER organization binding.
 - Smart XLSX header/sheet detection with preview diagnostics and passive external
-  link-path ignore; mapping version `KBCV-IMPORT-1.1`.
+  link-path ignore; mapping version `KBCV-IMPORT-1.2`.
 
 Evidence available:
 
 - `pytest -q`: 71 passed.
 - `node --check frontend/app.js`: PASS.
 - `git diff --check`: PASS.
-- Browser/UAT evidence (2026-07-14): ALL PASSED. Chụp đầy đủ 21 ảnh UAT cho cả 3 role (CUSTOMER, PORT_STAFF, ADMIN) và 3 viewport (Desktop, Tablet, Mobile) cũng như cả 2 theme (Dark, Light).
+- Browser/UAT evidence covers all roles, viewports and themes, but independent review found Smart Excel Import actually returned 38 accepted / 1 rejected and exposed raw SQL details in the UI. The original CLOSED conclusion is invalid.
 - Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
-- Tranche này chính thức chuyển sang trạng thái CLOSED/PASS.
+- Corrective code normalizes scalar numeric cells containing multiple source values, preserves original values in notes, returns mapping warnings, hides internal SQL errors and bumps assets to `?v=1.1.1`.
+- Required closure evidence: reset demo DB; import the 39-vessel workbook with `accepted=39`, `rejected=0`; verify row 15 values/notes; re-import and prove `idempotent=true` without duplicates. Until then this tranche remains REOPENED.

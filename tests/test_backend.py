@@ -190,6 +190,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
+    assert '/styles.css?v=1.1.1' in res.text
+    assert '/app.js?v=1.1.1' in res.text
     assert 'id="analytics-unavailable"' in res.text
     assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
     assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
@@ -219,6 +221,7 @@ def test_static_frontend(client):
     assert "const crewContainer = $('#declaration-crew-container');" in app_js
     assert "? $$('input[name=\"crew_ids\"]:checked', crewContainer).length" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
+    assert "Không thể nhập dòng này. Hãy kiểm tra định dạng số, ngày hoặc mã đăng ký trùng." in Path(__file__).resolve().parents[1].joinpath("backend", "app.py").read_text(encoding="utf-8")
     styles_css = client.get("/styles.css").text
     assert "[hidden] { display: none !important; }" in styles_css
     assert "overflow-y: auto" in styles_css
@@ -1072,7 +1075,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert preview.status_code == 200
     assert preview.json()["preview"] is True
-    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.1"
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.2"
     db = SessionLocal()
     assert db.query(ImportJob).count() == before
     db.close()
@@ -1099,14 +1102,17 @@ def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth
     registration = f"SG-SMART-{uuid.uuid4().hex[:10]}"
     workbook = make_xlsx(
         "Danh mục tùy biến",
-        ["Ghi chú", "Số đăng ký", "Tên tàu", "Cấp PT", "Loại PT", "DWT"],
-        [["Đủ dữ liệu", registration, "Sà lan linh hoạt", "VR-SII", "Sà lan", 950]],
+        ["Ghi chú", "Số đăng ký", "Tên tàu", "Cấp PT", "Loại PT", "DWT", "Sức chở hàng"],
+        [["Đủ dữ liệu", registration, "Sà lan linh hoạt", "VR-SII", "Sà lan", "950.5 / 980.5", "900,25 / 930,25"]],
     )
     headers = {**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
     preview = client.post("/api/import/vessels?preview=true", content=workbook, headers=headers)
     assert preview.status_code == 200
     assert preview.json()["mapping"]["strategy"] == "HEADER_LABEL_DETECTION"
     assert preview.json()["rows"][0]["missingFields"] == []
+    assert preview.json()["rows"][0]["deadweight_tons"] == 950.5
+    assert preview.json()["rows"][0]["cargo_capacity_tons"] == 900.25
+    assert len(preview.json()["rows"][0]["mappingWarnings"]) == 2
     imported = client.post("/api/import/vessels", content=workbook, headers=headers)
     assert imported.status_code == 200
     assert imported.json()["accepted"] == 1
@@ -1114,6 +1120,9 @@ def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth
     db = SessionLocal()
     try:
         vessel = db.query(Vessel).filter(Vessel.registration_no == registration).one()
+        assert vessel.deadweight_tons == 950.5
+        assert vessel.cargo_capacity_tons == 900.25
+        assert "950.5 / 980.5" in vessel.notes
         db.query(ImportJob).filter(ImportJob.source_checksum == imported.json()["checksum"]).delete(synchronize_session=False)
         db.delete(vessel)
         db.commit()

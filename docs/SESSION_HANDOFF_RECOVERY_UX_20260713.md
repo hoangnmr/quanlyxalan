@@ -1,12 +1,24 @@
 # Session Handoff: Recovery UX branch — 2026-07-13
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Status**: CLOSED — all browser findings, full 6-step wizard UAT, and Data, Reporting & Sidebar tranche PASS.
+- **Status**: Recovery Wizard UX remains CLOSED; Data, Reporting & Sidebar is REOPENED pending import retest.
 - **Date**: 2026-07-14
-- **Gate 5 Status**: READY (PASS)
+- **Gate 5 Status**: Wizard UX PASS; follow-up data/reporting tranche NOT CLOSED.
 - **Active Code Commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`, `82b81f9` và `43ecdc7`
 
 ## Kết quả UAT mới nhất (2026-07-14)
 - **Wizard CUSTOMER (1-6):** Đã kiểm thử và lưu screenshot đầy đủ tại `docs/evidence/recovery-ux-20260714/`.
-- **Data, Reporting and Sidebar:** Đã kiểm thử đầy đủ 21 trường hợp (gồm 4 kỳ báo cáo, Smart Excel Import 39 sà lan, phân quyền khu vực API Prep cho 3 vai trò, co giãn đa viewport Desktop/Tablet/Mobile). Bằng chứng lưu tại `docs/evidence/data-reporting-sidebar-20260714/`.
+- **Data, Reporting and Sidebar:** Sidebar, analytics, responsive và API Prep có bằng chứng PASS. Independent review phát hiện ảnh Smart Excel Import thực tế chỉ đạt 38/39, làm lộ lỗi SQL nội bộ; kết luận CLOSED của commit `8eb3c92` bị thu hồi.
 - **Báo cáo chi tiết:** [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md)
+
+## Corrective action after evidence review
+
+- Mapping nâng lên `KBCV-IMPORT-1.2`.
+- Ô số chứa nhiều cấu hình, ví dụ `2723.79 / 2912.57`, dùng giá trị đầu tiên làm giá trị chính và lưu nguyên ô nguồn trong `notes`.
+- Preview đánh dấu `mappingWarnings` thay vì âm thầm chuyển đổi.
+- UI không còn hiển thị exception/SQL/parameters; chi tiết chỉ ghi server log.
+- Asset cache tag nâng lên `?v=1.1.1`.
+- Parser check trên file untracked: 39 dòng, 0 thiếu trường bắt buộc, 0 giá trị còn sai kiểu số; dòng 15 có hai cảnh báo chuẩn hóa có truy vết.
+- Automated tests phải được chạy lại trước commit. Browser retest bắt buộc dùng DB sạch: import lần đầu phải `39/0`; lần hai phải `idempotent = true` và tổng số phương tiện không tăng.
+
+Không merge/push và không stage `templates/DU_LIEU_SA_LAN_39_CHIEC.xlsx`.

@@ -177,6 +177,13 @@ VESSEL_HEADER_ALIASES = {
     "updated_at": ("NGAY CAP NHAT",),
 }
 
+VESSEL_FLOAT_FIELDS = {
+    "length_m", "width_m", "side_height_m", "draft_m", "deadweight_tons",
+    "gross_tonnage", "engine_power_cv", "cargo_capacity_tons",
+    "container_capacity_teu",
+}
+VESSEL_INTEGER_FIELDS = {"build_year", "passenger_capacity", "min_crew"}
+
 
 def _field_for_header(value: Any) -> str | None:
     label = _normalized(value)
@@ -187,6 +194,39 @@ def _field_for_header(value: Any) -> str | None:
             if label == normalized_alias or normalized_alias in label:
                 candidates.append((len(normalized_alias), field))
     return max(candidates)[1] if candidates else None
+
+
+def _numeric_from_excel(value: Any, *, integer: bool = False) -> tuple[Any, str | None]:
+    """Return the first listed numeric value and flag ambiguous source text.
+
+    Some operational workbooks store two certified configurations in one cell,
+    for example ``2723.79 / 2912.57``. The database schema is scalar, so the
+    first (primary) value is imported and the original cell is retained in the
+    vessel notes instead of failing or silently discarding the ambiguity.
+    """
+    if value in (None, ""):
+        return None, None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return (int(value) if integer else float(value)), None
+
+    source = str(value).strip()
+    tokens = re.findall(r"[-+]?\d[\d.,]*", source)
+    if not tokens:
+        return None, f"Không đọc được giá trị số: {source}"
+    token = tokens[0].rstrip(".,")
+    if "," in token and "." in token:
+        if token.rfind(",") > token.rfind("."):
+            token = token.replace(".", "").replace(",", ".")
+        else:
+            token = token.replace(",", "")
+    elif "," in token:
+        token = token.replace(",", ".")
+    try:
+        parsed = float(token)
+    except ValueError:
+        return None, f"Không đọc được giá trị số: {source}"
+    warning = f"Giữ giá trị đầu tiên từ ô đa giá trị: {source}" if len(tokens) > 1 else None
+    return (int(parsed) if integer else parsed), warning
 
 
 def _detect_vessel_table(sheets: dict[str, dict[str, Any]]) -> tuple[str, dict[str, Any], int, dict[str, str]]:
@@ -244,6 +284,25 @@ def vessel_rows(sheets: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list
                 break
             continue
         blank_run = 0
+        mapping_warnings: list[str] = []
+        source_notes: list[str] = []
+        for field in VESSEL_FLOAT_FIELDS | VESSEL_INTEGER_FIELDS:
+            if field not in row or row[field] in (None, ""):
+                continue
+            raw_value = row[field]
+            parsed, warning = _numeric_from_excel(
+                raw_value, integer=field in VESSEL_INTEGER_FIELDS
+            )
+            row[field] = parsed
+            if warning:
+                mapping_warnings.append(f"{field}: {warning}")
+                source_notes.append(f"{field}={raw_value}")
+        if source_notes:
+            existing_notes = str(row.get("notes") or "").strip()
+            source_note = "Giá trị gốc Excel: " + "; ".join(source_notes)
+            row["notes"] = " | ".join(part for part in (existing_notes, source_note) if part)
+        if mapping_warnings:
+            row["_mapping_warnings"] = mapping_warnings
         row["_source_row"] = row_no
         row["_source_sheet"] = sheet_name
         rows.append(row)

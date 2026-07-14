@@ -1016,7 +1016,14 @@ function renderImportPreview() {
     const rows = preview.rows || [];
     warningCount = rows.filter(row => row.missingFields?.length).length;
     bodyHtml = rows.length
-      ? `<table class="data-table responsive-table"><thead><tr><th>Dòng</th><th>Tên phương tiện</th><th>Số đăng ký</th><th>Kiểm tra</th></tr></thead><tbody>${rows.map(row => `<tr><td data-label="Dòng">${row.sourceRow}</td><td data-label="Tên phương tiện">${esc(row.name || '—')}</td><td data-label="Số đăng ký">${esc(row.registration_no || '—')}</td><td data-label="Kiểm tra">${row.missingFields?.length ? `<span class="table-badge danger">Thiếu: ${esc(row.missingFields.join(', '))}</span>` : '<span class="table-badge submitted">Hợp lệ</span>'}</td></tr>`).join('')}</tbody></table>`
+      ? `<table class="data-table responsive-table"><thead><tr><th>Dòng</th><th>Tên phương tiện</th><th>Số đăng ký</th><th>Kiểm tra</th></tr></thead><tbody>${rows.map(row => {
+          const check = row.missingFields?.length
+            ? `<span class="table-badge danger">Thiếu: ${esc(row.missingFields.join(', '))}</span>`
+            : row.mappingWarnings?.length
+              ? `<span class="table-badge draft" title="${esc(row.mappingWarnings.join(' · '))}">Hợp lệ · đã chuẩn hóa</span>`
+              : '<span class="table-badge submitted">Hợp lệ</span>';
+          return `<tr><td data-label="Dòng">${row.sourceRow}</td><td data-label="Tên phương tiện">${esc(row.name || '—')}</td><td data-label="Số đăng ký">${esc(row.registration_no || '—')}</td><td data-label="Kiểm tra">${check}</td></tr>`;
+        }).join('')}</tbody></table>`
       : empty('Không tìm thấy dòng dữ liệu', 'Kiểm tra lại file có đúng mẫu và còn dữ liệu hay không.');
   } else {
     const row = preview.row || {};

@@ -39,7 +39,7 @@ from .models import (
 )
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
 
-IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.1"
+IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.2"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1424,6 +1424,7 @@ async def import_vessels(
         clean_row = {key: value for key, value in row.items() if not key.startswith("_")}
         clean_row["sourceRow"] = row.get("_source_row")
         clean_row["sourceSheet"] = row.get("_source_sheet")
+        clean_row["mappingWarnings"] = row.get("_mapping_warnings", [])
         clean_row["missingFields"] = [
             label for field, label in required_vessel_fields.items() if not row.get(field)
         ]
@@ -1500,8 +1501,16 @@ async def import_vessels(
                     db.add(Vessel(**safe))
                 db.flush()
             accepted += 1
-        except Exception as exc:
-            rejected.append({"sourceRow": source_row, "row": row.get("name"), "error": str(exc) or type(exc).__name__})
+        except Exception:
+            access_logger.exception(
+                "Vessel import row rejected source_row=%s registration_no=%s",
+                source_row, row.get("registration_no"),
+            )
+            rejected.append({
+                "sourceRow": source_row,
+                "row": row.get("name"),
+                "error": "Không thể nhập dòng này. Hãy kiểm tra định dạng số, ngày hoặc mã đăng ký trùng.",
+            })
     result = {
         "accepted": accepted,
         "rejected": rejected,

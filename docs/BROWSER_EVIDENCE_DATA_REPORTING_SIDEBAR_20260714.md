@@ -82,3 +82,4 @@ Vào ngày 2026-07-14, kịch bản retest cho corrective commit `1a2ae22` đã 
 - Hai file `import_success_retest.png` và `import_idempotency_retest.png` là cùng một ảnh với cùng SHA-256; idempotency chưa có bằng chứng độc lập.
 - Chưa có artifact trực tiếp cho bản ghi `TN-0963` sau import (`deadweight_tons`, `cargo_capacity_tons`, `notes`). Các giá trị này đã có automated/parser evidence nhưng chưa có browser/API/DB evidence được đính kèm vào UAT.
 - Vì vậy trạng thái vẫn là **REOPENED — targeted evidence required**, không phải CLOSED.
+- UX follow-up after this audit renders a distinct idempotent result (“File đã được nhập trước đó — Không tạo thêm bản ghi”) and uses assets `?v=1.1.2`; the replacement idempotency screenshot must show this state.

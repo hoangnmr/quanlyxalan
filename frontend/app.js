@@ -1058,8 +1058,13 @@ async function confirmImport() {
   button.textContent = 'Đang import…';
   try {
     const result = await api(path, {method:'POST', headers:IMPORT_FILE_HEADERS, body:file});
-    setImportResult(`<div><strong>Import thành công</strong><p>Đã nhận ${result.accepted || 0} bản ghi.${result.rejected?.length ? ` Có ${result.rejected.length} dòng bị từ chối.` : ''}</p>${result.rejected?.length ? `<ul>${result.rejected.map(item => `<li>Dòng ${item.sourceRow}: ${esc(item.error)}</li>`).join('')}</ul>` : ''}</div>`);
-    toast('Đã map dữ liệu Excel vào hệ thống.');
+    if (result.idempotent) {
+      setImportResult(`<div><strong>File đã được nhập trước đó</strong><p>Không tạo thêm bản ghi. Kết quả lần nhập gốc: ${result.accepted || 0} bản ghi, ${result.rejected?.length || 0} dòng bị từ chối.</p><small>Mã import: ${esc(result.importJobId || '—')}</small></div>`);
+      toast('Không tạo bản ghi trùng — file này đã được nhập trước đó.');
+    } else {
+      setImportResult(`<div><strong>Import thành công</strong><p>Đã nhận ${result.accepted || 0} bản ghi.${result.rejected?.length ? ` Có ${result.rejected.length} dòng bị từ chối.` : ''}</p>${result.rejected?.length ? `<ul>${result.rejected.map(item => `<li>Dòng ${item.sourceRow}: ${esc(item.error)}</li>`).join('')}</ul>` : ''}</div>`);
+      toast('Đã map dữ liệu Excel vào hệ thống.');
+    }
     state.pendingImport = null;
     $('#import-vessels').value = '';
     $('#import-declaration').value = '';

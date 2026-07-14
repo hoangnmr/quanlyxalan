@@ -379,3 +379,4 @@ Evidence available:
 - Retest corrective commit `1a2ae22`: ảnh import xác nhận 39 bản ghi và không còn lộ SQL. Tuy nhiên ảnh idempotency trùng byte-for-byte với ảnh import lần đầu; ảnh preview không hiển thị dòng 15; chưa có artifact trực tiếp cho giá trị/notes của TN-0963.
 - Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
 - Chỉ còn targeted evidence: response lần import thứ hai có `idempotent=true`, số lượng trước/sau không đổi, và API/DB hoặc vessel detail cho TN-0963 cùng notes nguồn. Không đóng tranche trước khi đủ ba bằng chứng này.
+- Idempotency UX follow-up now displays a distinct duplicate-safe result including the original counts and import job id; browser assets bumped to `?v=1.1.2`.

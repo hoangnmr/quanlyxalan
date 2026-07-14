@@ -190,8 +190,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.1.1' in res.text
-    assert '/app.js?v=1.1.1' in res.text
+    assert '/styles.css?v=1.1.2' in res.text
+    assert '/app.js?v=1.1.2' in res.text
     assert 'id="analytics-unavailable"' in res.text
     assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
     assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
@@ -222,6 +222,8 @@ def test_static_frontend(client):
     assert "? $$('input[name=\"crew_ids\"]:checked', crewContainer).length" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
     assert "Không thể nhập dòng này. Hãy kiểm tra định dạng số, ngày hoặc mã đăng ký trùng." in Path(__file__).resolve().parents[1].joinpath("backend", "app.py").read_text(encoding="utf-8")
+    assert "File đã được nhập trước đó" in app_js
+    assert "Không tạo thêm bản ghi" in app_js
     styles_css = client.get("/styles.css").text
     assert "[hidden] { display: none !important; }" in styles_css
     assert "overflow-y: auto" in styles_css

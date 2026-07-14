@@ -23,4 +23,4 @@
 
 Không merge/push và không stage `templates/DU_LIEU_SA_LAN_39_CHIEC.xlsx`.
 
-- **Retest corrective commit 1a2ae22:** Đã kiểm thử và xác nhận 100% trường dữ liệu kép của sà lan `TN-0963` tại dòng 15 được chuẩn hóa thành công, lưu log audit chuẩn xác. Bằng chứng UAT retest đã được chụp mới.
+- **Retest corrective commit 1a2ae22:** UI xác nhận import 39 bản ghi và không còn lộ SQL. Independent review phát hiện ảnh idempotency giống hệt ảnh import lần đầu; preview chưa hiển thị dòng 15; chưa có artifact trực tiếp cho TN-0963/notes. Tranche vẫn REOPENED, chỉ cần bổ sung targeted evidence thay vì chạy lại toàn bộ ma trận.

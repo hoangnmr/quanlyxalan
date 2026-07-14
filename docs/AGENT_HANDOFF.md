@@ -354,7 +354,7 @@ readiness vẫn là phạm vi riêng, không được suy diễn là đã đóng
 ## Tranche: Recovery Data, Reporting and Sidebar — 2026-07-14
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Status**: CLOSED — all browser findings and UAT matrix passed (including corrective retest).
+- **Status**: REOPENED — corrective import succeeds 39/39; targeted idempotency and row-15 evidence still missing.
 - **Phase**: REVIEW
 - **Risk Level**: R2 (import/data replacement and role-scoped reporting)
 
@@ -367,7 +367,7 @@ Implemented & Verified:
 - Sentinel datamock auto-removal on first real create/import while preserving a
   CUSTOMER organization binding.
 - Smart XLSX header/sheet detection with preview diagnostics and passive external
-  link-path ignore; mapping version `KBCV-IMPORT-1.1`.
+  link-path ignore; mapping version `KBCV-IMPORT-1.2`.
 - Normalized scalar numeric cells containing multiple source values (corrective commit `1a2ae22`), preserving original values in notes, hiding internal SQL errors, and assets bumped to `?v=1.1.1`.
 
 Evidence available:
@@ -376,6 +376,6 @@ Evidence available:
 - `node --check frontend/app.js`: PASS.
 - `git diff --check`: PASS.
 - Browser/UAT evidence (2026-07-14): ALL PASSED. Đã kiểm thử và chụp ảnh đầy đủ UAT cho cả 3 role (CUSTOMER, PORT_STAFF, ADMIN) và 3 viewport (Desktop, Tablet, Mobile) cũng như cả 2 theme (Dark, Light).
-- Retest corrective commit 1a2ae22: Đã UAT retest và chụp ảnh mới cho preview, import 39/0 và idempotency trên database sạch. Sà lan TN-0963 tại dòng 15 đã được chuẩn hóa thành công (DWT = 2723.79, Cargo = 2698.79) và log audit chuẩn xác.
+- Retest corrective commit `1a2ae22`: ảnh import xác nhận 39 bản ghi và không còn lộ SQL. Tuy nhiên ảnh idempotency trùng byte-for-byte với ảnh import lần đầu; ảnh preview không hiển thị dòng 15; chưa có artifact trực tiếp cho giá trị/notes của TN-0963.
 - Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
-- Tranche này chính thức chuyển sang trạng thái CLOSED/PASS.
+- Chỉ còn targeted evidence: response lần import thứ hai có `idempotent=true`, số lượng trước/sau không đổi, và API/DB hoặc vessel detail cho TN-0963 cùng notes nguồn. Không đóng tranche trước khi đủ ba bằng chứng này.

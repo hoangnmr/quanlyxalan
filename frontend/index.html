@@ -27,7 +27,7 @@
         <a href="#crew" data-route="crew"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span>Danh sách thuyền viên</a>
         <p class="nav-label">Dữ liệu</p>
         <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import Excel</a>
-        <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo Cảng vụ</a>
+        <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động Cảng</a>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-user">
@@ -95,7 +95,8 @@
 
         <section class="page" data-page="reports">
           <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><p>Dữ liệu được tổng hợp từ các phiếu đã thực hiện trong kỳ.</p></div></div>
-          <section class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="panel-actions"><div class="segmented period-switch"><button type="button" data-period="week">Tuần</button><button type="button" data-period="month" class="active">Tháng</button><button type="button" data-period="quarter">Quý</button><button type="button" data-period="year">Năm</button></div><button id="export-analytics" type="button" class="outline-button">Xuất Excel</button></div></div>
+          <section id="analytics-panel" class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="panel-actions"><div class="segmented period-switch"><button type="button" data-period="week">Tuần</button><button type="button" data-period="month" class="active">Tháng</button><button type="button" data-period="quarter">Quý</button><button type="button" data-period="year">Năm</button></div><button id="export-analytics" type="button" class="outline-button">Xuất Excel</button></div></div>
+            <div id="analytics-unavailable" class="feature-notice" role="status" hidden><strong>Thống kê sản lượng chưa khả dụng</strong><p>Hệ thống chưa có API thống kê đã được phê duyệt. Các báo cáo PL.01–PL.03 bên dưới vẫn sử dụng dữ liệu phiếu đã duyệt.</p></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
               <div class="trend-card"><div class="trend-head"><strong id="trend-title">Lượt tàu theo tháng</strong><span class="muted" id="trend-sub">—</span></div><div class="trend-chart" id="trend-chart"></div><div class="trend-legend"><span><i class="dot-cur"></i>Kỳ này</span><span><i class="dot-prev"></i>Cùng kỳ năm trước</span></div></div>
@@ -108,7 +109,7 @@
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button" data-report="appendix2">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button" data-report="appendix3">Xuất Excel</button></article>
           </div>
-          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Hệ thống tự động gởi thông tin khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói đồng bộ</button></div><div id="sync-jobs" class="table-wrap span-full"></div></section>
+          <section id="external-integration-panel" class="panel integration-panel" hidden><div><p class="eyebrow">KẾT NỐI DỮ LIỆU BÊN NGOÀI</p><h2>Chuẩn bị gói dữ liệu tích hợp</h2><p>Chức năng quản trị chỉ chuẩn bị dữ liệu; hệ thống chưa gửi ra bên ngoài khi chưa có đặc tả API và thông tin xác thực chính thức.</p></div><div class="integration-state"><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói dữ liệu</button></div><div id="sync-jobs" class="table-wrap span-full"></div></section>
         </section>
       </main>
     </div>
@@ -128,7 +129,7 @@
         <span class="login-logo-frame"><img src="/assets/csg-logo.jpg" alt="Cảng Sài Gòn"></span>
         <p class="eyebrow">CỔNG THÔNG TIN VẬN HÀNH</p>
         <h2 id="login-title">Cảng Tân Thuận</h2>
-        <p id="login-description">Đăng nhập để quản lý khai báo, phương tiện và luồng phê duyệt.</p>
+        <p id="login-description">Đăng nhập để quản lý khai báo, phương tiện và phản hồi của Cảng.</p>
       </div>
       <div class="login-form-content">
         <p id="login-feedback" class="login-feedback" role="alert" hidden></p>

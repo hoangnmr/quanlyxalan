@@ -190,6 +190,10 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
+    assert 'id="analytics-unavailable"' in res.text
+    assert 'id="external-integration-panel" class="panel integration-panel" hidden' in res.text
+    assert "Báo cáo hoạt động Cảng" in res.text
+    assert "Báo cáo Cảng vụ" not in res.text
     assert 'class="panel action-panel"' not in res.text
     app_js = client.get("/app.js").text
     assert "function setSubmitting(" in app_js
@@ -204,6 +208,9 @@ def test_static_frontend(client):
     assert "step-error-summary" in app_js
     assert "port_approval" in app_js
     assert "cv_approval" not in app_js
+    assert "renderAnalyticsUnavailable();" in app_js
+    assert "if (state.currentUser?.role === 'ADMIN') loadIntegration();" in app_js
+    assert "btn.style.display = isCustomer ? 'inline-block' : 'none'" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
 
 

@@ -193,3 +193,7 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 .crew-cert { flex-shrink: 0; font-size: 10px; }
 .crew-captain { background: color-mix(in srgb, var(--cvf-accent) 6%, transparent); }
 @media (max-width: 760px) { .crew-checklist { max-height: 220px; }.crew-name { max-width: 120px; } }
+
+.feature-notice { padding: 18px; border: 1px dashed var(--cvf-accent-border); border-radius: 10px; background: var(--cvf-accent-soft); }
+.feature-notice strong { color: var(--cvf-text-primary); }
+.feature-notice p { margin: 7px 0 0; color: var(--cvf-text-secondary); font-size: 12px; line-height: 1.55; }

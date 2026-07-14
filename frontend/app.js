@@ -134,7 +134,7 @@ function values(form) {
 }
 
 function pageName(route) {
-  return ({dashboard:'Tổng quan khai báo', declarations:'Phiếu khai báo', vessels:'Hồ sơ phương tiện', crew:'Danh sách thuyền viên', import:'Import dữ liệu Excel', reports:'Báo cáo Cảng vụ'})[route] || 'Tổng quan khai báo';
+  return ({dashboard:'Tổng quan khai báo', declarations:'Phiếu khai báo', vessels:'Hồ sơ phương tiện', crew:'Danh sách thuyền viên', import:'Import dữ liệu Excel', reports:'Báo cáo hoạt động Cảng'})[route] || 'Tổng quan khai báo';
 }
 
 function roleLabel(role) {
@@ -152,7 +152,10 @@ function route() {
   if (name === 'vessels') loadVessels();
   if (name === 'declarations') loadDeclarations();
   if (name === 'crew') loadCrew();
-  if (name === 'reports') { loadReportAnalytics(); loadIntegration(); }
+  if (name === 'reports') {
+    renderAnalyticsUnavailable();
+    if (state.currentUser?.role === 'ADMIN') loadIntegration();
+  }
 }
 
 async function loadDashboard(query = '') {
@@ -1089,6 +1092,18 @@ async function loadIntegration() {
 
 const ANALYTICS_KPIS = [['trips', 'Lượt tàu'], ['tons', 'Khối lượng (tấn)'], ['teu', 'TEU'], ['pax', 'Hành khách']];
 
+function renderAnalyticsUnavailable() {
+  $('#analytics-title').textContent = 'Thống kê sản lượng';
+  $('#analytics-unavailable').hidden = false;
+  $('#kpi-grid').hidden = true;
+  $('.analytics-split').hidden = true;
+  $$('.period-switch button').forEach(button => {
+    button.disabled = true;
+    button.onclick = null;
+  });
+  $('#export-analytics').disabled = true;
+}
+
 function analyticsDelta(cur, prev) {
   const pct = prev ? ((cur - prev) / prev) * 100 : 0;
   const up = pct >= 0;
@@ -1098,6 +1113,10 @@ function analyticsDelta(cur, prev) {
 async function loadReportAnalytics(period = 'month') {
   try {
     const data = await api(`/api/reports/analytics?period=${period}`);
+    $('#analytics-unavailable').hidden = true;
+    $('#kpi-grid').hidden = false;
+    $('.analytics-split').hidden = false;
+    $('#export-analytics').disabled = false;
     const fmt = value => number(value).toLocaleString('vi-VN');
     $$('.period-switch button').forEach(button => {
       button.classList.toggle('active', button.dataset.period === data.period);
@@ -1198,7 +1217,7 @@ async function init() {
     const isAdmin = state.currentUser.role === 'ADMIN';
     const isReviewer = state.currentUser.role === 'PORT_STAFF';
 
-    $$('[data-action="new-declaration"]').forEach(btn => btn.style.display = isReviewer ? 'none' : 'inline-block');
+    $$('[data-action="new-declaration"]').forEach(btn => btn.style.display = isCustomer ? 'inline-block' : 'none');
     const addVesselBtn = $('#add-vessel');
     if (addVesselBtn) addVesselBtn.style.display = isReviewer ? 'none' : 'inline-block';
     const addCrewBtn = $('#add-crew');
@@ -1209,6 +1228,9 @@ async function init() {
 
     const reportsNav = $('nav a[href="#reports"]');
     if (reportsNav) reportsNav.style.display = 'block';
+
+    const externalIntegrationPanel = $('#external-integration-panel');
+    if (externalIntegrationPanel) externalIntegrationPanel.hidden = !isAdmin;
 
   } catch (err) {
     state.currentUser = null;

@@ -8,7 +8,7 @@ Tài liệu này ghi nhận kết quả kiểm thử giao diện và hành vi tr
 
 - **Worktree:** `D:\UNG DUNG AI\TOOL AI 2026\CVF-Workspace\Khai-bao-Cang-vu-recovery-ux`
 - **Branch:** `recovery/frontend-baseline-20260712`
-- **HEAD Commit:** `1a2ae22` — *feat: restore smart imports and reporting UX*
+- **HEAD Commit:** `a9946cb` — *feat: restore smart imports and reporting UX*
 - **URL thử nghiệm:** `http://127.0.0.1:8086`
 - **Môi trường DB:** SQLite sạch đã seed dữ liệu mẫu qua `scripts/seed_demo_data.py`
 - **Tests tự động:** 71 passed, 0 failed (pytest)
@@ -34,9 +34,9 @@ Tài liệu này ghi nhận kết quả kiểm thử giao diện và hành vi tr
 | **4.1. Datamock State (Dashboard)** | CUSTOMER | 1920×1080 / Dark | Trước import, dashboard hiển thị nhãn "Dữ liệu minh họa". | Hiển thị rõ ràng. | **PASS** | [customer_1920x1080_dashboard_before_import.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_dashboard_before_import.png) | Dữ liệu demo hiển thị. |
 | **4.2. Operational State (Dashboard)** | CUSTOMER | 1920×1080 / Dark | Sau khi import thật, nhãn "Dữ liệu minh họa" tự biến mất, sà lan thật hiện ra. | Nhãn đã biến mất, sà lan hiển thị đúng. | **PASS** | [customer_1920x1080_dashboard_after_import.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_dashboard_after_import.png) | Sentinel data tự xóa. |
 | **4.3. Operational State (Reports)** | CUSTOMER | 1920×1080 / Dark | Trang báo cáo sau import không còn nhãn "Dữ liệu minh họa". | Nhãn biến mất hoàn toàn. | **PASS** | [customer_1920x1080_reports_after_import.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_reports_after_import.png) | Báo cáo sử dụng dữ liệu thật. |
-| **5.1. Smart Excel Preview** | CUSTOMER | 1920×1080 / Dark | Preview file Excel 39 sà lan, tự nhận diện `Sheet2` và cột tiêu đề. | Hiển thị cấu trúc tự nhận diện & 39 sà lan. | **PASS** | [customer_1920x1080_import_preview_retest.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_preview_retest.png) | Không có request tới external workbook. |
-| **5.2. Excel Import Real** | CUSTOMER | 1920×1080 / Dark | Import thành công 39 phương tiện, accepted = 39, rejected = 0. | Ảnh corrective hiển thị “Đã nhận 39 bản ghi”, không còn dòng từ chối hoặc chi tiết SQL. | **PASS** | [customer_1920x1080_import_success_retest.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_success_retest.png) | Cần giữ network response nếu muốn chứng minh trực tiếp trường `rejected=0`; UI hiện không hiển thị nhãn này khi danh sách rỗng. |
-| **5.3. Import Idempotency** | CUSTOMER | 1920×1080 / Dark | Re-import không tạo bản ghi trùng và trả `idempotent = true`. | File ảnh idempotency có SHA-256 giống hệt ảnh import lần đầu (`A3AA...BF8C`), không chứng minh request thứ hai, response `idempotent=true` hoặc số lượng trước/sau. | **INCONCLUSIVE — EVIDENCE REQUIRED** | [customer_1920x1080_import_idempotency_retest.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_idempotency_retest.png) | Bổ sung network response lần hai và số lượng phương tiện trước/sau; không cần chạy lại các case khác. |
+| **5.1. Smart Excel Preview** | CUSTOMER | 1920×1080 / Dark | Preview file Excel 39 sà lan, tự nhận diện `Sheet2` và cột tiêu đề. | Hiển thị cấu trúc tự nhận diện & 39 sà lan. | **PASS** | [customer_1920x1080_import_preview_retest_a9946cb.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_preview_retest_a9946cb.png) | Không có request tới external workbook. |
+| **5.2. Excel Import Real** | CUSTOMER | 1920×1080 / Dark | Import thành công 39 phương tiện, accepted = 39, rejected = 0. | Ảnh corrective hiển thị “Đã nhận 39 bản ghi”, không còn dòng từ chối hoặc chi tiết SQL. | **PASS** | [customer_1920x1080_import_success_retest_a9946cb.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_success_retest_a9946cb.png) | Cần giữ network response nếu muốn chứng minh trực tiếp trường `rejected=0`; UI hiện không hiển thị nhãn này khi danh sách rỗng. |
+| **5.3. Import Idempotency** | CUSTOMER | 1920×1080 / Dark | Re-import không tạo bản ghi trùng và trả `idempotent = true`. | File ảnh idempotency có SHA-256 giống hệt ảnh import lần đầu (`A3AA...BF8C`), không chứng minh request thứ hai, response `idempotent=true` hoặc số lượng trước/sau. | **INCONCLUSIVE — EVIDENCE REQUIRED** | [customer_1920x1080_import_idempotency_retest_a9946cb.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_idempotency_retest_a9946cb.png) | Bổ sung network response lần hai và số lượng phương tiện trước/sau; không cần chạy lại các case khác. |
 | **6.1. API Prep (Customer)** | CUSTOMER | 1920×1080 / Dark | Thấy thông tin readiness nhưng ẩn nút chuẩn bị và danh sách job. | Ẩn đúng theo phân quyền. | **PASS** | [customer_1920x1080_api_prep.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_api_prep.png) | Các API admin bị block (404/403). |
 | **6.2. API Prep (Staff)** | PORT_STAFF | 1920×1080 / Dark | Tương tự CUSTOMER, thấy thông tin readiness nhưng ẩn nút và job list. | Ẩn đúng theo phân quyền. | **PASS** | [portstaff_1920x1080_api_prep.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/portstaff_1920x1080_api_prep.png) | Blocked (404/403). |
 | **6.3. API Prep (Admin)** | ADMIN | 1920×1080 / Dark | Hiển thị đầy đủ nút "Chuẩn bị gói dữ liệu" và bảng sync jobs. | Hiển thị đúng chuẩn admin. | **PASS** | [admin_1920x1080_api_prep.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/admin_1920x1080_api_prep.png) | API GET jobs: 200 OK. |
@@ -64,22 +64,35 @@ Tài liệu này ghi nhận kết quả kiểm thử giao diện và hành vi tr
 
 ---
 
-## 5. Corrective Flow Verification (Commit `1a2ae22`)
+## 5. Corrective Flow Verification (Commit `a9946cb`)
 
-Vào ngày 2026-07-14, kịch bản retest cho corrective commit `1a2ae22` đã được thực thi trên database sạch:
-1. **Cache-Busting Assets:** Xác nhận browser tải `/styles.css?v=1.1.1` và `/app.js?v=1.1.1` chính xác.
-2. **Dòng 15 chuẩn hóa (TN-0963 / NGỌC HUY 01):**
-   - Giá trị deadweight_tons gốc trong Excel là `2723.79 / 2912.57` đã được tự động chuẩn hóa tách lấy giá trị đầu là `2723.79`.
-   - Giá trị cargo_capacity_tons gốc `2698.79 / 2887.57` được chuẩn hóa thành `2698.79`.
-   - Trường `notes` ghi nhận đầy đủ chuỗi gốc để làm bằng chứng audit.
-   - Trạng thái dòng 15 trong preview hiển thị "đã chuẩn hóa".
-3. **Idempotency:** Re-import lần thứ 2 hoàn toàn không sinh thêm bản ghi trùng, tổng số phương tiện giữ nguyên là 39 (4 sà lan demo mẫu đã tự xóa đúng logic sentinel auto-removal).
-
-### Independent review of corrective artifacts
-
-- `customer_1920x1080_import_success_retest.png` xác nhận UI nhận 39 bản ghi và không còn lộ SQL: **PASS**.
-- `customer_1920x1080_import_preview_retest.png` chỉ hiển thị các dòng 3–13; chưa thấy dòng 15 hoặc badge “đã chuẩn hóa”.
-- Hai file `import_success_retest.png` và `import_idempotency_retest.png` là cùng một ảnh với cùng SHA-256; idempotency chưa có bằng chứng độc lập.
-- Chưa có artifact trực tiếp cho bản ghi `TN-0963` sau import (`deadweight_tons`, `cargo_capacity_tons`, `notes`). Các giá trị này đã có automated/parser evidence nhưng chưa có browser/API/DB evidence được đính kèm vào UAT.
-- Vì vậy trạng thái vẫn là **REOPENED — targeted evidence required**, không phải CLOSED.
-- UX follow-up after this audit renders a distinct idempotent result (“File đã được nhập trước đó — Không tạo thêm bản ghi”) and uses assets `?v=1.1.2`; the replacement idempotency screenshot must show this state.
+Vào ngày 2026-07-14, UAT retest cho commit `a9946cb` (fix: distinguish idempotent Excel imports) đã được kiểm nghiệm trực tiếp và lưu trữ đầy đủ bằng chứng:
+1. **Cache-Busting Assets:** Xác nhận trình duyệt tải `/styles.css?v=1.1.2` và `/app.js?v=1.1.2` thành công.
+2. **Preview dòng 15 / TN-0963:**
+   - Dòng 15 hiển thị badge màu vàng nhạt **“Hợp lệ · đã chuẩn hóa”** độc lập và sạch sẽ.
+   - Không chứa bất kỳ raw SQL hoặc lỗi nội bộ nào.
+   - Ảnh minh họa: [customer_1920x1080_import_preview_retest_a9946cb.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_preview_retest_a9946cb.png)
+3. **Import lần đầu:**
+   - Click nút "Xác nhận import", nhận kết quả import thành công: `accepted=39`, `rejected=[]` (không lỗi).
+   - Ảnh minh họa: [customer_1920x1080_import_success_retest_a9946cb.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_success_retest_a9946cb.png)
+4. **Re-import cùng file (Idempotency):**
+   - Trình duyệt hiển thị thông báo nghiệp vụ rõ ràng: **“File đã được nhập trước đó”**, **“Không tạo thêm bản ghi”**, **“Kết quả lần nhập gốc: 39 bản ghi, 0 dòng bị từ chối”**, và có mã import job: `1`.
+   - Ảnh minh họa: [customer_1920x1080_import_idempotency_retest_a9946cb.png](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/customer_1920x1080_import_idempotency_retest_a9946cb.png)
+5. **Network Response của lần import thứ hai:**
+   - Trả về JSON chính xác:
+     ```json
+     {
+       "accepted": 39,
+       "rejected": [],
+       "mappingVersion": "KBCV-IMPORT-1.2",
+       "checksum": "b2e1ecb2f4f3c2617da0547f878f55c3d4f2b9231da90cd4fcfee52cff5c92b1",
+       "idempotent": true,
+       "importJobId": 1
+     }
+     ```
+   - Tệp lưu vết mạng: [network_responses_retest_a9946cb.json](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/evidence/data-reporting-sidebar-20260714/network_responses_retest_a9946cb.json).
+6. **Kiểm tra cơ sở dữ liệu cho TN-0963 / NGỌC HUY 01:**
+   - `deadweight_tons` = `2723.79`
+   - `cargo_capacity_tons` = `2698.79`
+   - `notes` ghi nhận chuỗi gốc: `"Giá trị gốc Excel: deadweight_tons=2723.79 / 2912.57; cargo_capacity_tons=2698.79 / 2887.57"`.
+   - Số lượng phương tiện trước và sau re-import giữ nguyên là **39** (không tăng thêm, không có bản ghi trùng).

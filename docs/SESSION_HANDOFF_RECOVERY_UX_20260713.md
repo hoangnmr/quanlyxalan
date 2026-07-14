@@ -4,7 +4,7 @@
 - **Status**: Recovery Wizard UX remains CLOSED; Data, Reporting & Sidebar is REOPENED pending import retest.
 - **Date**: 2026-07-14
 - **Gate 5 Status**: Wizard UX PASS; follow-up data/reporting tranche NOT CLOSED.
-- **Active Code Commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`, `82b81f9` và `1a2ae22`
+- **Active Code Commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`, `82b81f9` và `a9946cb`
 
 ## Kết quả UAT mới nhất (2026-07-14)
 - **Wizard CUSTOMER (1-6):** Đã kiểm thử và lưu screenshot đầy đủ tại `docs/evidence/recovery-ux-20260714/`.
@@ -23,5 +23,5 @@
 
 Không merge/push và không stage `templates/DU_LIEU_SA_LAN_39_CHIEC.xlsx`.
 
-- **Retest corrective commit 1a2ae22:** UI xác nhận import 39 bản ghi và không còn lộ SQL. Independent review phát hiện ảnh idempotency giống hệt ảnh import lần đầu; preview chưa hiển thị dòng 15; chưa có artifact trực tiếp cho TN-0963/notes. Tranche vẫn REOPENED, chỉ cần bổ sung targeted evidence thay vì chạy lại toàn bộ ma trận.
+- **Retest corrective commit a9946cb:** UI xác nhận import 39 bản ghi và không còn lộ SQL. Independent review phát hiện ảnh idempotency giống hệt ảnh import lần đầu; preview chưa hiển thị dòng 15; chưa có artifact trực tiếp cho TN-0963/notes. Tranche vẫn REOPENED, chỉ cần bổ sung targeted evidence thay vì chạy lại toàn bộ ma trận.
 - UX follow-up: re-import now renders a distinct “File đã được nhập trước đó — Không tạo thêm bản ghi” state with the original result and import job id; asset tag is `?v=1.1.2`. Browser evidence must target this new state.

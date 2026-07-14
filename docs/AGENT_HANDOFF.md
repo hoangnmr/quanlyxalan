@@ -332,7 +332,7 @@ official authority prerequisites recorded in its work order.
 ## Session handoff: Recovery UX branch — 2026-07-13
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Implementation commit**: `0b2ba72`
+- **Implementation commits**: `0b2ba72`, `5e74643`
 - **Status**: Implementation complete; browser/UAT evidence and Analytics remain open.
 - **Canonical session handoff**:
   `docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`

@@ -30,6 +30,10 @@ Implemented in this checkpoint:
    added a controlled migration for legacy users, statuses, and columns.
 8. Added inline wizard error summaries with focus recovery and replaced the
    native multi-select crew control with a keyboard-friendly checklist.
+9. Prevented the Reports route from calling an unimplemented Analytics endpoint
+   or an Admin-only integration endpoint for non-Admin users.
+10. Limited the customer declaration entry point to `CUSTOMER` in the UI and
+    removed remaining “Cảng vụ” wording from the active report navigation.
 
 ## Evidence
 
@@ -44,13 +48,17 @@ Implemented in this checkpoint:
   submitted declaration directly or request changes.
 - Static checks contain no visible `Chờ CV`, `Chờ QLC`, `Chờ BP`, or
   `CV → QLC → BP` strings in `frontend/`.
+- Live API reproduction before commit `5e74643`: Analytics returned 404 and
+  customer access to integration returned 403. The frontend now avoids both
+  invalid calls and regression remains PASS 67/67.
 
 ## Not completed in this checkpoint
 
 - Analytics restoration or implementation. The baseline frontend calls an
   analytics endpoint that is not present in the historical backend.
 - Live browser screenshot evidence. No in-app browser window was available in
-  this session; human visual review remains mandatory before closure.
+  the 2026-07-13 or 2026-07-14 sessions; human visual review remains mandatory
+  before closure.
 
 ## Active risk and next governed move
 

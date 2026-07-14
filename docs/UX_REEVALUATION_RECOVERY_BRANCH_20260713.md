@@ -45,6 +45,18 @@
 | Analytics | **CHƯA XỬ LÝ — NGOÀI TRANCHE** | Đã xác nhận frontend gọi endpoint chưa tồn tại và xử lý 404 bằng toast, không làm vỡ trang. | Cần một tranche riêng gồm định nghĩa chỉ số, API contract, quyền truy cập, dữ liệu tham chiếu và thiết kế biểu đồ trước khi code. |
 | Responsive/Gate 5 | **CHƯA CÓ BẰNG CHỨNG** | CSS breakpoint và cấu trúc responsive tồn tại; unit/static test xanh. | Chờ ảnh và thao tác thật tối thiểu tại 1920×1080, 1366×768, 390×844; cần kiểm thử bàn phím, accessibility và task completion. |
 
+## Cập nhật lỗi runtime — 2026-07-14
+
+| Mã | Trạng thái | Bằng chứng trước sửa | Xử lý tại `5e74643` |
+|---|---|---|---|
+| RUNTIME-001 | **ĐÃ XỬ LÝ** | Khách hàng mở trang Báo cáo làm frontend gọi `/api/reports/analytics?period=month` và nhận HTTP 404. | Trang không còn gọi endpoint Analytics chưa có contract. Khu vực thống kê hiển thị trạng thái “chưa khả dụng”, vô hiệu hóa kỳ và export; PL.01–PL.03 vẫn hoạt động độc lập. |
+| RUNTIME-002 | **ĐÃ XỬ LÝ** | Cùng thao tác trên làm frontend gọi integration Admin-only và nhận HTTP 403. | Integration ẩn mặc định, chỉ hiện và tải khi role là `ADMIN`; nội dung được đổi thành “Kết nối dữ liệu bên ngoài”, không mô tả Cảng là Cảng vụ. |
+| RUNTIME-003 | **ĐÃ XỬ LÝ** | Admin vẫn thấy nút “Tạo phiếu”, trong khi chỉ CUSTOMER được xác nhận gửi; thao tác cuối có thể dẫn đến 403. | Nút tạo phiếu chỉ hiện cho `CUSTOMER`. Admin vẫn quản trị hồ sơ phương tiện/thuyền viên nhưng không thực hiện khai báo thay khách hàng qua UI. |
+
+Regression sau sửa: `67 passed`; `node --check frontend/app.js` và
+`git diff --check` PASS. Phiên in-app browser không khả dụng ngày 2026-07-14,
+do đó chưa bổ sung ảnh hoặc tuyên bố Gate 5.
+
 ### Điều kiện để tiếp tục
 
 1. **Claude/browser tester** chạy lại đúng worktree và branch ghi trong

@@ -13,7 +13,8 @@ worktree `main` hoặc bản restore.
   `D:\UNG DUNG AI\TOOL AI 2026\CVF-Workspace\Khai-bao-Cang-vu-recovery-ux`
 - Branch: `recovery/frontend-baseline-20260712`
 - Baseline khôi phục: `929a8c487c572b7bcad859e237b17da1d494a1db`
-- Commit thi công mới nhất: `0b2ba72`
+- Commit workflow/UX nền: `0b2ba72`
+- Commit sửa lỗi runtime mới nhất: `5e74643`
 - Phase: BUILD/REVIEW
 - Risk: R2 vì có workflow, RBAC và migration dữ liệu.
 - Live governance evidence required: YES đối với mọi tuyên bố về CVF governance.
@@ -55,6 +56,17 @@ Commit `0b2ba72` bao gồm:
 - Báo cáo Claude được giữ nguyên ở phần dưới để truy vết, có bảng đính chính
   và trạng thái hiện hành ở đầu file.
 
+Commit `5e74643` bổ sung:
+
+- Không gọi endpoint Analytics chưa tồn tại khi mở trang Báo cáo; hiển thị
+  trạng thái chưa khả dụng thay vì toast 404 hoặc số liệu giả.
+- Chỉ Admin nhìn thấy và tải khu vực kết nối dữ liệu bên ngoài, loại bỏ toast
+  403 đối với CUSTOMER/PORT_STAFF.
+- Chỉ CUSTOMER nhìn thấy điểm vào tạo phiếu; Admin không còn đi vào luồng xác
+  nhận gửi vốn bị backend từ chối.
+- Đổi nhãn “Báo cáo Cảng vụ” thành “Báo cáo hoạt động Cảng” và bỏ mô tả phê
+  duyệt nhiều cấp còn sót.
+
 ## Bằng chứng kỹ thuật hiện có
 
 - `python -m pytest -q`: `67 passed`.
@@ -73,6 +85,10 @@ Commit `0b2ba72` bao gồm:
 
 Không có bằng chứng browser trực quan trong session này. Không được chuyển các
 mục “chờ browser/UAT” thành PASS chỉ dựa trên mã nguồn hoặc test tĩnh.
+
+Ngày 2026-07-14 đã thử kết nối in-app browser theo browser skill nhưng danh
+sách browser khả dụng rỗng. Không dùng công cụ browser khác để thay thế và
+không tạo tuyên bố screenshot/viewport.
 
 ## Cách chạy đúng worktree
 
@@ -139,7 +155,7 @@ chưa có chỉ đạo rõ của người dùng.
 ## Trình tự tiếp quản đề nghị
 
 1. Chạy First-Request Protocol trong `AGENTS.md` và Workspace Doctor.
-2. Xác nhận cwd, branch, `git status`, commit `0b2ba72` có trong lịch sử.
+2. Xác nhận cwd, branch, `git status`, commit `5e74643` có trong lịch sử.
 3. Đọc bảng trạng thái trong báo cáo UX; không dùng kết luận lỗi UX-101/102 cũ.
 4. Chạy migration và `pytest` trước kiểm thử browser.
 5. Thu thập browser evidence cho các mục đang chờ; không sửa analytics trong

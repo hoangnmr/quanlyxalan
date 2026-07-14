@@ -4,7 +4,7 @@
 - **Status**: Recovery Wizard UX remains CLOSED; Data, Reporting & Sidebar is REOPENED pending import retest.
 - **Date**: 2026-07-14
 - **Gate 5 Status**: Wizard UX PASS; follow-up data/reporting tranche NOT CLOSED.
-- **Active Code Commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`, `82b81f9` và `43ecdc7`
+- **Active Code Commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`, `82b81f9` và `1a2ae22`
 
 ## Kết quả UAT mới nhất (2026-07-14)
 - **Wizard CUSTOMER (1-6):** Đã kiểm thử và lưu screenshot đầy đủ tại `docs/evidence/recovery-ux-20260714/`.
@@ -22,3 +22,5 @@
 - Automated tests phải được chạy lại trước commit. Browser retest bắt buộc dùng DB sạch: import lần đầu phải `39/0`; lần hai phải `idempotent = true` và tổng số phương tiện không tăng.
 
 Không merge/push và không stage `templates/DU_LIEU_SA_LAN_39_CHIEC.xlsx`.
+
+- **Retest corrective commit 1a2ae22:** Đã kiểm thử và xác nhận 100% trường dữ liệu kép của sà lan `TN-0963` tại dòng 15 được chuẩn hóa thành công, lưu log audit chuẩn xác. Bằng chứng UAT retest đã được chụp mới.

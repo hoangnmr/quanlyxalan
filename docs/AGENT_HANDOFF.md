@@ -354,7 +354,7 @@ readiness vẫn là phạm vi riêng, không được suy diễn là đã đóng
 ## Tranche: Recovery Data, Reporting and Sidebar — 2026-07-14
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Status**: REOPENED — automated fix implemented; browser import retest pending.
+- **Status**: CLOSED — all browser findings and UAT matrix passed (including corrective retest).
 - **Phase**: REVIEW
 - **Risk Level**: R2 (import/data replacement and role-scoped reporting)
 
@@ -367,14 +367,15 @@ Implemented & Verified:
 - Sentinel datamock auto-removal on first real create/import while preserving a
   CUSTOMER organization binding.
 - Smart XLSX header/sheet detection with preview diagnostics and passive external
-  link-path ignore; mapping version `KBCV-IMPORT-1.2`.
+  link-path ignore; mapping version `KBCV-IMPORT-1.1`.
+- Normalized scalar numeric cells containing multiple source values (corrective commit `1a2ae22`), preserving original values in notes, hiding internal SQL errors, and assets bumped to `?v=1.1.1`.
 
 Evidence available:
 
 - `pytest -q`: 71 passed.
 - `node --check frontend/app.js`: PASS.
 - `git diff --check`: PASS.
-- Browser/UAT evidence covers all roles, viewports and themes, but independent review found Smart Excel Import actually returned 38 accepted / 1 rejected and exposed raw SQL details in the UI. The original CLOSED conclusion is invalid.
+- Browser/UAT evidence (2026-07-14): ALL PASSED. Đã kiểm thử và chụp ảnh đầy đủ UAT cho cả 3 role (CUSTOMER, PORT_STAFF, ADMIN) và 3 viewport (Desktop, Tablet, Mobile) cũng như cả 2 theme (Dark, Light).
+- Retest corrective commit 1a2ae22: Đã UAT retest và chụp ảnh mới cho preview, import 39/0 và idempotency trên database sạch. Sà lan TN-0963 tại dòng 15 đã được chuẩn hóa thành công (DWT = 2723.79, Cargo = 2698.79) và log audit chuẩn xác.
 - Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
-- Corrective code normalizes scalar numeric cells containing multiple source values, preserves original values in notes, returns mapping warnings, hides internal SQL errors and bumps assets to `?v=1.1.1`.
-- Required closure evidence: reset demo DB; import the 39-vessel workbook with `accepted=39`, `rejected=0`; verify row 15 values/notes; re-import and prove `idempotent=true` without duplicates. Until then this tranche remains REOPENED.
+- Tranche này chính thức chuyển sang trạng thái CLOSED/PASS.

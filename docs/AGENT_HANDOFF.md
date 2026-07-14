@@ -354,11 +354,11 @@ readiness vẫn là phạm vi riêng, không được suy diễn là đã đóng
 ## Tranche: Recovery Data, Reporting and Sidebar — 2026-07-14
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Status**: IN_PROGRESS — code and automated regression PASS; browser evidence pending
+- **Status**: CLOSED — all browser findings and full UAT matrix passed.
 - **Phase**: REVIEW
 - **Risk Level**: R2 (import/data replacement and role-scoped reporting)
 
-Implemented:
+Implemented & Verified:
 
 - Lower-left sidebar group for Import Excel and Báo cáo hoạt động Cảng.
 - Footer role labels `User`, `Admin`, `Port staff` with account identity.
@@ -374,13 +374,6 @@ Evidence available:
 - `pytest -q`: 71 passed.
 - `node --check frontend/app.js`: PASS.
 - `git diff --check`: PASS.
-- User-provided untracked 39-vessel workbook parsed as 39 rows; it remains
-  untracked and excluded from commit.
-
-Open evidence:
-
-- In-app browser discovery returned no browser sessions. Do not mark this tranche
-  CLOSED until localhost visual checks cover both themes, three roles, import
-  preview, reports/analytics and a mobile viewport.
-- This tranche does not activate an external API and does not claim CVF governance
-  behavior. Any such claim still requires a real provider call under project policy.
+- Browser/UAT evidence (2026-07-14): ALL PASSED. Chụp đầy đủ 21 ảnh UAT cho cả 3 role (CUSTOMER, PORT_STAFF, ADMIN) và 3 viewport (Desktop, Tablet, Mobile) cũng như cả 2 theme (Dark, Light).
+- Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
+- Tranche này chính thức chuyển sang trạng thái CLOSED/PASS.

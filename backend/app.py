@@ -11,7 +11,7 @@ import hashlib
 import logging
 import os
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -39,7 +39,7 @@ from .models import (
 )
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
 
-IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.0"
+IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.1"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -625,8 +625,18 @@ def is_demo_data_active(db: Session) -> bool:
     ).first() is not None
 
 
-def remove_demo_data_for_real_input(db: Session) -> bool:
-    """Remove only the explicitly marked demo dataset before the first real input."""
+def remove_demo_data_for_real_input(
+    db: Session,
+    *,
+    retain_organization_id: int | None = None,
+    organization_data: dict[str, Any] | None = None,
+) -> bool:
+    """Remove sentinel-marked records before the first real input.
+
+    A demo CUSTOMER keeps its organization binding, but the sentinel is cleared
+    and optional workbook metadata becomes the real profile. ADMIN imports may
+    remove the demo organization entirely.
+    """
     demo_org = db.query(Organization).filter(
         Organization.tax_code == DEMO_ORGANIZATION_TAX_CODE
     ).first()
@@ -644,7 +654,26 @@ def remove_demo_data_for_real_input(db: Session) -> bool:
     db.query(CrewMember).filter(CrewMember.organization_id == demo_org.id).delete(synchronize_session=False)
     db.query(Vessel).filter(Vessel.organization_id == demo_org.id).delete(synchronize_session=False)
     db.query(AuditEvent).filter(AuditEvent.organization_id == demo_org.id).delete(synchronize_session=False)
-    db.delete(demo_org)
+    db.query(ImportJob).filter(ImportJob.organization_id == demo_org.id).delete(synchronize_session=False)
+    if retain_organization_id == demo_org.id:
+        profile = organization_data or {}
+        proposed_name = str(profile.get("name") or "").strip()
+        name_in_use = proposed_name and db.query(Organization.id).filter(
+            Organization.name == proposed_name, Organization.id != demo_org.id
+        ).first()
+        if proposed_name and not name_in_use:
+            demo_org.name = proposed_name
+        demo_org.tax_code = str(profile.get("tax_code") or "").strip()
+        for field in ("address", "contact_name", "phone"):
+            value = str(profile.get(field) or "").strip()
+            if value:
+                setattr(demo_org, field, value)
+        demo_org.updated_at = now_iso()
+    else:
+        db.query(User).filter(User.organization_id == demo_org.id).update(
+            {User.organization_id: None}, synchronize_session=False
+        )
+        db.delete(demo_org)
     db.flush()
     return True
 
@@ -790,8 +819,6 @@ def save_vessel(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
-    if not payload.id:
-        remove_demo_data_for_real_input(db)
     if user.role == "CUSTOMER":
         # Force organization to the customer's bound organization
         org_id = user.organization_id
@@ -803,6 +830,13 @@ def save_vessel(
         )
         org = _get_or_create_org(db, org_name)
         org_id = org.id if org else None
+
+    if not payload.id:
+        remove_demo_data_for_real_input(
+            db,
+            retain_organization_id=org_id if user.role == "CUSTOMER" else None,
+            organization_data=payload.organization if isinstance(payload.organization, dict) else None,
+        )
 
     data = payload.model_dump(exclude={"id", "version", "organization", "organization_name"})
     data["organization_id"] = org_id
@@ -1379,6 +1413,21 @@ async def import_vessels(
         org_id = org.id if org else None
 
     checksum = hashlib.sha256(content).hexdigest()
+    required_vessel_fields = {
+        "name": "Tên phương tiện",
+        "registration_no": "Số đăng ký",
+        "vessel_type": "Loại phương tiện",
+        "vessel_class": "Cấp phương tiện",
+    }
+    preview_rows = []
+    for row in rows:
+        clean_row = {key: value for key, value in row.items() if not key.startswith("_")}
+        clean_row["sourceRow"] = row.get("_source_row")
+        clean_row["sourceSheet"] = row.get("_source_sheet")
+        clean_row["missingFields"] = [
+            label for field, label in required_vessel_fields.items() if not row.get(field)
+        ]
+        preview_rows.append(clean_row)
     if preview:
         db.rollback()
         return {
@@ -1386,7 +1435,11 @@ async def import_vessels(
             "mappingVersion": IMPORT_MAPPING_VERSION,
             "checksum": checksum,
             "organization": org_data,
-            "rows": [{"sourceRow": index, **row} for index, row in enumerate(rows, 11)],
+            "mapping": {
+                "strategy": "HEADER_LABEL_DETECTION",
+                "sheet": rows[0].get("_source_sheet") if rows else None,
+            },
+            "rows": preview_rows,
             "accepted": 0,
             "rejected": [],
         }
@@ -1402,11 +1455,26 @@ async def import_vessels(
         result["importJobId"] = prior.id
         return result
 
-    remove_demo_data_for_real_input(db)
+    remove_demo_data_for_real_input(
+        db,
+        retain_organization_id=org_id if user.role == "CUSTOMER" else None,
+        organization_data=org_data,
+    )
 
     accepted = 0
     rejected: list[dict] = []
-    for source_row, row in enumerate(rows, 11):
+    for row in rows:
+        source_row = row.get("_source_row")
+        missing_fields = [
+            label for field, label in required_vessel_fields.items() if not row.get(field)
+        ]
+        if missing_fields:
+            rejected.append({
+                "sourceRow": source_row,
+                "row": row.get("name"),
+                "error": f"Thiếu {', '.join(missing_fields)}",
+            })
+            continue
         try:
             with db.begin_nested():
                 existing = db.query(Vessel).filter(
@@ -1424,7 +1492,7 @@ async def import_vessels(
                     safe = {
                         k: (excel_date(v) if "date" in k else v)
                         for k, v in row.items()
-                        if hasattr(Vessel, k) and k not in ("id", "organization_id")
+                        if not k.startswith("_") and hasattr(Vessel, k) and k not in ("id", "organization_id")
                     }
                     safe["organization_id"] = org_id
                     safe["created_at"] = now_iso()
@@ -1501,7 +1569,7 @@ async def import_declaration(
     row["unload_json"] = json.dumps(cargo(row.pop("unload", {})), ensure_ascii=False)
     row["load_json"] = json.dumps(cargo(row.pop("load", {})), ensure_ascii=False)
 
-    safe = {k: v for k, v in row.items() if hasattr(Declaration, k)}
+    safe = {k: v for k, v in row.items() if not k.startswith("_") and hasattr(Declaration, k)}
     if not safe.get("declaration_date"):
         safe["declaration_date"] = date.today().isoformat()
     for required in ("company_name", "vessel_name", "registration_no", "vessel_type",
@@ -1510,10 +1578,19 @@ async def import_declaration(
         if not safe.get(required):
             safe[required] = "N/A"
 
-    # Enforce CUSTOMER organization binding
+    # Enforce CUSTOMER organization binding. Preserve the workbook company name
+    # long enough to replace a sentinel demo organization profile.
+    imported_company_name = str(safe.get("company_name") or "").strip()
     safe["organization_id"] = user.organization_id
-    if user.organization:
-        safe["company_name"] = user.organization.name
+
+    remove_demo_data_for_real_input(
+        db,
+        retain_organization_id=user.organization_id,
+        organization_data={"name": imported_company_name},
+    )
+    organization = db.query(Organization).filter(Organization.id == user.organization_id).first()
+    if organization:
+        safe["company_name"] = organization.name
 
     decl = Declaration(**safe)
     db.add(decl)
@@ -1541,6 +1618,188 @@ async def import_declaration(
 # ══════════════════════════════════════════════════════════════════════════════
 # REPORTS (Appendix 1 / 2 / 3)
 # ══════════════════════════════════════════════════════════════════════════════
+
+ANALYTICS_PERIODS = {"week", "month", "quarter", "year"}
+
+
+def _month_shift(value: date, offset: int) -> date:
+    month_index = value.year * 12 + value.month - 1 + offset
+    return date(month_index // 12, month_index % 12 + 1, 1)
+
+
+def _analytics_period(period: str, anchor: date) -> dict[str, Any]:
+    if period == "week":
+        current_start = anchor - timedelta(days=anchor.weekday())
+        current_end = current_start + timedelta(days=6)
+        previous_start = current_start - timedelta(days=364)
+        labels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+        bucket = lambda value, start: (value - start).days
+        title = "Tổng hợp theo tuần"
+        trend_title = "Lượt tàu theo ngày"
+        compare = "Tuần này so với cùng kỳ năm trước"
+    elif period == "month":
+        current_start = anchor.replace(day=1)
+        current_end = _month_shift(current_start, 1) - timedelta(days=1)
+        previous_start = date(current_start.year - 1, current_start.month, 1)
+        labels = [f"Tuần {index}" for index in range(1, 6)]
+        bucket = lambda value, start: min(4, (value.day - 1) // 7)
+        title = "Tổng hợp theo tháng"
+        trend_title = "Lượt tàu theo tuần"
+        compare = f"Tháng {current_start.month}/{current_start.year} so với cùng kỳ {previous_start.year}"
+    elif period == "quarter":
+        quarter_month = ((anchor.month - 1) // 3) * 3 + 1
+        current_start = date(anchor.year, quarter_month, 1)
+        current_end = _month_shift(current_start, 3) - timedelta(days=1)
+        previous_start = date(current_start.year - 1, current_start.month, 1)
+        labels = [f"T{_month_shift(current_start, index).month}" for index in range(3)]
+        bucket = lambda value, start: (value.year - start.year) * 12 + value.month - start.month
+        title = "Tổng hợp theo quý"
+        trend_title = "Lượt tàu theo tháng"
+        compare = f"Quý {(quarter_month - 1) // 3 + 1}/{current_start.year} so với cùng kỳ {previous_start.year}"
+    else:
+        current_start = date(anchor.year, 1, 1)
+        current_end = date(anchor.year, 12, 31)
+        previous_start = date(anchor.year - 1, 1, 1)
+        labels = [f"T{index}" for index in range(1, 13)]
+        bucket = lambda value, start: value.month - 1
+        title = "Tổng hợp theo năm"
+        trend_title = "Lượt tàu theo tháng"
+        compare = f"Năm {anchor.year} so với {anchor.year - 1}"
+    if period == "week":
+        previous_end = previous_start + timedelta(days=6)
+    elif period == "month":
+        previous_end = _month_shift(previous_start, 1) - timedelta(days=1)
+    elif period == "quarter":
+        previous_end = _month_shift(previous_start, 3) - timedelta(days=1)
+    else:
+        previous_end = date(previous_start.year, 12, 31)
+    return {
+        "current_start": current_start,
+        "current_end": current_end,
+        "previous_start": previous_start,
+        "previous_end": previous_end,
+        "labels": labels,
+        "bucket": bucket,
+        "title": title,
+        "trend_title": trend_title,
+        "compare": compare,
+    }
+
+
+def _declaration_operating_date(declaration: Declaration) -> date | None:
+    for raw in (declaration.actual_arrival_at, declaration.eta, declaration.declaration_date):
+        if not raw:
+            continue
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+    return None
+
+
+def _declaration_metrics(declaration: Declaration) -> dict[str, float]:
+    def numeric(value: Any) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    tons = 0.0
+    teu = 0.0
+    for raw in (declaration.unload_json, declaration.load_json):
+        try:
+            item = json.loads(raw or "{}")
+        except (TypeError, json.JSONDecodeError):
+            item = {}
+        tons += numeric(item.get("tons"))
+        teu += numeric(item.get("teu"))
+    return {
+        "trips": 1.0,
+        "tons": tons,
+        "teu": teu,
+        "pax": numeric(declaration.passenger_count),
+    }
+
+
+def _analytics_payload(db: Session, user: User, period: str, anchor: date) -> dict[str, Any]:
+    config = _analytics_period(period, anchor)
+    query = db.query(Declaration).filter(Declaration.workflow_status == "APPROVED")
+    if user.role == "CUSTOMER":
+        query = query.filter(Declaration.organization_id == user.organization_id)
+    declarations = query.all()
+    totals = {
+        "cur": {key: 0.0 for key in ("trips", "tons", "teu", "pax")},
+        "prev": {key: 0.0 for key in ("trips", "tons", "teu", "pax")},
+    }
+    trend_current = [0] * len(config["labels"])
+    trend_previous = [0] * len(config["labels"])
+    for declaration in declarations:
+        operating_date = _declaration_operating_date(declaration)
+        if not operating_date:
+            continue
+        if config["current_start"] <= operating_date <= config["current_end"]:
+            group = "cur"
+            trend = trend_current
+            start = config["current_start"]
+        elif config["previous_start"] <= operating_date <= config["previous_end"]:
+            group = "prev"
+            trend = trend_previous
+            start = config["previous_start"]
+        else:
+            continue
+        for key, value in _declaration_metrics(declaration).items():
+            totals[group][key] += value
+        index = config["bucket"](operating_date, start)
+        if 0 <= index < len(trend):
+            trend[index] += 1
+    return {
+        "period": period,
+        "asOf": anchor.isoformat(),
+        "dataSource": "DEMO" if is_demo_data_active(db) else "OPERATIONAL",
+        "kpis": {
+            key: {"cur": totals["cur"][key], "prev": totals["prev"][key]}
+            for key in totals["cur"]
+        },
+        "trend": {"labels": config["labels"], "cur": trend_current, "prev": trend_previous},
+        "meta": {
+            "analyticsTitle": config["title"],
+            "trendTitle": config["trend_title"],
+            "trendSub": f"{config['current_start'].isoformat()} → {config['current_end'].isoformat()}",
+            "compareSub": config["compare"],
+        },
+    }
+
+
+@app.get("/api/reports/analytics")
+def report_analytics(
+    period: str = "month",
+    as_of: Optional[date] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
+):
+    if period not in ANALYTICS_PERIODS:
+        raise HTTPException(status_code=422, detail="Kỳ thống kê phải là week, month, quarter hoặc year.")
+    return _analytics_payload(db, user, period, as_of or date.today())
+
+
+@app.get("/api/reports/analytics/export")
+def export_analytics(
+    period: str = "month",
+    as_of: Optional[date] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
+):
+    if period not in ANALYTICS_PERIODS:
+        raise HTTPException(status_code=422, detail="Kỳ thống kê không hợp lệ.")
+    payload = _analytics_payload(db, user, period, as_of or date.today())
+    labels = {"trips": "Lượt tàu", "tons": "Khối lượng (tấn)", "teu": "TEU", "pax": "Hành khách"}
+    rows = [[labels[key], values["cur"], values["prev"], values["cur"] - values["prev"]] for key, values in payload["kpis"].items()]
+    content = make_xlsx(payload["meta"]["analyticsTitle"], ["Chỉ tiêu", "Kỳ này", "Kỳ trước", "Chênh lệch"], rows)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="analytics_{period}_{payload["asOf"]}.xlsx"'},
+    )
 
 @app.get("/api/reports/{kind}")
 def export_report(

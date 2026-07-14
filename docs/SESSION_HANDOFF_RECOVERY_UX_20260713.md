@@ -84,3 +84,28 @@ không hard-code hoặc commit secret.
 4. Nếu code wizard, role display hoặc navigation thay đổi, mở lại regression
    tương ứng và cập nhật evidence trước khi giữ trạng thái PASS.
 5. Không merge hoặc push nếu người dùng chưa yêu cầu.
+
+## Follow-up tranche — Data, Reporting and Sidebar — 2026-07-14
+
+- Status: **IN_PROGRESS — implementation/tests PASS, browser evidence pending**.
+- Code changed after the closed Gate 5 evidence, therefore prior screenshots do
+  not prove this follow-up visual state.
+- Sidebar separates the primary navigation from the lower-left Import Excel and
+  Báo cáo hoạt động Cảng group. The footer displays role labels `User`, `Admin`
+  or `Port staff`, followed by the account name and username.
+- Restored a visible, non-sensitive API preparation panel for every role;
+  prepare/job controls remain ADMIN-only and no outbound network call is enabled.
+- Added approved-declaration analytics for week/month/quarter/year with previous
+  year comparison and XLSX export.
+- Upgraded import mapping to `KBCV-IMPORT-1.1`: label-based sheet/header detection,
+  preview diagnostics, passive external-link ignore without network access, and
+  fixed-template fallback for declarations.
+- Sentinel demo data is removed on first real create/import. CUSTOMER user and
+  organization binding is retained and converted to the real profile.
+- Automated evidence: `71 passed`; `node --check frontend/app.js` PASS;
+  `git diff --check` PASS.
+- Manual parser evidence: the untracked 39-vessel workbook is detected as 39
+  rows without staging or modifying that file.
+- Browser skill discovery returned no available in-app browser. Required follow-up:
+  run localhost visual regression for dark/light, CUSTOMER/PORT_STAFF/ADMIN,
+  Import preview and Reports at desktop plus mobile before closing this tranche.

@@ -31,7 +31,7 @@ from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organ
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db, DEMO_ORGANIZATION_TAX_CODE, remove_demo_data_for_real_input
-from backend.xlsx_io import read_workbook
+from backend.xlsx_io import make_xlsx, read_workbook, vessel_rows
 
 # ── Create all tables in test DB ──────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -191,7 +191,9 @@ def test_static_frontend(client):
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
     assert 'id="analytics-unavailable"' in res.text
-    assert 'id="external-integration-panel" class="panel integration-panel" hidden' in res.text
+    assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
+    assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
+    assert 'class="primary-nav"' in res.text and 'class="data-nav"' in res.text
     assert "Báo cáo hoạt động Cảng" in res.text
     assert "Báo cáo Cảng vụ" not in res.text
     assert 'class="panel action-panel"' not in res.text
@@ -208,7 +210,10 @@ def test_static_frontend(client):
     assert "step-error-summary" in app_js
     assert "port_approval" in app_js
     assert "cv_approval" not in app_js
-    assert "renderAnalyticsUnavailable();" in app_js
+    assert "loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month')" in app_js
+    assert "CUSTOMER:'User'" in app_js
+    assert "PORT_STAFF:'Port staff'" in app_js
+    assert "ADMIN:'Admin'" in app_js
     assert "if (state.currentUser?.role === 'ADMIN') loadIntegration();" in app_js
     assert "btn.style.display = isCustomer ? 'inline-block' : 'none'" in app_js
     assert "const crewContainer = $('#declaration-crew-container');" in app_js
@@ -218,6 +223,8 @@ def test_static_frontend(client):
     assert "[hidden] { display: none !important; }" in styles_css
     assert "overflow-y: auto" in styles_css
     assert "overscroll-behavior: contain" in styles_css
+    assert ".data-nav { margin-top: auto" in styles_css
+    assert ".integration-readiness" in styles_css
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():
@@ -620,6 +627,40 @@ def test_retired_workflow_actions_return_gone(client, customer_headers, port_sta
         db.close()
 
 
+def test_real_input_keeps_customer_binding_and_clears_demo_sentinel():
+    db = SessionLocal()
+    try:
+        demo = Organization(name="Demo customer", tax_code=DEMO_ORGANIZATION_TAX_CODE, created_at=now_iso(), updated_at=now_iso())
+        db.add(demo)
+        db.flush()
+        user = User(
+            username=f"demo-{uuid.uuid4().hex}", password_hash=get_password_hash("testpass"),
+            full_name="Demo User", role="CUSTOMER", organization_id=demo.id,
+            is_active=1, created_at=now_iso(),
+        )
+        db.add(user)
+        db.add(Vessel(organization_id=demo.id, name="Mock", registration_no=_reg(), vessel_type="Sà lan", vessel_class="VR-SII", created_at=now_iso(), updated_at=now_iso()))
+        db.commit()
+
+        assert remove_demo_data_for_real_input(
+            db, retain_organization_id=demo.id,
+            organization_data={"name": "Khách hàng thật", "tax_code": "REAL-001"},
+        ) is True
+        db.commit()
+        db.refresh(demo)
+        db.refresh(user)
+        assert demo.name == "Khách hàng thật"
+        assert demo.tax_code == "REAL-001"
+        assert user.organization_id == demo.id
+        assert db.query(Vessel).filter(Vessel.organization_id == demo.id).count() == 0
+        db.delete(user)
+        db.delete(demo)
+        db.commit()
+    finally:
+        db.rollback()
+        db.close()
+
+
 def test_changes_requested_resubmission_resets_approval_state(client, customer_headers, port_staff_headers):
     created = client.post(
         "/api/declarations?submit=true",
@@ -771,6 +812,32 @@ def test_xlsx_rejects_external_relationship_and_zip_bomb_shape():
         read_workbook(bomb.getvalue())
 
 
+def test_xlsx_ignores_non_executed_external_link_path_and_detects_headers():
+    base = make_xlsx(
+        "Dữ liệu phương tiện",
+        ["Tên phương tiện", "Số đăng ký", "Loại phương tiện", "Cấp phương tiện", "Trọng tải toàn phần"],
+        [["Sà lan kiểm thử", "SG-SMART-001", "Sà lan", "VR-SII", 850]],
+    )
+    source = zipfile.ZipFile(io.BytesIO(base))
+    output = io.BytesIO()
+    with source, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        for info in source.infolist():
+            archive.writestr(info, source.read(info.filename))
+        archive.writestr(
+            "xl/externalLinks/_rels/externalLink1.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath" Target="old.xlsx" TargetMode="External"/>'
+            '</Relationships>',
+        )
+    organization, rows = vessel_rows(read_workbook(output.getvalue()))
+    assert organization["name"] == "Khách hàng import"
+    assert rows[0]["name"] == "Sà lan kiểm thử"
+    assert rows[0]["registration_no"] == "SG-SMART-001"
+    assert rows[0]["deadweight_tons"] == 850
+    assert rows[0]["_source_row"] == 4
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 10. EXCEL REPORTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -792,6 +859,66 @@ def test_xlsx_report_appendix2(client, auth_headers):
 def test_xlsx_report_appendix3(client, auth_headers):
     res = client.get("/api/reports/appendix3", headers=auth_headers)
     assert res.status_code == 200
+
+
+def test_report_analytics_supports_week_month_quarter_year_and_export(client, customer_headers):
+    created_ids = []
+    for operating_date, tons, teu, pax in (
+        ("2042-03-15T08:00", 120, 4, 7),
+        ("2041-03-15T08:00", 80, 2, 3),
+    ):
+        created = client.post(
+            "/api/declarations",
+            json=_minimal_declaration(
+                declaration_date=operating_date[:10], eta=operating_date,
+                etd=f"{operating_date[:10]}T18:00",
+                unload={"tons": tons, "teu": teu}, passenger_count=pax,
+            ),
+            headers=customer_headers,
+        )
+        assert created.status_code == 200
+        created_ids.append(created.json()["id"])
+    db = SessionLocal()
+    try:
+        for declaration_id in created_ids:
+            declaration = db.query(Declaration).filter(Declaration.id == declaration_id).one()
+            declaration.workflow_status = "APPROVED"
+            declaration.status = "SUBMITTED"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        for period in ("week", "month", "quarter", "year"):
+            response = client.get(
+                f"/api/reports/analytics?period={period}&as_of=2042-03-15",
+                headers=customer_headers,
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["period"] == period
+            assert set(body["kpis"]) == {"trips", "tons", "teu", "pax"}
+            assert len(body["trend"]["cur"]) == len(body["trend"]["labels"])
+        month = client.get(
+            "/api/reports/analytics?period=month&as_of=2042-03-15",
+            headers=customer_headers,
+        ).json()
+        assert month["kpis"]["trips"] == {"cur": 1.0, "prev": 1.0}
+        assert month["kpis"]["tons"] == {"cur": 120.0, "prev": 80.0}
+        export = client.get(
+            "/api/reports/analytics/export?period=quarter&as_of=2042-03-15",
+            headers=customer_headers,
+        )
+        assert export.status_code == 200
+        assert "spreadsheetml" in export.headers.get("content-type", "")
+        assert zipfile.is_zipfile(io.BytesIO(export.content))
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(Declaration).filter(Declaration.id.in_(created_ids)).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client, customer_headers):
@@ -855,6 +982,8 @@ def test_all_frontend_routes_registered():
         "/api/suggestions",
         "/api/import/vessels",
         "/api/import/declaration",
+        "/api/reports/analytics",
+        "/api/reports/analytics/export",
         "/api/reports/{kind}",
         "/api/integrations/maritime-authority",
         "/api/integrations/prepare-sync",
@@ -943,7 +1072,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert preview.status_code == 200
     assert preview.json()["preview"] is True
-    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.0"
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.1"
     db = SessionLocal()
     assert db.query(ImportJob).count() == before
     db.close()
@@ -964,3 +1093,29 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     assert repeated.status_code == 200
     assert repeated.json()["idempotent"] is True
     assert repeated.json()["id"] == first.json()["id"]
+
+
+def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth_headers):
+    registration = f"SG-SMART-{uuid.uuid4().hex[:10]}"
+    workbook = make_xlsx(
+        "Danh mục tùy biến",
+        ["Ghi chú", "Số đăng ký", "Tên tàu", "Cấp PT", "Loại PT", "DWT"],
+        [["Đủ dữ liệu", registration, "Sà lan linh hoạt", "VR-SII", "Sà lan", 950]],
+    )
+    headers = {**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    preview = client.post("/api/import/vessels?preview=true", content=workbook, headers=headers)
+    assert preview.status_code == 200
+    assert preview.json()["mapping"]["strategy"] == "HEADER_LABEL_DETECTION"
+    assert preview.json()["rows"][0]["missingFields"] == []
+    imported = client.post("/api/import/vessels", content=workbook, headers=headers)
+    assert imported.status_code == 200
+    assert imported.json()["accepted"] == 1
+    assert imported.json()["rejected"] == []
+    db = SessionLocal()
+    try:
+        vessel = db.query(Vessel).filter(Vessel.registration_no == registration).one()
+        db.query(ImportJob).filter(ImportJob.source_checksum == imported.json()["checksum"]).delete(synchronize_session=False)
+        db.delete(vessel)
+        db.commit()
+    finally:
+        db.close()

@@ -138,7 +138,7 @@ function pageName(route) {
 }
 
 function roleLabel(role) {
-  return ({CUSTOMER:'Khách hàng / Chủ phương tiện', PORT_STAFF:'Nhân viên Cảng', ADMIN:'Quản trị hệ thống'})[role] || role;
+  return ({CUSTOMER:'User', PORT_STAFF:'Port staff', ADMIN:'Admin'})[role] || role;
 }
 
 function route() {
@@ -153,7 +153,7 @@ function route() {
   if (name === 'declarations') loadDeclarations();
   if (name === 'crew') loadCrew();
   if (name === 'reports') {
-    renderAnalyticsUnavailable();
+    loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month');
     if (state.currentUser?.role === 'ADMIN') loadIntegration();
   }
 }
@@ -1024,7 +1024,9 @@ function renderImportPreview() {
     warningCount = missing.length ? 1 : 0;
     bodyHtml = `<div class="attachment-field"><strong>${esc(row.vessel_name || '—')} · ${esc(row.registration_no || '—')}</strong><p>${esc(row.last_port || '—')} → ${esc(row.working_port || '—')}</p><small>${missing.length ? `Thiếu: ${esc(missing.join(', '))}` : 'Đủ dữ liệu bắt buộc.'}</small></div>`;
   }
+  const mapping = preview.mapping;
   setImportResult(`
+    ${mapping ? `<div class="import-mapping-note"><strong>Đã tự nhận diện cấu trúc</strong><span>Sheet: ${esc(mapping.sheet || '—')} · Mapping: theo nhãn cột</span></div>` : ''}
     ${warningCount ? `<div class="warning-strip visible">${kind === 'vessels' ? `Có ${warningCount} dòng thiếu dữ liệu bắt buộc — các dòng này sẽ bị bỏ qua nếu bạn tiếp tục.` : 'File thiếu dữ liệu bắt buộc — không thể import cho đến khi bổ sung.'}</div>` : ''}
     ${bodyHtml}
     <div class="modal-actions">
@@ -1117,6 +1119,7 @@ async function loadReportAnalytics(period = 'month') {
   try {
     const data = await api(`/api/reports/analytics?period=${period}`);
     $('#analytics-unavailable').hidden = true;
+    $('#analytics-demo-notice').hidden = data.dataSource !== 'DEMO';
     $('#kpi-grid').hidden = false;
     $('.analytics-split').hidden = false;
     $('#export-analytics').disabled = false;
@@ -1143,7 +1146,11 @@ async function loadReportAnalytics(period = 'month') {
       const delta = analyticsDelta(kpi.cur, kpi.prev);
       return `<tr><td>${label}</td><td>${fmt(kpi.cur)}</td><td>${fmt(kpi.prev)}</td><td class="compare-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</td></tr>`;
     }).join('');
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    renderAnalyticsUnavailable();
+    $('#analytics-unavailable').querySelector('p').textContent = error.message;
+    toast(error.message, true);
+  }
 }
 
 function exportAnalyticsReport() {
@@ -1212,7 +1219,7 @@ async function init() {
   try {
     state.currentUser = await api('/api/auth/me');
     const displayName = state.currentUser.full_name?.trim() || state.currentUser.username;
-    $('#user-display').innerHTML = `<strong>${esc(displayName)}</strong><small>${esc(roleLabel(state.currentUser.role))}</small>`;
+    $('#user-display').innerHTML = `<span class="role-pill">${esc(roleLabel(state.currentUser.role))}</span><strong>${esc(displayName)}</strong><small>@${esc(state.currentUser.username)}</small>`;
     $('#logout-button').style.display = 'inline-block';
 
     // Role-based UI visibility constraints
@@ -1232,8 +1239,10 @@ async function init() {
     const reportsNav = $('nav a[href="#reports"]');
     if (reportsNav) reportsNav.style.display = 'block';
 
-    const externalIntegrationPanel = $('#external-integration-panel');
-    if (externalIntegrationPanel) externalIntegrationPanel.style.display = isAdmin ? 'grid' : 'none';
+    const integrationActions = $('#integration-admin-actions');
+    const integrationJobs = $('#sync-jobs');
+    if (integrationActions) integrationActions.hidden = !isAdmin;
+    if (integrationJobs) integrationJobs.hidden = !isAdmin;
 
   } catch (err) {
     state.currentUser = null;

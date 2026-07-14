@@ -131,10 +131,15 @@ an obsolete status.
 
 | Method | Path | Allowed Roles | Request | Response |
 |--------|------|---------------|---------|----------|
-| POST | `/api/import/vessels` | CUSTOMER, ADMIN | XLSX body | `{accepted, rejected}` |
-| POST | `/api/import/declaration`| CUSTOMER, ADMIN | XLSX body | `{accepted, rejected, id}` |
+| POST | `/api/import/vessels?preview=true` | CUSTOMER, ADMIN | XLSX body | `{preview, mapping, rows, checksum}` |
+| POST | `/api/import/vessels` | CUSTOMER, ADMIN | XLSX body | `{accepted, rejected, mappingVersion, checksum}` |
+| POST | `/api/import/declaration?preview=true` | CUSTOMER | XLSX body | `{preview, row, checksum}` |
+| POST | `/api/import/declaration`| CUSTOMER | XLSX body | `{accepted, rejected, id, mappingVersion, checksum}` |
 
 *   **Tenant Constraint**: Imported vessels/declarations are automatically bound to the logged-in customer's `organization_id`.
+*   **Mapping `KBCV-IMPORT-1.1`**: vessel workbooks are detected by normalized Vietnamese header labels across sheet names and header rows. Required fields are Tên phương tiện, Số đăng ký, Loại phương tiện and Cấp phương tiện. Declaration workbooks are detected by field labels with the published template cells retained as fallback.
+*   **External link safety**: passive Excel `hyperlink` and `externalLinkPath` relationships are ignored and never fetched. Other external relationship types remain rejected.
+*   **Demo transition**: the sentinel demo dataset is removed on first real create/import. A demo CUSTOMER keeps its organization/user binding while the sentinel is cleared and the real organization profile is applied.
 
 ### REPORTS
 
@@ -143,8 +148,11 @@ an obsolete status.
 | GET | `/api/reports/appendix1` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 | GET | `/api/reports/appendix2` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 | GET | `/api/reports/appendix3` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
+| GET | `/api/reports/analytics` | CUSTOMER, PORT_STAFF, ADMIN | `period=week\|month\|quarter\|year`, optional `as_of` | `{period, dataSource, kpis, trend, meta}` |
+| GET | `/api/reports/analytics/export` | CUSTOMER, PORT_STAFF, ADMIN | same as analytics | XLSX download |
 
 *   **Tenant Constraint**: CUSTOMER receives only records from its own organization; reviewers and ADMIN receive the operational scope allowed by their role.
+*   Analytics includes only declarations in `APPROVED` and compares the selected period with the same period of the previous year. `dataSource=DEMO` is a display marker only; it is not governance evidence.
 
 ### INTEGRATIONS
 

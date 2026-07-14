@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.0.1">
+  <link rel="stylesheet" href="/styles.css?v=1.1.0">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -19,12 +19,14 @@
         <span class="brand-copy"><strong>TIEN-TAN THUAN PORT</strong><small>Port Declaration System</small></span>
       </a>
       <div class="workspace-chip"><span class="status-dot"></span><span><small>HỆ THỐNG</small><strong>Đang hoạt động</strong></span></div>
-      <nav>
+      <nav class="primary-nav">
         <p class="nav-label">Vận hành</p>
         <a href="#dashboard" data-route="dashboard"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></span>Tổng quan</a>
         <a href="#declarations" data-route="declarations"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v.5h1.5A1.5 1.5 0 0 1 19 7v12a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V7a1.5 1.5 0 0 1 1.5-1.5H8V5a1 1 0 0 1 1-1z"></path><path d="M9 4.5h6"></path><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4"></path></svg></span>Phiếu khai báo</a>
         <a href="#vessels" data-route="vessels"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l7.4 4.2a1.2 1.2 0 0 0 1.2 0L20 13"></path><path d="M5.5 11.2V6.5a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v4.7"></path><path d="M12 5V3"></path><path d="M6 19.5c1.2.8 2.3.8 3.5 0s2.3-.8 3.5 0 2.3.8 3.5 0"></path></svg></span>Hồ sơ phương tiện</a>
         <a href="#crew" data-route="crew"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span>Danh sách thuyền viên</a>
+      </nav>
+      <nav class="data-nav" aria-label="Dữ liệu và báo cáo">
         <p class="nav-label">Dữ liệu</p>
         <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import Excel</a>
         <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động Cảng</a>
@@ -87,8 +89,8 @@
         <section class="page" data-page="import">
           <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Dùng hai file mẫu để map dữ liệu vào hệ thống.</p></div></div>
           <div class="import-grid">
-            <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Nhập danh sách phương tiện từ <code>Ho_so_phuong_tien_thuy_noi_dia.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" id="import-vessels" accept=".xlsx"></label></section>
-            <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Nhập một lượt từ <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
+            <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Tự nhận diện sheet, hàng tiêu đề và tên cột. File mẫu hoặc bảng Excel có đủ Tên phương tiện, Số đăng ký, Loại và Cấp phương tiện đều có thể kiểm tra trước khi nhập.</p><label class="file-button">Chọn file<input type="file" id="import-vessels" accept=".xlsx"></label></section>
+            <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Tự dò nhãn dữ liệu trong workbook; file mẫu <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code> có đủ dữ liệu là có thể nhập.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
           </div>
           <section class="panel"><div class="panel-header"><div><p class="eyebrow">NHẬT KÝ IMPORT</p><h2>Kết quả gần nhất</h2></div></div><div id="import-result" class="empty-state">Chưa có file nào được import trong phiên này.</div></section>
         </section>
@@ -97,6 +99,7 @@
           <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><p>Dữ liệu được tổng hợp từ các phiếu đã thực hiện trong kỳ.</p></div></div>
           <section id="analytics-panel" class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="panel-actions"><div class="segmented period-switch"><button type="button" data-period="week">Tuần</button><button type="button" data-period="month" class="active">Tháng</button><button type="button" data-period="quarter">Quý</button><button type="button" data-period="year">Năm</button></div><button id="export-analytics" type="button" class="outline-button">Xuất Excel</button></div></div>
             <div id="analytics-unavailable" class="feature-notice" role="status" hidden><strong>Thống kê sản lượng chưa khả dụng</strong><p>Hệ thống chưa có API thống kê đã được phê duyệt. Các báo cáo PL.01–PL.03 bên dưới vẫn sử dụng dữ liệu phiếu đã duyệt.</p></div>
+            <div id="analytics-demo-notice" class="demo-data-notice" role="status" hidden><strong>Dữ liệu minh họa</strong><span>Số liệu dùng bộ dữ liệu mẫu để xem giao diện. Khi tạo hoặc import dữ liệu thật, bộ mẫu tự được gỡ và báo cáo chuyển sang dữ liệu vận hành.</span></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
               <div class="trend-card"><div class="trend-head"><strong id="trend-title">Lượt tàu theo tháng</strong><span class="muted" id="trend-sub">—</span></div><div class="trend-chart" id="trend-chart"></div><div class="trend-legend"><span><i class="dot-cur"></i>Kỳ này</span><span><i class="dot-prev"></i>Cùng kỳ năm trước</span></div></div>
@@ -109,7 +112,7 @@
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button" data-report="appendix2">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button" data-report="appendix3">Xuất Excel</button></article>
           </div>
-          <section id="external-integration-panel" class="panel integration-panel" hidden><div><p class="eyebrow">KẾT NỐI DỮ LIỆU BÊN NGOÀI</p><h2>Chuẩn bị gói dữ liệu tích hợp</h2><p>Chức năng quản trị chỉ chuẩn bị dữ liệu; hệ thống chưa gửi ra bên ngoài khi chưa có đặc tả API và thông tin xác thực chính thức.</p></div><div class="integration-state"><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói dữ liệu</button></div><div id="sync-jobs" class="table-wrap span-full"></div></section>
+          <section id="external-integration-panel" class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI DỮ LIỆU BÊN NGOÀI</p><h2>Chuẩn bị luồng tích hợp API</h2><p>Luồng payload, nhật ký chuẩn bị và adapter đã sẵn sàng ở chế độ thủ công. Hệ thống chưa gửi ra ngoài cho đến khi có đặc tả endpoint, thông tin xác thực và phê duyệt chính thức.</p><div class="integration-readiness"><span><b>Payload</b> Sẵn sàng chuẩn bị</span><span><b>Endpoint</b> Chờ đặc tả</span><span><b>Xác thực</b> Chờ cấu hình</span></div></div><div id="integration-admin-actions" class="integration-state" hidden><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói dữ liệu</button></div><div id="sync-jobs" class="table-wrap span-full" hidden></div></section>
         </section>
       </main>
     </div>
@@ -146,6 +149,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.0.1" defer></script>
+  <script src="/app.js?v=1.1.0" defer></script>
 </body>
 </html>

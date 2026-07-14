@@ -348,3 +348,39 @@ official authority prerequisites recorded in its work order.
 Tất cả các bước UAT Wizard 1-6 đã hoàn thành. Bằng chứng kiểm thử visual được
 lưu tại `docs/evidence/recovery-ux-20260714/`. Analytics và production/staging
 readiness vẫn là phạm vi riêng, không được suy diễn là đã đóng cùng UX Gate 5.
+
+---
+
+## Tranche: Recovery Data, Reporting and Sidebar — 2026-07-14
+
+- **Branch**: `recovery/frontend-baseline-20260712`
+- **Status**: IN_PROGRESS — code and automated regression PASS; browser evidence pending
+- **Phase**: REVIEW
+- **Risk Level**: R2 (import/data replacement and role-scoped reporting)
+
+Implemented:
+
+- Lower-left sidebar group for Import Excel and Báo cáo hoạt động Cảng.
+- Footer role labels `User`, `Admin`, `Port staff` with account identity.
+- Visible API preparation/readiness information; ADMIN-only mutation controls.
+- Week/month/quarter/year approved-declaration analytics and XLSX export.
+- Sentinel datamock auto-removal on first real create/import while preserving a
+  CUSTOMER organization binding.
+- Smart XLSX header/sheet detection with preview diagnostics and passive external
+  link-path ignore; mapping version `KBCV-IMPORT-1.1`.
+
+Evidence available:
+
+- `pytest -q`: 71 passed.
+- `node --check frontend/app.js`: PASS.
+- `git diff --check`: PASS.
+- User-provided untracked 39-vessel workbook parsed as 39 rows; it remains
+  untracked and excluded from commit.
+
+Open evidence:
+
+- In-app browser discovery returned no browser sessions. Do not mark this tranche
+  CLOSED until localhost visual checks cover both themes, three roles, import
+  preview, reports/analytics and a mobile viewport.
+- This tranche does not activate an external API and does not claim CVF governance
+  behavior. Any such claim still requires a real provider call under project policy.

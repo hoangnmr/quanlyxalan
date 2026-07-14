@@ -3,7 +3,7 @@
 ## Tranche
 
 - ID: RECOVERY-UX-T1
-- Status: CLOSED — visual and behavioral regression tests passed, branch is ready for Gate 5 closure
+- Status: REMEDIATION PASS — Gate 5 closure pending full six-step wizard UAT
 - Branch: `recovery/frontend-baseline-20260712`
 - Baseline: `929a8c487c572b7bcad859e237b17da1d494a1db`
 - Worktree: `Khai-bao-Cang-vu-recovery-ux`
@@ -37,14 +37,23 @@ Implemented in this checkpoint:
 - Live API reproduction before commit `5e74643`: Analytics returned 404 and
   customer access to integration returned 403. The frontend now avoids both
   invalid calls and regression remains PASS 67/67.
-- **Browser/UAT evidence (2026-07-14):** ALL PASSED. All critical issues (wizard crash, integration panel CSS leak, mobile sidebar layout) have been fixed and visually verified on the real browser. Detailed evidence recorded in [BROWSER_EVIDENCE_RECOVERY_UX_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md).
+- **Browser/UAT evidence (2026-07-14):** Three remediation findings PASS. The
+  wizard opens at Step 1, role-based integration visibility and mobile logout
+  access are visually verified. Detailed evidence is recorded in
+  `docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md`.
 
 ## Not completed in this checkpoint
 
 - Analytics restoration or implementation. The baseline frontend calls an
   analytics endpoint that is not present in the historical backend.
-- **RESOLVED (2026-07-14):** Live browser screenshot evidence. Multi-role multi-viewport visual testing has been completed. Gate 5 is READY (PASS).
+- Full six-step wizard UAT through Step 6, including validation/focus recovery,
+  crew checklist and review/send evidence.
 
-## Active risk
+## Active risk and next governed move
 
-No active risks. All visual regressions are resolved.
+- R2 remains active because the branch changes workflow-facing UX and is not
+  yet integrated.
+- Do not close Gate 5 or merge solely from the Step 1 screenshot. Complete the
+  six-step browser journey and attach Step 4/Step 6 plus console/network proof.
+- Analytics remains outside this tranche and is not a blocker for remediation
+  verification, but it must not be described as implemented.

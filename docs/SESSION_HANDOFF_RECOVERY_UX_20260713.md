@@ -16,6 +16,8 @@ worktree `main` hoặc bản restore.
 - Commit workflow/UX nền: `0b2ba72`
 - Commit sửa lỗi runtime mới nhất: `5e74643`
 - Commit remediation browser findings: `7c5431d`
+- Commit browser retest/frontend follow-up: `a2b1ca0`
+- Trạng thái: ba browser finding PASS; Gate 5 OPEN chờ wizard đủ sáu bước.
 - Phase: BUILD/REVIEW
 - Risk: R2 vì có workflow, RBAC và migration dữ liệu.
 - Live governance evidence required: YES đối với mọi tuyên bố về CVF governance.
@@ -76,6 +78,14 @@ Commit `7c5431d` bổ sung:
 - Cho sidebar mobile cuộn dọc để truy cập mục Đăng xuất.
 - Thêm regression guard và giữ toàn bộ test ở mức `67 passed`.
 
+Commit `a2b1ca0` bổ sung:
+
+- Browser evidence sau sửa cho ba finding trực tiếp.
+- Hiển thị panel tích hợp theo role bằng `style.display` và cache-busting asset.
+- Chuẩn hóa icon SVG sidebar mobile về 16px.
+- Bằng chứng hiện có xác nhận wizard mở ở Bước 1; chưa chứng minh hành trình
+  hoàn chỉnh qua Bước 6.
+
 ## Bằng chứng kỹ thuật hiện có
 
 - `python -m pytest -q`: `67 passed`.
@@ -93,8 +103,10 @@ Commit `7c5431d` bổ sung:
 - CVF Workspace Doctor ở đầu tranche: PASS 17/17.
 
 **Đã bổ sung bằng chứng browser trực quan vào ngày 2026-07-14.**
-Tất cả các UAT/browser test đã được thực hiện bằng trình duyệt thật qua browser subagent.
-Bằng chứng lưu tại `docs/evidence/recovery-ux-20260714/`. Báo cáo đầy đủ xem tại `docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md`.
+Các scenario trong ma trận browser đã được chạy bằng trình duyệt thật; ba
+finding trực tiếp PASS. Wizard mới có evidence tại Bước 1, chưa đủ full-flow
+UAT sáu bước. Bằng chứng lưu tại `docs/evidence/recovery-ux-20260714/`; phạm vi
+và giới hạn được ghi tại `docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md`.
 Cơ sở dữ liệu được cấu hình lại sạch, nạp tài khoản admin, seed đầy đủ dữ liệu mẫu trước khi chạy test.
 
 ## Cách chạy đúng worktree
@@ -121,20 +133,20 @@ Không giả định mật khẩu Admin. Nếu cần Admin trên database mới,
 
 ## Việc chưa hoàn thành và điều kiện chờ
 
-### 1. Browser/UAT và Gate 5 — ĐÃ SỬA FINDING, CHỜ RETEST (NOT READY)
+### 1. Browser/UAT và Gate 5 — BA FINDING PASS, CHỜ FULL-FLOW UAT
 
 Ngày 2026-07-14, agent đã chạy đầy đủ kiểm thử trực tiếp trên trình duyệt qua browser subagent.
 Bằng chứng dạng ảnh đã được chụp đầy đủ tại 1920×1080, 1366×768, 390×844 và lưu tại `docs/evidence/recovery-ux-20260714/`.
 Báo cáo chi tiết đã được tạo tại `docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md`.
-**Kết luận Gate 5:** **CLOSED / READY** do phát hiện các lỗi nghiêm trọng sau:
+Ba lỗi nghiêm trọng ban đầu gồm:
 1. **Crash Wizard (Finding 1):** JavaScript lỗi ở dòng 681 của `app.js` khi click tạo/mở phiếu (TypeError querySelectorAll trên null).
 2. **CSS Hidden Override (Finding 2):** Lộ panel Kết nối ngoài cho Khách hàng/Staff do CSS rule của `.panel`/`.integration-panel` ghi đè thuộc tính `hidden` của HTML.
 3. **Sidebar Mobile Scroll (Finding 3):** Không thể cuộn menu sidebar trên Mobile để bấm nút Đăng xuất.
 
-Ba finding trên đã được sửa trong commit `7c5431d`. Chưa có browser evidence
-sau remediation, vì vậy ảnh tại `docs/evidence/recovery-ux-20260714/` chỉ chứng
-minh trạng thái lỗi trước sửa. Cần chạy lại đúng ba scenario trước khi thay đổi
-kết luận Gate 5.
+Ba finding trên đã được sửa tại `7c5431d`/`a2b1ca0` và có browser evidence
+PASS cho phạm vi trực tiếp. Tuy nhiên ảnh wizard mới dừng tại Bước 1, chưa có
+Bước 4 checklist, Bước 6 Xem lại & Gửi hoặc console/network xuyên suốt sáu
+bước. **Gate 5 chưa CLOSED** cho đến khi bổ sung các bằng chứng này.
 
 ### 2. Analytics
 
@@ -171,11 +183,12 @@ chưa có chỉ đạo rõ của người dùng.
 ## Trình tự tiếp quản đề nghị
 
 1. Chạy First-Request Protocol trong `AGENTS.md` và Workspace Doctor.
-2. Xác nhận cwd, branch, `git status`, commit `7c5431d` có trong lịch sử.
+2. Xác nhận cwd, branch, `git status`, commit `a2b1ca0` có trong lịch sử.
 3. Đọc bảng trạng thái trong báo cáo UX; không dùng kết luận lỗi UX-101/102 cũ.
 4. Chạy migration và `pytest` trước kiểm thử browser.
-5. Retest browser cho wizard sáu bước, panel tích hợp theo role và sidebar
-   mobile 390×844; không sửa analytics trong cùng tranche.
+5. Đi đủ wizard sáu bước và lưu evidence Bước 4/Bước 6 cùng console/network;
+   panel theo role và sidebar mobile đã PASS, không cần lặp lại nếu môi trường
+   không thay đổi. Không sửa analytics trong cùng tranche.
 6. Nếu có sửa code, ghi bằng chứng vào checkpoint/handoff và commit trên branch
    recovery; không merge/push nếu chưa được người dùng yêu cầu.
 

@@ -332,8 +332,8 @@ official authority prerequisites recorded in its work order.
 ## Session handoff: Recovery UX branch — 2026-07-13
 
 - **Branch**: `recovery/frontend-baseline-20260712`
-- **Implementation commits**: `0b2ba72`, `5e74643`, `7c5431d`
-- **Status**: Browser findings remediated; post-fix browser retest and Analytics remain open.
+- **Implementation commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`
+- **Status**: Three browser findings PASS; full six-step wizard UAT and Analytics remain open.
 - **Canonical session handoff**:
   `docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`
 - **UX issue ledger**:
@@ -341,4 +341,5 @@ official authority prerequisites recorded in its work order.
 
 Agents continuing this work must use the isolated recovery worktree, preserve
 the untracked Excel files in `templates/`, and must not close Gate 5 without
-real browser/UAT evidence.
+real browser/UAT evidence. Current evidence reaches wizard Step 1 only; Gate 5
+must remain open until the complete six-step journey is recorded.

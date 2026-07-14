@@ -8,7 +8,7 @@ Tài liệu này ghi nhận kết quả kiểm thử trực tiếp giao diện v
 
 - **Worktree:** `D:\UNG DUNG AI\TOOL AI 2026\CVF-Workspace\Khai-bao-Cang-vu-recovery-ux`
 - **Branch:** `recovery/frontend-baseline-20260712`
-- **HEAD Commit:** (đang chuẩn bị commit sửa đổi)
+- **HEAD kiểm thử:** mã nguồn được commit tại `a2b1ca0`
 - **URL thử nghiệm:** `http://127.0.0.1:8086`
 - **Thời gian thực hiện:** 2026-07-14 11:00 (Giờ hệ thống)
 - **Môi trường DB:** Database SQLite sạch (`data/cang_vu.db`), nâng cấp bằng `alembic upgrade head`, seed dữ liệu demo bằng `seed_demo_data.py`, bootstrap tài khoản admin bằng `bootstrap_admin.py`.
@@ -24,7 +24,7 @@ Tài liệu này ghi nhận kết quả kiểm thử trực tiếp giao diện v
 | Role | Viewport | Kịch bản / Luồng chính | Kết quả | Chi tiết / Screenshot |
 |---|---|---|---|---|
 | **CUSTOMER** | Desktop (1920×1080) | Đăng nhập & xem Dashboard | **PASS** | `customer_1920x1080_dashboard_pass.png` |
-| | | Tạo phiếu / Mở wizard | **PASS** | Wizard mở ra thành công ở Bước 1. `customer_1920x1080_wizard-step1_pass.png` |
+| | | Tạo phiếu / Mở wizard | **PASS — phạm vi mở Bước 1** | Wizard mở ra thành công ở Bước 1. `customer_1920x1080_wizard-step1_pass.png` |
 | | | Trang Báo cáo (Ẩn panel ngoài) | **PASS** | Ẩn hoàn toàn panel Kết nối ngoài. `customer_1920x1080_reports-no-errors_pass.png` |
 | | Laptop (1366×768) | Xem Dashboard | **PASS** | `customer_1366x768_dashboard_pass.png` |
 | | | Trang Báo cáo | **PASS** | Ẩn panel kết nối ngoài thành công. `customer_1366x768_reports-no-errors_pass.png` |
@@ -98,6 +98,17 @@ Tất cả các screenshot được lưu trữ tại thư mục:
 
 ### Kết luận Gate 5:
 > [!NOTE]
-> **GATE 5 STATUS: READY (PASS)**
+> **REMEDIATION STATUS: PASS — GATE 5 CLOSURE PENDING**
 > 
-> Sau khi áp dụng đầy đủ các bản vá frontend trên `frontend/app.js` và `frontend/styles.css`, cả ba lỗi visual/behavioral nghiêm trọng đều đã được khắc phục triệt để và được chứng minh thành công qua kiểm thử trực tiếp trên trình duyệt thật (qua các viewport 1920x1080, 1366x768 và 390x844). Dự án recovery **ĐÃ ĐỦ ĐIỀU KIỆN** để đóng Gate 5 và tiến hành tích hợp.
+> Sau khi áp dụng các bản vá frontend, ba finding trực tiếp đã PASS trên trình
+> duyệt thật: wizard mở được, panel tích hợp hiển thị đúng theo role và menu
+> mobile truy cập được Đăng xuất. Tuy nhiên evidence hiện chỉ ghi nhận wizard
+> tại Bước 1, chưa đi đủ sáu bước đến màn Xem lại & Gửi. Vì vậy chưa dùng báo
+> cáo này để tuyên bố đóng toàn bộ Gate 5 hoặc tích hợp branch.
+
+### Bằng chứng còn thiếu để đóng Gate 5
+
+1. Đi đủ sáu bước wizard bằng tài khoản CUSTOMER trên HEAD `a2b1ca0`.
+2. Xác nhận validation/focus recovery, checklist thuyền viên và màn Xem lại & Gửi.
+3. Ghi ảnh hoặc video tối thiểu tại Bước 4 và Bước 6; ghi rõ console/network
+   không có lỗi trong toàn bộ hành trình.

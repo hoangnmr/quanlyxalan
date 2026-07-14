@@ -83,12 +83,10 @@ Commit `5e74643` bổ sung:
   - `page=1&page_size=1` trả một item và metadata tổng.
 - CVF Workspace Doctor ở đầu tranche: PASS 17/17.
 
-Không có bằng chứng browser trực quan trong session này. Không được chuyển các
-mục “chờ browser/UAT” thành PASS chỉ dựa trên mã nguồn hoặc test tĩnh.
-
-Ngày 2026-07-14 đã thử kết nối in-app browser theo browser skill nhưng danh
-sách browser khả dụng rỗng. Không dùng công cụ browser khác để thay thế và
-không tạo tuyên bố screenshot/viewport.
+**Đã bổ sung bằng chứng browser trực quan vào ngày 2026-07-14.**
+Tất cả các UAT/browser test đã được thực hiện bằng trình duyệt thật qua browser subagent.
+Bằng chứng lưu tại `docs/evidence/recovery-ux-20260714/`. Báo cáo đầy đủ xem tại `docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md`.
+Cơ sở dữ liệu được cấu hình lại sạch, nạp tài khoản admin, seed đầy đủ dữ liệu mẫu trước khi chạy test.
 
 ## Cách chạy đúng worktree
 
@@ -114,11 +112,15 @@ Không giả định mật khẩu Admin. Nếu cần Admin trên database mới,
 
 ## Việc chưa hoàn thành và điều kiện chờ
 
-### 1. Browser/UAT và Gate 5
+### 1. Browser/UAT và Gate 5 — ĐÃ THU THẬP BẰNG CHỨNG (FAIL / NOT READY)
 
-Chưa có ảnh hoặc thao tác thật tại 1920×1080, 1366×768, 390×844. Chưa có
-keyboard/screen-reader/axe test và task study theo role. Cần Claude hoặc agent
-có browser chạy đúng branch, ghi URL, viewport, role, thao tác, kết quả và ảnh.
+Ngày 2026-07-14, agent đã chạy đầy đủ kiểm thử trực tiếp trên trình duyệt qua browser subagent.
+Bằng chứng dạng ảnh đã được chụp đầy đủ tại 1920×1080, 1366×768, 390×844 và lưu tại `docs/evidence/recovery-ux-20260714/`.
+Báo cáo chi tiết đã được tạo tại `docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md`.
+**Kết luận Gate 5:** **FAIL / NOT READY** do phát hiện các lỗi nghiêm trọng sau:
+1. **Crash Wizard (Finding 1):** JavaScript lỗi ở dòng 681 của `app.js` khi click tạo/mở phiếu (TypeError querySelectorAll trên null).
+2. **CSS Hidden Override (Finding 2):** Lộ panel Kết nối ngoài cho Khách hàng/Staff do CSS rule của `.panel`/`.integration-panel` ghi đè thuộc tính `hidden` của HTML.
+3. **Sidebar Mobile Scroll (Finding 3):** Không thể cuộn menu sidebar trên Mobile để bấm nút Đăng xuất.
 
 ### 2. Analytics
 

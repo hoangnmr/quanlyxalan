@@ -25,7 +25,8 @@
   đã Việt hóa.
 - **UX-004 — đã xử lý ở commit hiện tại:** control chọn thuyền viên dùng nhóm
   checkbox có vùng chạm tối thiểu thay cho native `select multiple`.
-- **Analytics và kiểm thử trực quan đa viewport — vẫn chờ bằng chứng riêng.**
+- **Analytics — vẫn chờ tranche riêng.**
+- **Kiểm thử trực quan đa viewport (2026-07-14):** Đã thu thập đầy đủ bằng chứng thực tế qua browser subagent. Kết quả kiểm thử **FAIL (NOT READY)** do phát hiện lỗi crash JS nghiêm trọng của wizard, lỗi hiển thị panel kết nối ngoài do CSS, và lỗi cuộn menu sidebar mobile.
   Analytics không được gộp vào tranche sửa workflow/UX này.
 
 ## Sổ trạng thái sau thi công
@@ -37,13 +38,13 @@
 | UX-102 | **ĐÍNH CHÍNH — ĐÃ CÓ SẴN** | Phân trang hoạt động khi gửi `page`; `page_size=2` trả đúng hai items và metadata tổng. Response mảng khi không có `page` là tương thích ngược có chủ ý. | Không còn việc code trong checkpoint này. Chỉ cần performance test với tập dữ liệu tham chiếu khi Gate 5 được tổ chức. |
 | UX-103 | **ĐÃ XỬ LÝ** | Audit/runtime dùng “Khách hàng xác nhận gửi phiếu khai báo”; UI và preview bỏ “Nộp/nộp”. | Chờ browser/UAT xác nhận tất cả thông điệp nhìn thấy đúng ngữ cảnh. |
 | UX-104 | **CHƯA ĐÓNG** | Dashboard đã ẩn chức năng theo role và có attention queue theo vai trò. | Chờ task study hoặc UAT với khách hàng và nhân viên Cảng để xác định thứ tự ưu tiên widget; chưa đủ bằng chứng để tái cấu trúc dashboard. |
-| UX-105 | **ĐÃ THI CÔNG, CHỜ BẰNG CHỨNG UX** | Wizard có error summary, `aria-invalid`, mô tả lỗi theo field và focus về lỗi đầu tiên. Static/regression test đã PASS. | Chờ kiểm thử bàn phím thật, screen reader hoặc axe-core trong browser; chưa được dùng kết quả static để đóng Gate 5. |
+| UX-105 | **BLOCKED** | Đã cấu hình mã nguồn nhưng bị chặn kiểm thử trực tiếp do lỗi Crash Wizard (Finding 1) làm vỡ DOM khi mở phiếu. | Sửa lỗi Crash Wizard để có thể tiến hành kiểm thử validation và focus ring. |
 | UX-106 | **ĐÃ XỬ LÝ** | “Crew List” đã được Việt hóa trong app và preview. | Chỉ còn rà soát nội dung bằng mắt trong lượt browser/UAT. |
 | UX-107 | **PASS** | Không còn role/stage CV/QLC/BP trong UI hay schema/runtime hiện hành; các tên action cũ chỉ còn trong deny-list và regression test để bảo đảm trả 410. | Không xóa deny-list/test vì đó là hàng rào chống client cũ gọi nhầm. |
 | UX-002 cũ | **ĐÃ XỬ LÝ** | Nhãn được đổi thành “Nháp cục bộ · chưa gửi”, có thời điểm lưu cục bộ khi phát sinh. | Chờ quan sát bằng mắt để xác nhận người dùng hiểu đúng; không được mô tả là đồng bộ server. |
-| UX-004 cũ | **ĐÃ THI CÔNG, CHỜ BẰNG CHỨNG UX** | Native `select multiple` đã được thay bằng checkbox checklist thân thiện bàn phím/mobile. | Chờ browser test ở desktop và mobile, kiểm tra vùng chạm và Tab/Space. |
+| UX-004 cũ | **BLOCKED** | Đã thi công checkbox checklist trong mã nguồn, nhưng bị chặn kiểm thử trực quan trên giao diện do lỗi Crash Wizard (Finding 1). | Sửa lỗi Crash Wizard để có thể kiểm thử Tab/Space và vùng chạm trên checklist. |
 | Analytics | **CHƯA XỬ LÝ — NGOÀI TRANCHE** | Đã xác nhận frontend gọi endpoint chưa tồn tại và xử lý 404 bằng toast, không làm vỡ trang. | Cần một tranche riêng gồm định nghĩa chỉ số, API contract, quyền truy cập, dữ liệu tham chiếu và thiết kế biểu đồ trước khi code. |
-| Responsive/Gate 5 | **CHƯA CÓ BẰNG CHỨNG** | CSS breakpoint và cấu trúc responsive tồn tại; unit/static test xanh. | Chờ ảnh và thao tác thật tối thiểu tại 1920×1080, 1366×768, 390×844; cần kiểm thử bàn phím, accessibility và task completion. |
+| Responsive/Gate 5 | **FAIL (NOT READY)** | Đã thu thập bằng chứng đa viewport thành công ngày 2026-07-14. Phát hiện lỗi nghiêm trọng crash wizard (Finding 1), lỗi CSS panel kết nối ngoài (Finding 2), và lỗi cuộn nút đăng xuất trên mobile (Finding 3). | Sửa các lỗi layout, CSS và JS crash nêu trên trước khi xin phê duyệt Gate 5. |
 
 ## Cập nhật lỗi runtime — 2026-07-14
 

@@ -3,7 +3,7 @@
 ## Tranche
 
 - ID: RECOVERY-UX-T1
-- Status: IN_PROGRESS — implementation complete, awaiting human visual review
+- Status: REVIEWED — browser evidence collected, failed due to critical UI crashes and CSS leaks
 - Branch: `recovery/frontend-baseline-20260712`
 - Baseline: `929a8c487c572b7bcad859e237b17da1d494a1db`
 - Worktree: `Khai-bao-Cang-vu-recovery-ux`
@@ -51,14 +51,16 @@ Implemented in this checkpoint:
 - Live API reproduction before commit `5e74643`: Analytics returned 404 and
   customer access to integration returned 403. The frontend now avoids both
   invalid calls and regression remains PASS 67/67.
+- **Browser/UAT evidence (2026-07-14):** Collected comprehensive screenshots and
+  videos across three viewports (Desktop, Laptop, Mobile). Found a critical crash
+  in the Customer Declaration Wizard and a serious security/CSS leak of the Admin Integration panel.
+  Detailed evidence recorded in [BROWSER_EVIDENCE_RECOVERY_UX_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_RECOVERY_UX_20260714.md).
 
 ## Not completed in this checkpoint
 
 - Analytics restoration or implementation. The baseline frontend calls an
   analytics endpoint that is not present in the historical backend.
-- Live browser screenshot evidence. No in-app browser window was available in
-  the 2026-07-13 or 2026-07-14 sessions; human visual review remains mandatory
-  before closure.
+- **RESOLVED (2026-07-14):** Live browser screenshot evidence. Multi-role multi-viewport visual testing has been completed. Gate 5 remains NOT READY (FAIL) due to critical visual findings.
 
 ## Active risk and next governed move
 

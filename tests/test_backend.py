@@ -14,6 +14,7 @@ import io
 import os
 import tempfile
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organ
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db, DEMO_ORGANIZATION_TAX_CODE, remove_demo_data_for_real_input
-from backend.xlsx_io import read_workbook
+from backend.xlsx_io import make_xlsx, read_workbook, vessel_rows
 
 # ── Create all tables in test DB ──────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -64,9 +65,7 @@ def _seed_user() -> None:
         user_data = [
             ("testuser", "ADMIN", None),
             ("customeruser", "CUSTOMER", org.id),
-            ("cvuser", "CV", None),
-            ("qlcuser", "QLC", None),
-            ("bpuser", "BP", None),
+            ("portstaff", "PORT_STAFF", None),
         ]
         for username, role, org_id in user_data:
             if not db.query(User).filter(User.username == username).first():
@@ -111,24 +110,8 @@ def customer_headers(client):
 
 
 @pytest.fixture(scope="module")
-def cv_headers(client):
-    res = client.post("/api/auth/login", json={"username": "cvuser", "password": "testpass"})
-    assert res.status_code == 200, f"Login failed: {res.text}"
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-@pytest.fixture(scope="module")
-def qlc_headers(client):
-    res = client.post("/api/auth/login", json={"username": "qlcuser", "password": "testpass"})
-    assert res.status_code == 200, f"Login failed: {res.text}"
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-@pytest.fixture(scope="module")
-def bp_headers(client):
-    res = client.post("/api/auth/login", json={"username": "bpuser", "password": "testpass"})
+def port_staff_headers(client):
+    res = client.post("/api/auth/login", json={"username": "portstaff", "password": "testpass"})
     assert res.status_code == 200, f"Login failed: {res.text}"
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -137,7 +120,7 @@ def bp_headers(client):
 # ── Helper ────────────────────────────────────────────────────────────────────
 def _reg() -> str:
     """Generate a unique registration number."""
-    return f"SG-T0-{time.time_ns()}"
+    return f"SG-T0-{uuid.uuid4().hex}"
 
 
 def _minimal_declaration(**overrides) -> dict:
@@ -185,13 +168,13 @@ def test_admin_operations_summary(client, auth_headers, customer_headers):
     assert client.get("/api/admin/operations-summary", headers=customer_headers).status_code == 403
 
 
-def test_dashboard_attention_queue_is_role_scoped(client, customer_headers, cv_headers):
+def test_dashboard_attention_queue_is_role_scoped(client, customer_headers, port_staff_headers):
     customer = client.get("/api/dashboard", headers=customer_headers)
     assert customer.status_code == 200
     assert customer.json()["attention"]["label"]
     assert all(item["workflow_status"] in {"DRAFT", "CHANGES_REQUESTED"} for item in customer.json()["attention"]["items"])
 
-    reviewer = client.get("/api/dashboard", headers=cv_headers)
+    reviewer = client.get("/api/dashboard", headers=port_staff_headers)
     assert reviewer.status_code == 200
     assert all(item["workflow_status"] == "PENDING_REVIEW" for item in reviewer.json()["attention"]["items"])
 
@@ -207,14 +190,46 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
+    assert '/styles.css?v=1.1.2' in res.text
+    assert '/app.js?v=1.1.2' in res.text
+    assert 'id="analytics-unavailable"' in res.text
+    assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
+    assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
+    assert 'class="primary-nav"' in res.text and 'class="data-nav"' in res.text
+    assert "Báo cáo hoạt động Cảng" in res.text
+    assert "Báo cáo Cảng vụ" not in res.text
     assert 'class="panel action-panel"' not in res.text
     app_js = client.get("/app.js").text
     assert "function setSubmitting(" in app_js
     assert "function bindLoginForm()" in app_js
     assert "bindLoginForm();" in app_js
     assert "Tiến trình duyệt" in app_js
-    assert "CV = Cảng vụ viên" in app_js
+    assert "Nhân viên Cảng" in app_js
+    assert "CV = Cảng vụ viên" not in app_js
+    assert "Theo các bước CV · QLC · BP" not in app_js
+    assert "PORT_APPROVE" in app_js
+    assert "crew-checklist" in app_js
+    assert "step-error-summary" in app_js
+    assert "port_approval" in app_js
+    assert "cv_approval" not in app_js
+    assert "loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month')" in app_js
+    assert "CUSTOMER:'User'" in app_js
+    assert "PORT_STAFF:'Port staff'" in app_js
+    assert "ADMIN:'Admin'" in app_js
+    assert "if (state.currentUser?.role === 'ADMIN') loadIntegration();" in app_js
+    assert "btn.style.display = isCustomer ? 'inline-block' : 'none'" in app_js
+    assert "const crewContainer = $('#declaration-crew-container');" in app_js
+    assert "? $$('input[name=\"crew_ids\"]:checked', crewContainer).length" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
+    assert "Không thể nhập dòng này. Hãy kiểm tra định dạng số, ngày hoặc mã đăng ký trùng." in Path(__file__).resolve().parents[1].joinpath("backend", "app.py").read_text(encoding="utf-8")
+    assert "File đã được nhập trước đó" in app_js
+    assert "Không tạo thêm bản ghi" in app_js
+    styles_css = client.get("/styles.css").text
+    assert "[hidden] { display: none !important; }" in styles_css
+    assert "overflow-y: auto" in styles_css
+    assert "overscroll-behavior: contain" in styles_css
+    assert ".data-nav { margin-top: auto" in styles_css
+    assert ".integration-readiness" in styles_css
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():
@@ -548,10 +563,50 @@ def test_teu_calculations(client, customer_headers):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. WORKFLOW — ORDERED TRANSITION
+# 7. WORKFLOW — CUSTOMER CONFIRMATION + PORT ENTERPRISE REVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_ordered_workflow_transition(client, customer_headers, cv_headers, qlc_headers, bp_headers):
+def test_port_employee_can_approve_directly_or_request_changes(
+    client, customer_headers, port_staff_headers, auth_headers
+):
+    approved_source = client.post(
+        "/api/declarations?submit=true",
+        json=_minimal_declaration(),
+        headers=customer_headers,
+    )
+    declaration_id = approved_source.json()["id"]
+
+    denied = client.post(
+        f"/api/declarations/{declaration_id}/workflow",
+        json={"action": "PORT_APPROVE"},
+        headers=auth_headers,
+    )
+    assert denied.status_code == 403
+
+    approved = client.post(
+        f"/api/declarations/{declaration_id}/workflow",
+        json={"action": "PORT_APPROVE", "note": "Thông tin phù hợp"},
+        headers=port_staff_headers,
+    )
+    assert approved.status_code == 200
+    assert approved.json()["workflow_status"] == "APPROVED"
+    assert approved.json()["port_approval"] == "APPROVED"
+    assert "cv_approval" not in approved.json()
+
+    changes_source = client.post(
+        "/api/declarations?submit=true",
+        json=_minimal_declaration(),
+        headers=customer_headers,
+    )
+    requested = client.post(
+        f"/api/declarations/{changes_source.json()['id']}/workflow",
+        json={"action": "REQUEST_CHANGES", "note": "Cần bổ sung chứng từ"},
+        headers=port_staff_headers,
+    )
+    assert requested.status_code == 200
+    assert requested.json()["workflow_status"] == "CHANGES_REQUESTED"
+
+def test_retired_workflow_actions_return_gone(client, customer_headers, port_staff_headers):
     res = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -560,67 +615,58 @@ def test_ordered_workflow_transition(client, customer_headers, cv_headers, qlc_h
     assert res.status_code == 200
     decl_id = res.json()["id"]
 
-    # Try BP before CV — must fail
-    res2 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "Sai thứ tự",
-    }, headers=bp_headers)
-    assert res2.status_code == 400
+    for action in ("CV_APPROVE", "QLC_APPROVE", "BP_APPROVE", "ISSUE", "REVOKE"):
+        response = client.post(
+            f"/api/declarations/{decl_id}/workflow",
+            json={"action": action, "note": "Hành động cũ"},
+            headers=port_staff_headers,
+        )
+        assert response.status_code == 410
+        assert "ngừng hỗ trợ" in response.json()["detail"]
 
-    # CV approve
-    res3 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "CV_APPROVE", "actor_role": "CV", "actor_name": "Cán bộ CV",
-    }, headers=cv_headers)
-    assert res3.status_code == 200
-    assert res3.json()["workflow_status"] == "PENDING_QLC"
-
-    # QLC approve
-    res4 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "QLC_APPROVE", "actor_role": "QLC", "actor_name": "Quản lý",
-    }, headers=qlc_headers)
-    assert res4.status_code == 200
-    assert res4.json()["workflow_status"] == "PENDING_BP"
-
-    # BP approve
-    res5 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "Ban phép",
-    }, headers=bp_headers)
-    assert res5.status_code == 200
-    assert res5.json()["workflow_status"] == "APPROVED"
-
-    # Issue
-    res6 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "ISSUE", "actor_role": "BP", "actor_name": "Ban phép",
-        "permit_no": "53/GP-TT",
-    }, headers=bp_headers)
-    assert res6.status_code == 200
-    issued = res6.json()
-    assert issued["workflow_status"] == "ISSUED"
-    assert issued["permit_no"] == "53/GP-TT"
-
-    # Events timeline: SUBMIT + CV + QLC + BP + ISSUE = 5
-    res7 = client.get(f"/api/declarations/{decl_id}/events", headers=cv_headers)
-    assert res7.status_code == 200
-    assert len(res7.json()) == 5
+    db = SessionLocal()
+    try:
+        unchanged = db.get(Declaration, decl_id)
+        assert unchanged.workflow_status == "PENDING_REVIEW"
+    finally:
+        db.close()
 
 
-def test_skip_workflow_stage_rejected(client, customer_headers, cv_headers, bp_headers):
-    res = client.post(
-        "/api/declarations?submit=true",
-        json=_minimal_declaration(),
-        headers=customer_headers,
-    )
-    decl_id = res.json()["id"]
-    client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "CV_APPROVE", "actor_role": "CV", "actor_name": "CV",
-    }, headers=cv_headers)
-    # Skip QLC → BP should fail
-    res2 = client.post(f"/api/declarations/{decl_id}/workflow", json={
-        "action": "BP_APPROVE", "actor_role": "BP", "actor_name": "BP skip",
-    }, headers=bp_headers)
-    assert res2.status_code == 400
+def test_real_input_keeps_customer_binding_and_clears_demo_sentinel():
+    db = SessionLocal()
+    try:
+        demo = Organization(name="Demo customer", tax_code=DEMO_ORGANIZATION_TAX_CODE, created_at=now_iso(), updated_at=now_iso())
+        db.add(demo)
+        db.flush()
+        user = User(
+            username=f"demo-{uuid.uuid4().hex}", password_hash=get_password_hash("testpass"),
+            full_name="Demo User", role="CUSTOMER", organization_id=demo.id,
+            is_active=1, created_at=now_iso(),
+        )
+        db.add(user)
+        db.add(Vessel(organization_id=demo.id, name="Mock", registration_no=_reg(), vessel_type="Sà lan", vessel_class="VR-SII", created_at=now_iso(), updated_at=now_iso()))
+        db.commit()
+
+        assert remove_demo_data_for_real_input(
+            db, retain_organization_id=demo.id,
+            organization_data={"name": "Khách hàng thật", "tax_code": "REAL-001"},
+        ) is True
+        db.commit()
+        db.refresh(demo)
+        db.refresh(user)
+        assert demo.name == "Khách hàng thật"
+        assert demo.tax_code == "REAL-001"
+        assert user.organization_id == demo.id
+        assert db.query(Vessel).filter(Vessel.organization_id == demo.id).count() == 0
+        db.delete(user)
+        db.delete(demo)
+        db.commit()
+    finally:
+        db.rollback()
+        db.close()
 
 
-def test_changes_requested_resubmission_resets_approval_state(client, customer_headers, cv_headers):
+def test_changes_requested_resubmission_resets_approval_state(client, customer_headers, port_staff_headers):
     created = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -630,7 +676,7 @@ def test_changes_requested_resubmission_resets_approval_state(client, customer_h
     requested = client.post(
         f"/api/declarations/{declaration['id']}/workflow",
         json={"action": "REQUEST_CHANGES", "note": "Thiếu thông tin hàng hóa"},
-        headers=cv_headers,
+        headers=port_staff_headers,
     )
     assert requested.status_code == 200
     assert requested.json()["workflow_status"] == "CHANGES_REQUESTED"
@@ -642,10 +688,12 @@ def test_changes_requested_resubmission_resets_approval_state(client, customer_h
     )
     assert resubmitted.status_code == 200
     assert resubmitted.json()["workflow_status"] == "PENDING_REVIEW"
-    assert resubmitted.json()["cv_approval"] == "PENDING"
+    assert resubmitted.json()["port_approval"] == "PENDING"
 
 
-def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, customer_headers, cv_headers):
+def test_workflow_audit_carries_authoritative_actor_and_correlation_id(
+    client, customer_headers, port_staff_headers
+):
     created = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(),
@@ -655,8 +703,8 @@ def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, c
     correlation = "t2-correlation-test"
     response = client.post(
         f"/api/declarations/{declaration_id}/workflow",
-        json={"action": "CV_APPROVE"},
-        headers={**cv_headers, "X-Correlation-ID": correlation},
+        json={"action": "PORT_APPROVE"},
+        headers={**port_staff_headers, "X-Correlation-ID": correlation},
     )
     assert response.status_code == 200
     assert response.headers["X-Correlation-ID"] == correlation
@@ -666,7 +714,7 @@ def test_workflow_audit_carries_authoritative_actor_and_correlation_id(client, c
         audit_event = db.query(AuditEvent).filter(
             AuditEvent.entity_type == "DECLARATION",
             AuditEvent.entity_id == declaration_id,
-            AuditEvent.action == "CV_APPROVE",
+            AuditEvent.action == "PORT_APPROVE",
         ).one()
         assert audit_event.correlation_id == correlation
         assert audit_event.actor_user_id is not None
@@ -769,6 +817,32 @@ def test_xlsx_rejects_external_relationship_and_zip_bomb_shape():
         read_workbook(bomb.getvalue())
 
 
+def test_xlsx_ignores_non_executed_external_link_path_and_detects_headers():
+    base = make_xlsx(
+        "Dữ liệu phương tiện",
+        ["Tên phương tiện", "Số đăng ký", "Loại phương tiện", "Cấp phương tiện", "Trọng tải toàn phần"],
+        [["Sà lan kiểm thử", "SG-SMART-001", "Sà lan", "VR-SII", 850]],
+    )
+    source = zipfile.ZipFile(io.BytesIO(base))
+    output = io.BytesIO()
+    with source, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        for info in source.infolist():
+            archive.writestr(info, source.read(info.filename))
+        archive.writestr(
+            "xl/externalLinks/_rels/externalLink1.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath" Target="old.xlsx" TargetMode="External"/>'
+            '</Relationships>',
+        )
+    organization, rows = vessel_rows(read_workbook(output.getvalue()))
+    assert organization["name"] == "Khách hàng import"
+    assert rows[0]["name"] == "Sà lan kiểm thử"
+    assert rows[0]["registration_no"] == "SG-SMART-001"
+    assert rows[0]["deadweight_tons"] == 850
+    assert rows[0]["_source_row"] == 4
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 10. EXCEL REPORTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -790,6 +864,66 @@ def test_xlsx_report_appendix2(client, auth_headers):
 def test_xlsx_report_appendix3(client, auth_headers):
     res = client.get("/api/reports/appendix3", headers=auth_headers)
     assert res.status_code == 200
+
+
+def test_report_analytics_supports_week_month_quarter_year_and_export(client, customer_headers):
+    created_ids = []
+    for operating_date, tons, teu, pax in (
+        ("2042-03-15T08:00", 120, 4, 7),
+        ("2041-03-15T08:00", 80, 2, 3),
+    ):
+        created = client.post(
+            "/api/declarations",
+            json=_minimal_declaration(
+                declaration_date=operating_date[:10], eta=operating_date,
+                etd=f"{operating_date[:10]}T18:00",
+                unload={"tons": tons, "teu": teu}, passenger_count=pax,
+            ),
+            headers=customer_headers,
+        )
+        assert created.status_code == 200
+        created_ids.append(created.json()["id"])
+    db = SessionLocal()
+    try:
+        for declaration_id in created_ids:
+            declaration = db.query(Declaration).filter(Declaration.id == declaration_id).one()
+            declaration.workflow_status = "APPROVED"
+            declaration.status = "SUBMITTED"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        for period in ("week", "month", "quarter", "year"):
+            response = client.get(
+                f"/api/reports/analytics?period={period}&as_of=2042-03-15",
+                headers=customer_headers,
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["period"] == period
+            assert set(body["kpis"]) == {"trips", "tons", "teu", "pax"}
+            assert len(body["trend"]["cur"]) == len(body["trend"]["labels"])
+        month = client.get(
+            "/api/reports/analytics?period=month&as_of=2042-03-15",
+            headers=customer_headers,
+        ).json()
+        assert month["kpis"]["trips"] == {"cur": 1.0, "prev": 1.0}
+        assert month["kpis"]["tons"] == {"cur": 120.0, "prev": 80.0}
+        export = client.get(
+            "/api/reports/analytics/export?period=quarter&as_of=2042-03-15",
+            headers=customer_headers,
+        )
+        assert export.status_code == 200
+        assert "spreadsheetml" in export.headers.get("content-type", "")
+        assert zipfile.is_zipfile(io.BytesIO(export.content))
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(Declaration).filter(Declaration.id.in_(created_ids)).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client, customer_headers):
@@ -853,6 +987,8 @@ def test_all_frontend_routes_registered():
         "/api/suggestions",
         "/api/import/vessels",
         "/api/import/declaration",
+        "/api/reports/analytics",
+        "/api/reports/analytics/export",
         "/api/reports/{kind}",
         "/api/integrations/maritime-authority",
         "/api/integrations/prepare-sync",
@@ -941,7 +1077,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert preview.status_code == 200
     assert preview.json()["preview"] is True
-    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.0"
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.2"
     db = SessionLocal()
     assert db.query(ImportJob).count() == before
     db.close()
@@ -962,3 +1098,35 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     assert repeated.status_code == 200
     assert repeated.json()["idempotent"] is True
     assert repeated.json()["id"] == first.json()["id"]
+
+
+def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth_headers):
+    registration = f"SG-SMART-{uuid.uuid4().hex[:10]}"
+    workbook = make_xlsx(
+        "Danh mục tùy biến",
+        ["Ghi chú", "Số đăng ký", "Tên tàu", "Cấp PT", "Loại PT", "DWT", "Sức chở hàng"],
+        [["Đủ dữ liệu", registration, "Sà lan linh hoạt", "VR-SII", "Sà lan", "950.5 / 980.5", "900,25 / 930,25"]],
+    )
+    headers = {**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    preview = client.post("/api/import/vessels?preview=true", content=workbook, headers=headers)
+    assert preview.status_code == 200
+    assert preview.json()["mapping"]["strategy"] == "HEADER_LABEL_DETECTION"
+    assert preview.json()["rows"][0]["missingFields"] == []
+    assert preview.json()["rows"][0]["deadweight_tons"] == 950.5
+    assert preview.json()["rows"][0]["cargo_capacity_tons"] == 900.25
+    assert len(preview.json()["rows"][0]["mappingWarnings"]) == 2
+    imported = client.post("/api/import/vessels", content=workbook, headers=headers)
+    assert imported.status_code == 200
+    assert imported.json()["accepted"] == 1
+    assert imported.json()["rejected"] == []
+    db = SessionLocal()
+    try:
+        vessel = db.query(Vessel).filter(Vessel.registration_no == registration).one()
+        assert vessel.deadweight_tons == 950.5
+        assert vessel.cargo_capacity_tons == 900.25
+        assert "950.5 / 980.5" in vessel.notes
+        db.query(ImportJob).filter(ImportJob.source_checksum == imported.json()["checksum"]).delete(synchronize_session=False)
+        db.delete(vessel)
+        db.commit()
+    finally:
+        db.close()

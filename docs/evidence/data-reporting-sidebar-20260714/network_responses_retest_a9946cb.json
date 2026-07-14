@@ -1,0 +1,18 @@
+[
+  {
+    "accepted": 39,
+    "rejected": [],
+    "mappingVersion": "KBCV-IMPORT-1.2",
+    "checksum": "b2e1ecb2f4f3c2617da0547f878f55c3d4f2b9231da90cd4fcfee52cff5c92b1",
+    "idempotent": false,
+    "importJobId": 1
+  },
+  {
+    "accepted": 39,
+    "rejected": [],
+    "mappingVersion": "KBCV-IMPORT-1.2",
+    "checksum": "b2e1ecb2f4f3c2617da0547f878f55c3d4f2b9231da90cd4fcfee52cff5c92b1",
+    "idempotent": true,
+    "importJobId": 1
+  }
+]

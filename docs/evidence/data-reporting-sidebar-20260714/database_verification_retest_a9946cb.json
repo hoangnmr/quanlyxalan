@@ -1,0 +1,15 @@
+{
+  "database": "data/cang_vu.db",
+  "verifiedAt": "2026-07-14",
+  "vesselCountAfterFirstImport": 39,
+  "vesselCountAfterReimport": 39,
+  "importJobCount": 1,
+  "vessel": {
+    "registrationNumber": "TN-0963",
+    "name": "NGỌC HUY 01",
+    "deadweightTons": 2723.79,
+    "cargoCapacityTons": 2698.79,
+    "notes": "Giá trị gốc Excel: deadweight_tons=2723.79 / 2912.57; cargo_capacity_tons=2698.79 / 2887.57"
+  },
+  "conclusion": "Re-import did not create duplicate vessels or import jobs."
+}

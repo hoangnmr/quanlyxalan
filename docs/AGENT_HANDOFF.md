@@ -319,6 +319,11 @@ adapter-ready; external activation remains blocked.
 
 ### Open Gate 5 evidence
 
+> Historical T5 checkpoint status. For the isolated Recovery UX branch, this
+> gap was subsequently closed by full-flow evidence commit `3574128`; see the
+> Recovery UX session handoff below. Production release readiness remains
+> separate.
+
 Representative-user task study, browser-assisted accessibility audit,
 responsive viewport matrix and reference-dataset performance measurements are
 not yet available. Gate 5 is not closed. Reopen T5 only when the product owner
@@ -331,44 +336,97 @@ official authority prerequisites recorded in its work order.
 
 ## Tranche: T5 UX Remediation (WO-KBCV-T5-UXR-20260713)
 
-- **Status**: LOCAL IMPLEMENTATION COMPLETE — GATE 5 OPEN
+- **Status**: SUPERSEDED BY RECOVERY UX CLOSED/PASS EVIDENCE
 - **Phase**: REVIEW
 - **Risk Level**: R1; escalate to R2 for authority, workflow or legal mapping
   changes
 
-### Completed before handoff
+### Completed before recovery integration
 
 - Independent heuristic review and evidence-response documents recorded.
-- API/RBAC evidence reviewed; browser/UAT evidence remains incomplete.
 - Wizard step controls converted to native keyboard-operable buttons with
   accessible names and current/locked state semantics.
-- Local draft status now states that data is stored on the current device, is
-  not yet saved to the system and includes the local save time.
+- Local draft status states that data is stored on the current device, is not
+  yet saved to the system and includes the local save time.
 - Added static frontend UX regression tests.
-- Local verification: JavaScript syntax PASS; full suite `69 passed`;
-  `git diff --check` PASS.
-
-### Completed implementation
-
 - Reordered the owner-approved wizard flow to A -> B -> C/D -> E -> attachments
   -> F without changing legal section meaning.
 - Added inline field and persistent form-level error recovery.
 - Replaced the crew multi-select with a keyboard/touch checklist and repaired
   the prior-trip crew suggestion path.
-- Added role dashboard layout, standardized terminology and static regression
-  coverage.
+- Added role dashboard layout and standardized terminology.
 
-### Active decisions and blockers
+### Closure relationship
 
-- The current A -> B -> C/D -> E -> attachments -> F order is product-owner
-  approved. Do not change legal section meaning without new approval.
-- Gate 5 remains OPEN until task study, keyboard/screen-reader evidence,
-  responsive matrix and browser performance traces are complete.
-- Production readiness remains outside this tranche.
+The original local T5 checkpoint left Gate 5 open. The isolated Recovery UX
+branch subsequently incorporated the approved UX intent and supplied browser
+evidence for the six-step flow. The canonical final state is recorded in the
+Recovery UX and Recovery Data/Reporting tranches below. Production readiness
+remains outside this closure.
 
-### Next governed move
+---
 
-Wait for the deferred browser task study, keyboard/screen-reader evidence,
-responsive matrix and browser performance traces. Gate 5 remains OPEN. Stop and
-request R2 approval if later work affects role authority, workflow semantics or
-signed report meaning.
+## Session handoff: Recovery UX branch — 2026-07-13
+
+- **Branch**: `recovery/frontend-baseline-20260712`
+- **Implementation/evidence commits**: `0b2ba72`, `5e74643`, `7c5431d`, `a2b1ca0`, `82b81f9`, `3574128`
+- **Status**: CLOSED — all browser findings and full six-step wizard UAT passed.
+- **Gate 5 Status**: CLOSED (PASS)
+- **Canonical session handoff**:
+  `docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`
+- **UX issue ledger**:
+  `docs/UX_REEVALUATION_RECOVERY_BRANCH_20260713.md`
+
+Tất cả các bước UAT Wizard 1-6 đã hoàn thành. Bằng chứng kiểm thử visual được
+lưu tại `docs/evidence/recovery-ux-20260714/`. Analytics và production/staging
+readiness vẫn là phạm vi riêng, không được suy diễn là đã đóng cùng UX Gate 5.
+
+---
+
+## Tranche: Recovery Data, Reporting and Sidebar — 2026-07-14
+
+- **Branch**: `recovery/frontend-baseline-20260712`
+- **Status**: CLOSED — corrective import and targeted browser/database evidence PASS.
+- **Phase**: REVIEW
+- **Risk Level**: R2 (import/data replacement and role-scoped reporting)
+
+Implemented & Verified:
+
+- Lower-left sidebar group for Import Excel and Báo cáo hoạt động Cảng.
+- Footer role labels `User`, `Admin`, `Port staff` with account identity.
+- Visible API preparation/readiness information; ADMIN-only mutation controls.
+- Week/month/quarter/year approved-declaration analytics and XLSX export.
+- Sentinel datamock auto-removal on first real create/import while preserving a
+  CUSTOMER organization binding.
+- Smart XLSX header/sheet detection with preview diagnostics and passive external
+  link-path ignore; mapping version `KBCV-IMPORT-1.2`.
+- Normalized scalar numeric cells containing multiple source values in commit `1a2ae22`, preserving original values in notes and hiding internal SQL errors. Commit `a9946cb` adds a distinct idempotent re-import state; assets are verified at `?v=1.1.2`.
+
+Evidence available:
+
+- `pytest -q`: 71 passed.
+- `node --check frontend/app.js`: PASS.
+- `git diff --check`: PASS.
+- Browser/UAT evidence (2026-07-14): ALL PASSED. Đã kiểm thử và chụp ảnh đầy đủ UAT cho cả 3 role (CUSTOMER, PORT_STAFF, ADMIN) và 3 viewport (Desktop, Tablet, Mobile) cũng như cả 2 theme (Dark, Light).
+- Retest corrective commit `a9946cb`: preview hiển thị dòng 15/TN-0963 và badge chuẩn hóa; import lần đầu đạt 39/0, không lộ SQL; re-import hiển thị trạng thái duplicate-safe riêng.
+- Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
+- Targeted evidence đã đủ: network response lần hai có `idempotent=true`; database giữ 39 phương tiện và 1 import job; TN-0963 có giá trị chuẩn hóa cùng notes nguồn. Biên nhận nằm trong `docs/evidence/data-reporting-sidebar-20260714/`.
+- Tranche **Recovery Data, Reporting and Sidebar** được đóng **CLOSED / PASS** trong phạm vi local/pilot. Không suy diễn kết luận này thành production readiness hoặc bằng chứng governance AI.
+
+---
+
+## Final integration to main — 2026-07-14
+
+- **Status**: CLOSED — recovery baseline integrated with the six local T5 commits from `main`.
+- **Phase**: FREEZE for local/pilot scope.
+- **Risk Level**: R2 (main-branch integration).
+- Recovery frontend is canonical because it carries the approved workflow and
+  completed browser evidence. The earlier T5 history and decisions remain in
+  this handoff for traceability.
+- Stale static assertions from the earlier frontend were reconciled with the
+  approved confirmation language and recovery implementation.
+- Final integration verification: `79 passed`; `node --check frontend/app.js`:
+  PASS; `git diff --check`: PASS; no unresolved conflict markers.
+- The local reference workbook remains untracked and is not part of the merge.
+- Production deployment/readiness and external API activation remain outside
+  this closure.

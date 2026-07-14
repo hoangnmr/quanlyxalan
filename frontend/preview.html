@@ -29,22 +29,23 @@
         <span class="brand-copy"><strong>TIEN-TAN THUAN PORT</strong><small>Port Declaration System</small></span>
       </a>
       <div class="workspace-chip"><span class="status-dot"></span><span><small>HỆ THỐNG</small><strong>Đang hoạt động</strong></span></div>
-      <nav>
+      <nav class="primary-nav">
         <p class="nav-label">Vận hành</p>
         <a href="#dashboard" data-route="dashboard" class="active"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></span>Tổng quan</a>
         <a href="#declarations" data-route="declarations"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v.5h1.5A1.5 1.5 0 0 1 19 7v12a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V7a1.5 1.5 0 0 1 1.5-1.5H8V5a1 1 0 0 1 1-1z"></path><path d="M9 4.5h6"></path><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4"></path></svg></span>Phiếu khai báo</a>
         <a href="#vessels" data-route="vessels"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l7.4 4.2a1.2 1.2 0 0 0 1.2 0L20 13"></path><path d="M5.5 11.2V6.5a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v4.7"></path><path d="M12 5V3"></path><path d="M6 19.5c1.2.8 2.3.8 3.5 0s2.3-.8 3.5 0 2.3.8 3.5 0"></path></svg></span>Hồ sơ phương tiện</a>
         <a href="#crew" data-route="crew"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span>Danh sách thuyền viên</a>
+      </nav>
+      <nav class="data-nav" aria-label="Dữ liệu và báo cáo">
         <p class="nav-label">Dữ liệu</p>
         <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import Excel</a>
-        <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo Cảng vụ</a>
+        <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động Cảng</a>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-user">
-          <span id="user-display" class="sidebar-user-name">Nguyễn Văn Cảng (CV)</span>
+          <span id="user-display" class="sidebar-user-name"><span class="role-pill">Port staff</span><strong>Nguyễn Văn Cảng</strong><small>@portstaff</small></span>
           <button id="logout-button" class="ghost-button sidebar-logout">Đăng xuất</button>
         </div>
-        <small>CVF governed workspace</small>
       </div>
     </aside>
 
@@ -74,15 +75,15 @@
           <div id="stats" class="stat-grid" aria-live="polite">
             <article class="stat-card"><p>PHƯƠNG TIỆN</p><strong>128</strong><small>Hồ sơ đang lưu</small></article>
             <article class="stat-card"><p>PHIẾU NHÁP</p><strong>7</strong><small>Chờ khách hoàn tất</small></article>
-            <article class="stat-card"><p>ĐÃ DUYỆT</p><strong>42</strong><small>Có thể đưa vào báo cáo</small></article>
+            <article class="stat-card"><p>ĐÃ XÁC NHẬN</p><strong>42</strong><small>Chờ Cảng xem xét</small></article>
             <article class="stat-card"><p>DỰ KIẾN ĐẾN HÔM NAY</p><strong>9</strong><small>Theo ETA đã khai</small></article>
             <article class="stat-card"><p>CẢNH BÁO CHỨNG CHỈ</p><strong>3</strong><small>Hết hạn hoặc còn dưới 30 ngày</small></article>
           </div>
           <section class="demo-data-notice" role="status"><strong>Dữ liệu minh họa</strong><span>Đây là dữ liệu mẫu để kiểm tra giao diện. Hệ thống sẽ tự gỡ toàn bộ dữ liệu này khi bạn tạo hoặc import phương tiện thực tế đầu tiên.</span></section>
-          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Nhắc trong ứng dụng hiển thị cảnh báo hạn chứng chỉ ở dashboard và Crew List. Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input type="checkbox" checked><span>Nhắc trong ứng dụng</span></label></section>
+          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Nhắc trong ứng dụng hiển thị cảnh báo hạn chứng chỉ ở tổng quan và danh sách thuyền viên. Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input type="checkbox" checked><span>Nhắc trong ứng dụng</span></label></section>
           <div class="warning-strip visible" role="status">Có 3 phương tiện có chứng chỉ hết hạn hoặc sắp hết hạn trong 30 ngày.</div>
           <section class="panel attention-queue"><div class="panel-header"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2>Hàng đợi xử lý (2)</h2></div><button class="soft-button" type="button">Mở danh sách</button></div><div class="attention-list">
-            <article><div><strong>KB-2026-0188</strong><small>Tân Cảng 09 · Chờ CV</small></div><span>6 giờ</span></article>
+            <article><div><strong>KB-2026-0188</strong><small>Tân Cảng 09 · Chờ Cảng xử lý</small></div><span>6 giờ</span></article>
             <article><div><strong>KB-2026-0191</strong><small>Sông Sài Gòn 27 · Cần bổ sung</small></div><span>18 giờ</span></article>
           </div></section>
           <div class="content-grid">
@@ -98,23 +99,23 @@
 
         <!-- DECLARATIONS -->
         <section class="page" data-page="declarations">
-          <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Điều phối phiếu vào, rời cảng</h1><p>Theo dõi khai báo, kiểm tra nhiều cấp, ban hành và lịch sử xử lý.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
-          <section class="panel advanced-filter"><label>Tàu / số đăng ký<input placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select><option>Tất cả</option><option>Vào cảng</option><option>Rời cảng</option></select></label><label>Trạng thái<select><option>Tất cả</option><option>Chờ CV</option><option>Đã duyệt</option></select></label><label>Thuyền trưởng<input placeholder="Họ tên"></label><label>Từ ngày<input type="date"></label><label>Đến ngày<input type="date"></label><button class="ghost-button">Đặt lại</button><span class="muted">42 phiếu</span></section>
+          <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><h1>Điều phối phiếu vào, rời cảng</h1><p>Theo dõi khai báo, phản hồi của Cảng và lịch sử xử lý.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
+          <section class="panel advanced-filter"><label>Tàu / số đăng ký<input placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select><option>Tất cả</option><option>Vào cảng</option><option>Rời cảng</option></select></label><label>Trạng thái<select><option>Tất cả</option><option>Chờ Cảng xử lý</option><option>Cần bổ sung</option><option>Đã duyệt</option></select></label><label>Thuyền trưởng<input placeholder="Họ tên"></label><label>Từ ngày<input type="date"></label><label>Đến ngày<input type="date"></label><button class="ghost-button">Đặt lại</button><span class="muted">42 phiếu</span></section>
           <section class="panel"><div class="table-wrap" data-declarations></div><div class="pagination" aria-label="Phân trang"><span>Trang 1/3</span><button type="button" disabled>Trước</button><button type="button">Sau</button></div></section>
         </section>
 
         <!-- CREW -->
         <section class="page" data-page="crew">
-          <div class="page-heading"><div><p class="eyebrow">CREW LIST / CHỨNG CHỈ</p><h1>Danh sách thuyền viên</h1><p>Quản lý thuyền trưởng, thuyền viên và hạn chứng chỉ chuyên môn.</p></div><button class="primary-button">+ Thêm thuyền viên</button></div>
+          <div class="page-heading"><div><p class="eyebrow">THUYỀN VIÊN / CHỨNG CHỈ</p><h1>Danh sách thuyền viên</h1><p>Quản lý thuyền trưởng, thuyền viên và hạn chứng chỉ chuyên môn.</p></div><button class="primary-button">+ Thêm thuyền viên</button></div>
           <div class="warning-strip visible">2 chứng chỉ đã hết hạn hoặc sẽ hết hạn trong 30 ngày. Cần rà soát trước khi phân công chuyến.</div>
           <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input placeholder="Tìm họ tên, chức danh hoặc số chứng chỉ"></label><span class="muted">36 người</span></div><div class="table-wrap" data-crew></div></section>
         </section>
 
         <!-- IMPORT -->
         <section class="page" data-page="import">
-          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><h1>Import biểu mẫu Excel</h1><p>Dùng đúng hai file mẫu đã phát hành để map dữ liệu vào hệ thống.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><h1>Import biểu mẫu Excel</h1><p>Hệ thống tự nhận diện sheet, hàng tiêu đề và tên cột; file mẫu vẫn được hỗ trợ.</p></div></div>
           <div class="import-grid">
-            <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Nhập danh sách phương tiện từ <code>Ho_so_phuong_tien_thuy_noi_dia.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" accept=".xlsx"></label></section>
+            <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Nhập file có đủ Tên phương tiện, Số đăng ký, Loại và Cấp phương tiện; không bắt buộc đúng tên sheet.</p><label class="file-button">Chọn file<input type="file" accept=".xlsx"></label></section>
             <section class="panel upload-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Nhập một lượt từ <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code>.</p><label class="file-button">Chọn file<input type="file" accept=".xlsx"></label></section>
           </div>
           <section class="panel"><div class="panel-header"><div><p class="eyebrow">NHẬT KÝ IMPORT</p><h2>Kết quả gần nhất</h2></div></div><div class="empty-state"><div><strong>Chưa có file nào được import</strong><p>Chọn một file mẫu Excel để bắt đầu map dữ liệu trong phiên này.</p></div></div></section>
@@ -122,7 +123,7 @@
 
         <!-- REPORTS -->
         <section class="page" data-page="reports">
-          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu gửi Cảng vụ</h1><p>Dữ liệu được tổng hợp từ các phiếu đã duyệt trong kỳ.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><h1>Biểu mẫu hoạt động cảng</h1><p>Dữ liệu được tổng hợp từ các phiếu đã xác nhận gửi trong kỳ.</p></div></div>
           <section class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="segmented period-switch"><button data-period="week">Tuần</button><button data-period="month" class="active">Tháng</button><button data-period="quarter">Quý</button><button data-period="year">Năm</button></div></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
@@ -136,14 +137,14 @@
             <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button">Xuất Excel</button></article>
           </div>
-          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI CẢNG VỤ</p><h2>Luồng đồng bộ API trực tiếp</h2><p>Chuẩn bị payload từ phiếu đã duyệt. Hệ thống chỉ gửi khi Cảng vụ cung cấp đặc tả API, endpoint và credential chính thức.</p></div><div class="integration-state"><span class="state-badge pending">Chưa cấu hình</span><button class="primary-button">Chuẩn bị gói đồng bộ</button></div><div class="table-wrap span-full" data-sync></div></section>
+          <section class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI DỮ LIỆU BÊN NGOÀI</p><h2>Chuẩn bị luồng tích hợp API</h2><p>Adapter chỉ chuẩn bị payload, chưa thực hiện kết nối mạng cho đến khi có endpoint, xác thực và phê duyệt chính thức.</p><div class="integration-readiness"><span><b>Payload</b>Sẵn sàng chuẩn bị</span><span><b>Endpoint</b>Chờ đặc tả</span><span><b>Xác thực</b>Chờ cấu hình</span></div></div><div class="integration-state"><span class="state-badge pending">Chưa cấu hình</span><button class="primary-button">Chuẩn bị gói đồng bộ</button></div><div class="table-wrap span-full" data-sync></div></section>
         </section>
       </main>
     </div>
   </div>
 
   <!-- DECLARATION MODAL (contract markup, prefilled demo) -->
-  <dialog id="declaration-dialog" class="modal wide"><form onsubmit="return false"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div id="draft-state" class="draft-state" role="status" aria-live="polite"><span aria-hidden="true">●</span> Nháp cục bộ trên thiết bị này · chưa lưu lên hệ thống</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div>
+  <dialog id="declaration-dialog" class="modal wide"><form onsubmit="return false"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div class="draft-state"><span>●</span> Nháp cục bộ · chưa gửi</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div>
     <div>
       <section class="form-section"><h3>A. Thông tin chung và phương tiện</h3><div class="section-grid">
         <label>* Loại phiếu<select><option>Vào cảng</option><option>Rời cảng</option></select></label>
@@ -171,17 +172,17 @@
         <label class="attachment-field wide-field">Đính kèm hình ảnh / PDF / Word / Excel<input type="file" multiple><small>Mỗi file tối đa 12 MB. File được lưu cùng phiếu khai báo.</small></label>
       </div></section>
     </div>
-    <div class="review-strip"><div><strong>Kiểm tra trước khi nộp</strong><p>Dấu * là bắt buộc. Phiếu đã nộp được khóa để bảo toàn báo cáo.</p></div><div><button type="button" class="outline-button">Lưu nháp</button><button type="button" class="primary-button">Kiểm tra & nộp</button></div></div>
+    <div class="review-strip"><div><strong>Kiểm tra trước khi xác nhận</strong><p>Dấu * là bắt buộc. Sau khi gửi, Cảng sẽ xem xét và phản hồi.</p></div><div><button type="button" class="outline-button">Lưu nháp</button><button type="button" class="primary-button">Xác nhận & gửi</button></div></div>
   </form></dialog>
 
   <!-- WORKFLOW MODAL -->
   <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2>KB-2026-0188 · Tân Cảng 09</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div>
-    <div class="workflow-summary"><article><small>LOẠI PHIẾU</small><strong>Vào cảng</strong></article><article><small>TRẠNG THÁI</small><strong>Chờ QLC</strong></article><article><small>GIẤY PHÉP</small><strong>Chưa ban hành</strong></article><article><small>DUYỆT</small><span class="approval-dots"><span class="approval approved" title="Cảng vụ viên: Đã duyệt">CV ✓</span><span class="approval" title="Quản lý cảng: Đang chờ">QLC</span><span class="approval" title="Ban cấp phép: Đang chờ">BP</span></span></article></div>
+    <div class="workflow-summary"><article><small>LOẠI PHIẾU</small><strong>Vào cảng</strong></article><article><small>TRẠNG THÁI</small><strong>Chờ Cảng xử lý</strong></article><article><small>PHẢN HỒI</small><strong>Chưa có</strong></article><article><small>XỬ LÝ</small><span class="approval-dots"><span class="approval" title="Nhân viên Cảng đang xem xét"></span></span></article></div>
     <div class="timeline">
-      <article><span></span><div><strong>Chờ CV · Trần Quốc Hải</strong><small>CUSTOMER · 11/07/2026 08:12</small><p>Khách hàng nộp phiếu khai báo lượt vào cảng.</p></div></article>
-      <article><span></span><div><strong>Đã duyệt · Nguyễn Văn Cảng</strong><small>CV · 11/07/2026 09:40</small><p>Cảng vụ viên duyệt hồ sơ, chuyển Quản lý cảng.</p></div></article>
+      <article><span></span><div><strong>Chờ Cảng xử lý · Trần Quốc Hải</strong><small>Khách hàng / Chủ phương tiện · 11/07/2026 08:12</small><p>Khách hàng xác nhận gửi phiếu khai báo lượt vào cảng.</p></div></article>
+      <article><span></span><div><strong>Đã duyệt · Nguyễn Văn Cảng</strong><small>Nhân viên Cảng · 11/07/2026 09:40</small><p>Nhân viên Cảng đã đối chiếu và duyệt hồ sơ.</p></div></article>
     </div>
-    <form class="workflow-form" onsubmit="return false"><label>Thao tác<select><option>Chọn</option><option>QLC duyệt</option><option>Yêu cầu bổ sung</option></select></label><label>Số giấy phép<input placeholder="Tự sinh nếu để trống"></label><label class="span-full">Ghi chú / lý do<textarea placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung hoặc thu hồi"></textarea></label><button class="primary-button" type="button">Ghi nhận thao tác</button></form>
+    <form class="workflow-form" onsubmit="return false"><label>Thao tác<select><option>Chọn</option><option>Xác nhận duyệt</option><option>Yêu cầu bổ sung</option></select></label><label class="span-full">Ghi chú / lý do<textarea placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung"></textarea></label><button class="primary-button" type="button">Gửi phản hồi</button></form>
   </dialog>
 
   <!-- LOGIN DIALOG -->
@@ -191,7 +192,7 @@
         <span class="login-logo-frame"><img src="assets/csg-logo.jpg" alt="Cảng Sài Gòn"></span>
         <p class="eyebrow">CỔNG THÔNG TIN VẬN HÀNH</p>
         <h2 id="login-title">Cảng Tân Thuận</h2>
-        <p>Đăng nhập để quản lý khai báo, phương tiện và luồng phê duyệt.</p>
+        <p>Đăng nhập để quản lý khai báo, phương tiện và phản hồi của Cảng.</p>
       </div>
       <div class="login-form-content">
         <label>Tên đăng nhập<input type="text" placeholder="Nhập tên đăng nhập"></label>
@@ -220,17 +221,17 @@
       const cls = state === 'approved' ? 'approval approved' : state === 'rejected' ? 'approval rejected' : 'approval';
       return `<span class="${cls}">${label}${state === 'approved' ? ' ✓' : ''}</span>`;
     }
-    const legend = '<div class="approval-legend"><strong>Tiến trình duyệt:</strong><span>CV = Cảng vụ viên</span><span>QLC = Quản lý cảng</span><span>BP = Ban cấp phép</span><span class="approval-legend-state">Xanh = đã duyệt · Xám = chờ</span></div>';
+    const legend = '<div class="approval-legend"><strong>Trạng thái xử lý:</strong><span class="approval-legend-state">Xanh = đã duyệt · Xám = đang chờ Cảng</span></div>';
 
     const declRows = [
-      ['KB-2026-0188','Vào cảng · —','Tân Cảng 09','SG-4821 · Trần Quốc Hải','Cần Thơ → Tân Thuận','11/07/2026 14:00',['approved','pending','pending'],'draft','Chờ QLC'],
+      ['KB-2026-0188','Vào cảng · —','Tân Cảng 09','SG-4821 · Trần Quốc Hải','Cần Thơ → Tân Thuận','11/07/2026 14:00',['pending'],'draft','Chờ Cảng xử lý'],
       ['KB-2026-0187','Rời cảng · GP-1183','Sông Sài Gòn 27','SG-1207 · Lê Minh Đức','Tân Thuận → Vũng Tàu','11/07/2026 09:30',['approved','approved','approved'],'submitted','Đã ban hành'],
-      ['KB-2026-0185','Vào cảng · —','Phú Mỹ 14','VT-3390 · Phạm Văn Sơn','Vũng Tàu → Tân Thuận','10/07/2026 22:10',['approved','approved','pending'],'draft','Chờ BP'],
+      ['KB-2026-0185','Vào cảng · —','Phú Mỹ 14','VT-3390 · Phạm Văn Sơn','Vũng Tàu → Tân Thuận','10/07/2026 22:10',['pending'],'draft','Chờ Cảng xử lý'],
       ['KB-2026-0182','Rời cảng · —','Đồng Nai 05','DN-2214 · Võ Thành Long','Tân Thuận → Mỹ Tho','10/07/2026 16:45',['rejected','pending','pending'],'danger','Đã thu hồi'],
     ];
     function declTable(editable) {
-      return legend + '<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Tiến trình duyệt<small>CV → QLC → BP</small></th><th>Trạng thái</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
-        declRows.map(r => `<tr><td data-label="Mã / Loại"><strong>${r[0]}</strong><br><small>${r[1]}</small></td><td data-label="Phương tiện">${r[2]}<br><small>${r[3]}</small></td><td data-label="Hành trình">${r[4]}</td><td data-label="Thời gian">${r[5]}</td><td data-label="Tiến trình duyệt"><span class="approval-dots">${dot(r[6][0],'CV')}${dot(r[6][1],'QLC')}${dot(r[6][2],'BP')}</span></td><td data-label="Trạng thái"><span class="table-badge ${r[7]}">${r[8]}</span></td>${editable ? '<td data-label="Thao tác"><button>Mở phiếu</button> · <button>Chi tiết</button></td>' : ''}</tr>`).join('') +
+      return legend + '<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Cảng xử lý</th><th>Trạng thái</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        declRows.map(r => `<tr><td data-label="Mã / Loại"><strong>${r[0]}</strong><br><small>${r[1]}</small></td><td data-label="Phương tiện">${r[2]}<br><small>${r[3]}</small></td><td data-label="Hành trình">${r[4]}</td><td data-label="Thời gian">${r[5]}</td><td data-label="Cảng xử lý"><span class="approval-dots">${dot(r[6][0],'')}</span></td><td data-label="Trạng thái"><span class="table-badge ${r[7]}">${r[8]}</span></td>${editable ? '<td data-label="Thao tác"><button>Mở phiếu</button> · <button>Chi tiết</button></td>' : ''}</tr>`).join('') +
         '</tbody></table>';
     }
     document.querySelector('[data-recent]').innerHTML = declTable(false);
@@ -307,7 +308,7 @@
       const route = a.dataset.route;
       document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === route));
       document.querySelectorAll('nav a').forEach(l => l.classList.toggle('active', l === a));
-      const names = {dashboard:'Tổng quan khai báo',declarations:'Phiếu khai báo',vessels:'Hồ sơ phương tiện',crew:'Danh sách thuyền viên',import:'Import dữ liệu Excel',reports:'Báo cáo Cảng vụ'};
+      const names = {dashboard:'Tổng quan khai báo',declarations:'Phiếu khai báo',vessels:'Hồ sơ phương tiện',crew:'Danh sách thuyền viên',import:'Import dữ liệu Excel',reports:'Báo cáo hoạt động Cảng'};
       document.getElementById('page-context').textContent = names[route];
       document.querySelector('.sidebar').classList.remove('open');
     }));

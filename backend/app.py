@@ -11,7 +11,7 @@ import hashlib
 import logging
 import os
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -39,7 +39,7 @@ from .models import (
 )
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
 
-IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.0"
+IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.2"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -151,18 +151,16 @@ def certificate_status(value: Optional[str], warning_days: int = 30) -> str:
 
 # ── Workflow state machine ─────────────────────────────────────────────────────
 WORKFLOW_TRANSITIONS: dict[str, dict[str, str]] = {
-    "CV_APPROVE":        {"from": "PENDING_REVIEW",  "to": "PENDING_QLC"},
-    "QLC_APPROVE":       {"from": "PENDING_QLC",     "to": "PENDING_BP"},
-    "BP_APPROVE":        {"from": "PENDING_BP",       "to": "APPROVED"},
-    "ISSUE":             {"from": "APPROVED",         "to": "ISSUED"},
-    "REQUEST_CHANGES":   {"from": None,               "to": "CHANGES_REQUESTED"},
-    "REVOKE":            {"from": None,               "to": "REVOKED"},
+    "PORT_APPROVE":      {"from": "PENDING_REVIEW",  "to": "APPROVED"},
+    "REQUEST_CHANGES":   {"from": "PENDING_REVIEW",  "to": "CHANGES_REQUESTED"},
 }
+
+RETIRED_WORKFLOW_ACTIONS = frozenset({"CV_APPROVE", "QLC_APPROVE", "BP_APPROVE", "ISSUE", "REVOKE"})
 
 
 def _apply_workflow_transition(
     db: Session, declaration: Declaration, action: str, actor_role: str,
-    actor_name: str, actor_user_id: int, note: str = "", permit_no: str = ""
+    actor_name: str, actor_user_id: int, note: str = ""
 ) -> Declaration:
     rule = WORKFLOW_TRANSITIONS.get(action)
     if not rule:
@@ -176,26 +174,15 @@ def _apply_workflow_transition(
             detail=f"Không thể thực hiện '{action}' từ trạng thái '{current}'. "
                    f"Cần trạng thái '{required_from}'.",
         )
-    if action in ("REQUEST_CHANGES", "REVOKE") and not note.strip():
+    if action == "REQUEST_CHANGES" and not note.strip():
         raise HTTPException(status_code=400, detail="Cần nhập lý do cho thao tác này.")
 
     new_status = rule["to"]
     from_status = current
     declaration.workflow_status = new_status
 
-    if action == "CV_APPROVE":
-        declaration.cv_approval = "APPROVED"
-    elif action == "QLC_APPROVE":
-        declaration.qlc_approval = "APPROVED"
-    elif action == "BP_APPROVE":
-        declaration.bp_approval = "APPROVED"
-    elif action == "ISSUE":
-        if not permit_no.strip():
-            raise HTTPException(status_code=400, detail="Cần cung cấp permit_no khi phát hành.")
-        declaration.permit_no = permit_no.strip()
-        declaration.issued_at = now_iso()
-    elif action == "REVOKE":
-        declaration.revoked_at = now_iso()
+    if action == "PORT_APPROVE":
+        declaration.port_approval = "APPROVED"
 
     declaration.updated_at = now_iso()
     declaration.version += 1
@@ -391,7 +378,6 @@ class DeclarationSaveRequest(BaseModel):
 class WorkflowActionRequest(BaseModel):
     action: str
     note: str = ""
-    permit_no: str = ""
 
 
 class PrepareSyncRequest(BaseModel):
@@ -597,7 +583,7 @@ def admin_operations_summary(
     year_start = date(today.year, 1, 1).isoformat()
     declaration_query = db.query(Declaration).filter(Declaration.declaration_date >= year_start)
     declarations = declaration_query.all()
-    approved = [item for item in declarations if item.workflow_status in {"APPROVED", "ISSUED"}]
+    approved = [item for item in declarations if item.workflow_status == "APPROVED"]
     pending = [item for item in declarations if item.workflow_status.startswith("PENDING_")]
     tons = teu = 0.0
     for item in approved:
@@ -639,8 +625,18 @@ def is_demo_data_active(db: Session) -> bool:
     ).first() is not None
 
 
-def remove_demo_data_for_real_input(db: Session) -> bool:
-    """Remove only the explicitly marked demo dataset before the first real input."""
+def remove_demo_data_for_real_input(
+    db: Session,
+    *,
+    retain_organization_id: int | None = None,
+    organization_data: dict[str, Any] | None = None,
+) -> bool:
+    """Remove sentinel-marked records before the first real input.
+
+    A demo CUSTOMER keeps its organization binding, but the sentinel is cleared
+    and optional workbook metadata becomes the real profile. ADMIN imports may
+    remove the demo organization entirely.
+    """
     demo_org = db.query(Organization).filter(
         Organization.tax_code == DEMO_ORGANIZATION_TAX_CODE
     ).first()
@@ -658,7 +654,26 @@ def remove_demo_data_for_real_input(db: Session) -> bool:
     db.query(CrewMember).filter(CrewMember.organization_id == demo_org.id).delete(synchronize_session=False)
     db.query(Vessel).filter(Vessel.organization_id == demo_org.id).delete(synchronize_session=False)
     db.query(AuditEvent).filter(AuditEvent.organization_id == demo_org.id).delete(synchronize_session=False)
-    db.delete(demo_org)
+    db.query(ImportJob).filter(ImportJob.organization_id == demo_org.id).delete(synchronize_session=False)
+    if retain_organization_id == demo_org.id:
+        profile = organization_data or {}
+        proposed_name = str(profile.get("name") or "").strip()
+        name_in_use = proposed_name and db.query(Organization.id).filter(
+            Organization.name == proposed_name, Organization.id != demo_org.id
+        ).first()
+        if proposed_name and not name_in_use:
+            demo_org.name = proposed_name
+        demo_org.tax_code = str(profile.get("tax_code") or "").strip()
+        for field in ("address", "contact_name", "phone"):
+            value = str(profile.get(field) or "").strip()
+            if value:
+                setattr(demo_org, field, value)
+        demo_org.updated_at = now_iso()
+    else:
+        db.query(User).filter(User.organization_id == demo_org.id).update(
+            {User.organization_id: None}, synchronize_session=False
+        )
+        db.delete(demo_org)
     db.flush()
     return True
 
@@ -667,10 +682,8 @@ def _attention_queue(db: Session, user: User) -> dict[str, Any]:
     """Return only the actionable/observable queue for the authenticated role."""
     role_rules = {
         "CUSTOMER": (["DRAFT", "CHANGES_REQUESTED"], "Phiếu cần khách hàng hoàn tất hoặc bổ sung"),
-        "CV": (["PENDING_REVIEW"], "Phiếu chờ chuyên viên kiểm tra"),
-        "QLC": (["PENDING_QLC"], "Phiếu chờ quản lý chất lượng phê duyệt"),
-        "BP": (["PENDING_BP"], "Phiếu chờ bộ phận phát hành phê duyệt"),
-        "ADMIN": (["PENDING_REVIEW", "PENDING_QLC", "PENDING_BP"], "Theo dõi các phiếu đang chờ xử lý"),
+        "PORT_STAFF": (["PENDING_REVIEW"], "Phiếu chờ nhân viên Cảng xem xét"),
+        "ADMIN": (["PENDING_REVIEW"], "Theo dõi các phiếu đang chờ Cảng xử lý"),
     }
     statuses, label = role_rules.get(user.role, ([], ""))
     if not statuses:
@@ -728,8 +741,8 @@ def get_dashboard(
         warnings_q = warnings_q.filter(Vessel.organization_id == user.organization_id)
         recent_q = recent_q.filter(Declaration.organization_id == user.organization_id)
         vessel_search_q = vessel_search_q.filter(Vessel.organization_id == user.organization_id)
-    elif user.role in ("CV", "QLC", "BP"):
-        # Reviewers see all submitted/approved/issued/revoked, but not drafts
+    elif user.role == "PORT_STAFF":
+        # Port employees see all non-draft declarations.
         drafts_q = drafts_q.filter(Declaration.id == -1)  # Drafts count is 0
         recent_q = recent_q.filter(Declaration.workflow_status != "DRAFT")
 
@@ -792,7 +805,7 @@ def _vessel_dict(v: Vessel) -> dict:
 
 
 @app.get("/api/vessels")
-def get_vessels(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN"))):
+def get_vessels(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN"))):
     if user.role == "CUSTOMER":
         vessels = db.query(Vessel).filter(Vessel.organization_id == user.organization_id).order_by(desc(Vessel.updated_at)).all()
     else:
@@ -806,8 +819,6 @@ def save_vessel(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
-    if not payload.id:
-        remove_demo_data_for_real_input(db)
     if user.role == "CUSTOMER":
         # Force organization to the customer's bound organization
         org_id = user.organization_id
@@ -819,6 +830,13 @@ def save_vessel(
         )
         org = _get_or_create_org(db, org_name)
         org_id = org.id if org else None
+
+    if not payload.id:
+        remove_demo_data_for_real_input(
+            db,
+            retain_organization_id=org_id if user.role == "CUSTOMER" else None,
+            organization_data=payload.organization if isinstance(payload.organization, dict) else None,
+        )
 
     data = payload.model_dump(exclude={"id", "version", "organization", "organization_name"})
     data["organization_id"] = org_id
@@ -906,7 +924,7 @@ def _crew_dict(c: CrewMember, db: Session) -> dict:
 
 
 @app.get("/api/crew")
-def get_crew(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN"))):
+def get_crew(db: Session = Depends(get_db), user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN"))):
     if user.role == "CUSTOMER":
         crews = db.query(CrewMember).filter(CrewMember.organization_id == user.organization_id).order_by(CrewMember.full_name).all()
     else:
@@ -994,13 +1012,13 @@ def get_declarations(
     sort: str = Query(default="updated_at"),
     direction: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     query = db.query(Declaration)
 
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
-    elif user.role in ("CV", "QLC", "BP"):
+    elif user.role == "PORT_STAFF":
         # Reviewers cannot see draft declarations
         query = query.filter(Declaration.workflow_status != "DRAFT")
 
@@ -1059,7 +1077,7 @@ def save_declaration(
     if submit and user.role != "CUSTOMER":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ chủ phương tiện (CUSTOMER) mới có quyền nộp phiếu khai báo."
+            detail="Chỉ khách hàng/chủ phương tiện (CUSTOMER) mới có quyền xác nhận gửi phiếu khai báo."
         )
 
     if user.role == "CUSTOMER":
@@ -1102,7 +1120,7 @@ def save_declaration(
         if decl.workflow_status not in ("DRAFT", "CHANGES_REQUESTED"):
             raise HTTPException(
                 status_code=409,
-                detail="Không thể chỉnh sửa phiếu đã nộp. Dùng luồng REQUEST_CHANGES để điều chỉnh.",
+                detail="Không thể chỉnh sửa phiếu đã xác nhận gửi. Dùng luồng REQUEST_CHANGES để điều chỉnh.",
             )
         # Update fields
         for field_name in (
@@ -1179,9 +1197,7 @@ def save_declaration(
 
     if submit:
         if payload.id and decl.workflow_status == "CHANGES_REQUESTED":
-            decl.cv_approval = "PENDING"
-            decl.qlc_approval = "PENDING"
-            decl.bp_approval = "PENDING"
+            decl.port_approval = "PENDING"
         decl.workflow_status = "PENDING_REVIEW"
         decl.status = "SUBMITTED"
         decl.submitted_at = now_iso()
@@ -1194,7 +1210,7 @@ def save_declaration(
             actor_role=user.role,
             actor_user_id=user.id,
             correlation_id=correlation_id.get(),
-            note="Nộp phiếu khai báo",
+            note="Khách hàng xác nhận gửi phiếu khai báo.",
             created_at=now_iso(),
         )
         db.add(event)
@@ -1222,7 +1238,7 @@ def save_declaration(
 def get_declaration_events(
     declaration_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
@@ -1252,30 +1268,17 @@ def declaration_workflow(
     declaration_id: int,
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CV", "QLC", "BP")),  # Deny CUSTOMER and ADMIN by default
+    user: User = Depends(require_roles("PORT_STAFF")),
 ):
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
 
-    # Role checks per action
-    if payload.action == "CV_APPROVE" and user.role != "CV":
-        raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền thực hiện hành động này.")
-    if payload.action == "QLC_APPROVE" and user.role != "QLC":
-        raise HTTPException(status_code=403, detail="Chỉ QLC mới có quyền thực hiện hành động này.")
-    if payload.action in ("BP_APPROVE", "ISSUE", "REVOKE") and user.role != "BP":
-        raise HTTPException(status_code=403, detail="Chỉ BP mới có quyền thực hiện hành động này.")
-
-    if payload.action == "REQUEST_CHANGES":
-        current = decl.workflow_status
-        if current == "PENDING_REVIEW" and user.role != "CV":
-            raise HTTPException(status_code=403, detail="Chỉ CV mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
-        elif current == "PENDING_QLC" and user.role != "QLC":
-            raise HTTPException(status_code=403, detail="Chỉ QLC mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
-        elif current == "PENDING_BP" and user.role != "BP":
-            raise HTTPException(status_code=403, detail="Chỉ BP mới có quyền yêu cầu chỉnh sửa ở giai đoạn này.")
-        elif current not in ("PENDING_REVIEW", "PENDING_QLC", "PENDING_BP"):
-            raise HTTPException(status_code=400, detail="Không thể yêu cầu chỉnh sửa từ trạng thái hiện tại.")
+    if payload.action in RETIRED_WORKFLOW_ACTIONS:
+        raise HTTPException(
+            status_code=410,
+            detail="Hành động thuộc quy trình cũ đã ngừng hỗ trợ. Dùng PORT_APPROVE hoặc REQUEST_CHANGES.",
+        )
 
     # Derive actor details strictly from JWT
     actor_role = user.role
@@ -1289,7 +1292,6 @@ def declaration_workflow(
         actor_name=actor_name,
         actor_user_id=user.id,
         note=payload.note,
-        permit_no=payload.permit_no,
     )
     audit(
         db, "DECLARATION", declaration_id, payload.action,
@@ -1362,7 +1364,7 @@ _SUGGESTION_FIELDS = {
 def get_suggestions(
     field: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     col = _SUGGESTION_FIELDS.get(field)
     if not col:
@@ -1411,6 +1413,22 @@ async def import_vessels(
         org_id = org.id if org else None
 
     checksum = hashlib.sha256(content).hexdigest()
+    required_vessel_fields = {
+        "name": "Tên phương tiện",
+        "registration_no": "Số đăng ký",
+        "vessel_type": "Loại phương tiện",
+        "vessel_class": "Cấp phương tiện",
+    }
+    preview_rows = []
+    for row in rows:
+        clean_row = {key: value for key, value in row.items() if not key.startswith("_")}
+        clean_row["sourceRow"] = row.get("_source_row")
+        clean_row["sourceSheet"] = row.get("_source_sheet")
+        clean_row["mappingWarnings"] = row.get("_mapping_warnings", [])
+        clean_row["missingFields"] = [
+            label for field, label in required_vessel_fields.items() if not row.get(field)
+        ]
+        preview_rows.append(clean_row)
     if preview:
         db.rollback()
         return {
@@ -1418,7 +1436,11 @@ async def import_vessels(
             "mappingVersion": IMPORT_MAPPING_VERSION,
             "checksum": checksum,
             "organization": org_data,
-            "rows": [{"sourceRow": index, **row} for index, row in enumerate(rows, 11)],
+            "mapping": {
+                "strategy": "HEADER_LABEL_DETECTION",
+                "sheet": rows[0].get("_source_sheet") if rows else None,
+            },
+            "rows": preview_rows,
             "accepted": 0,
             "rejected": [],
         }
@@ -1434,11 +1456,26 @@ async def import_vessels(
         result["importJobId"] = prior.id
         return result
 
-    remove_demo_data_for_real_input(db)
+    remove_demo_data_for_real_input(
+        db,
+        retain_organization_id=org_id if user.role == "CUSTOMER" else None,
+        organization_data=org_data,
+    )
 
     accepted = 0
     rejected: list[dict] = []
-    for source_row, row in enumerate(rows, 11):
+    for row in rows:
+        source_row = row.get("_source_row")
+        missing_fields = [
+            label for field, label in required_vessel_fields.items() if not row.get(field)
+        ]
+        if missing_fields:
+            rejected.append({
+                "sourceRow": source_row,
+                "row": row.get("name"),
+                "error": f"Thiếu {', '.join(missing_fields)}",
+            })
+            continue
         try:
             with db.begin_nested():
                 existing = db.query(Vessel).filter(
@@ -1456,7 +1493,7 @@ async def import_vessels(
                     safe = {
                         k: (excel_date(v) if "date" in k else v)
                         for k, v in row.items()
-                        if hasattr(Vessel, k) and k not in ("id", "organization_id")
+                        if not k.startswith("_") and hasattr(Vessel, k) and k not in ("id", "organization_id")
                     }
                     safe["organization_id"] = org_id
                     safe["created_at"] = now_iso()
@@ -1464,8 +1501,16 @@ async def import_vessels(
                     db.add(Vessel(**safe))
                 db.flush()
             accepted += 1
-        except Exception as exc:
-            rejected.append({"sourceRow": source_row, "row": row.get("name"), "error": str(exc) or type(exc).__name__})
+        except Exception:
+            access_logger.exception(
+                "Vessel import row rejected source_row=%s registration_no=%s",
+                source_row, row.get("registration_no"),
+            )
+            rejected.append({
+                "sourceRow": source_row,
+                "row": row.get("name"),
+                "error": "Không thể nhập dòng này. Hãy kiểm tra định dạng số, ngày hoặc mã đăng ký trùng.",
+            })
     result = {
         "accepted": accepted,
         "rejected": rejected,
@@ -1533,7 +1578,7 @@ async def import_declaration(
     row["unload_json"] = json.dumps(cargo(row.pop("unload", {})), ensure_ascii=False)
     row["load_json"] = json.dumps(cargo(row.pop("load", {})), ensure_ascii=False)
 
-    safe = {k: v for k, v in row.items() if hasattr(Declaration, k)}
+    safe = {k: v for k, v in row.items() if not k.startswith("_") and hasattr(Declaration, k)}
     if not safe.get("declaration_date"):
         safe["declaration_date"] = date.today().isoformat()
     for required in ("company_name", "vessel_name", "registration_no", "vessel_type",
@@ -1542,10 +1587,19 @@ async def import_declaration(
         if not safe.get(required):
             safe[required] = "N/A"
 
-    # Enforce CUSTOMER organization binding
+    # Enforce CUSTOMER organization binding. Preserve the workbook company name
+    # long enough to replace a sentinel demo organization profile.
+    imported_company_name = str(safe.get("company_name") or "").strip()
     safe["organization_id"] = user.organization_id
-    if user.organization:
-        safe["company_name"] = user.organization.name
+
+    remove_demo_data_for_real_input(
+        db,
+        retain_organization_id=user.organization_id,
+        organization_data={"name": imported_company_name},
+    )
+    organization = db.query(Organization).filter(Organization.id == user.organization_id).first()
+    if organization:
+        safe["company_name"] = organization.name
 
     decl = Declaration(**safe)
     db.add(decl)
@@ -1574,13 +1628,195 @@ async def import_declaration(
 # REPORTS (Appendix 1 / 2 / 3)
 # ══════════════════════════════════════════════════════════════════════════════
 
+ANALYTICS_PERIODS = {"week", "month", "quarter", "year"}
+
+
+def _month_shift(value: date, offset: int) -> date:
+    month_index = value.year * 12 + value.month - 1 + offset
+    return date(month_index // 12, month_index % 12 + 1, 1)
+
+
+def _analytics_period(period: str, anchor: date) -> dict[str, Any]:
+    if period == "week":
+        current_start = anchor - timedelta(days=anchor.weekday())
+        current_end = current_start + timedelta(days=6)
+        previous_start = current_start - timedelta(days=364)
+        labels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+        bucket = lambda value, start: (value - start).days
+        title = "Tổng hợp theo tuần"
+        trend_title = "Lượt tàu theo ngày"
+        compare = "Tuần này so với cùng kỳ năm trước"
+    elif period == "month":
+        current_start = anchor.replace(day=1)
+        current_end = _month_shift(current_start, 1) - timedelta(days=1)
+        previous_start = date(current_start.year - 1, current_start.month, 1)
+        labels = [f"Tuần {index}" for index in range(1, 6)]
+        bucket = lambda value, start: min(4, (value.day - 1) // 7)
+        title = "Tổng hợp theo tháng"
+        trend_title = "Lượt tàu theo tuần"
+        compare = f"Tháng {current_start.month}/{current_start.year} so với cùng kỳ {previous_start.year}"
+    elif period == "quarter":
+        quarter_month = ((anchor.month - 1) // 3) * 3 + 1
+        current_start = date(anchor.year, quarter_month, 1)
+        current_end = _month_shift(current_start, 3) - timedelta(days=1)
+        previous_start = date(current_start.year - 1, current_start.month, 1)
+        labels = [f"T{_month_shift(current_start, index).month}" for index in range(3)]
+        bucket = lambda value, start: (value.year - start.year) * 12 + value.month - start.month
+        title = "Tổng hợp theo quý"
+        trend_title = "Lượt tàu theo tháng"
+        compare = f"Quý {(quarter_month - 1) // 3 + 1}/{current_start.year} so với cùng kỳ {previous_start.year}"
+    else:
+        current_start = date(anchor.year, 1, 1)
+        current_end = date(anchor.year, 12, 31)
+        previous_start = date(anchor.year - 1, 1, 1)
+        labels = [f"T{index}" for index in range(1, 13)]
+        bucket = lambda value, start: value.month - 1
+        title = "Tổng hợp theo năm"
+        trend_title = "Lượt tàu theo tháng"
+        compare = f"Năm {anchor.year} so với {anchor.year - 1}"
+    if period == "week":
+        previous_end = previous_start + timedelta(days=6)
+    elif period == "month":
+        previous_end = _month_shift(previous_start, 1) - timedelta(days=1)
+    elif period == "quarter":
+        previous_end = _month_shift(previous_start, 3) - timedelta(days=1)
+    else:
+        previous_end = date(previous_start.year, 12, 31)
+    return {
+        "current_start": current_start,
+        "current_end": current_end,
+        "previous_start": previous_start,
+        "previous_end": previous_end,
+        "labels": labels,
+        "bucket": bucket,
+        "title": title,
+        "trend_title": trend_title,
+        "compare": compare,
+    }
+
+
+def _declaration_operating_date(declaration: Declaration) -> date | None:
+    for raw in (declaration.actual_arrival_at, declaration.eta, declaration.declaration_date):
+        if not raw:
+            continue
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+    return None
+
+
+def _declaration_metrics(declaration: Declaration) -> dict[str, float]:
+    def numeric(value: Any) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    tons = 0.0
+    teu = 0.0
+    for raw in (declaration.unload_json, declaration.load_json):
+        try:
+            item = json.loads(raw or "{}")
+        except (TypeError, json.JSONDecodeError):
+            item = {}
+        tons += numeric(item.get("tons"))
+        teu += numeric(item.get("teu"))
+    return {
+        "trips": 1.0,
+        "tons": tons,
+        "teu": teu,
+        "pax": numeric(declaration.passenger_count),
+    }
+
+
+def _analytics_payload(db: Session, user: User, period: str, anchor: date) -> dict[str, Any]:
+    config = _analytics_period(period, anchor)
+    query = db.query(Declaration).filter(Declaration.workflow_status == "APPROVED")
+    if user.role == "CUSTOMER":
+        query = query.filter(Declaration.organization_id == user.organization_id)
+    declarations = query.all()
+    totals = {
+        "cur": {key: 0.0 for key in ("trips", "tons", "teu", "pax")},
+        "prev": {key: 0.0 for key in ("trips", "tons", "teu", "pax")},
+    }
+    trend_current = [0] * len(config["labels"])
+    trend_previous = [0] * len(config["labels"])
+    for declaration in declarations:
+        operating_date = _declaration_operating_date(declaration)
+        if not operating_date:
+            continue
+        if config["current_start"] <= operating_date <= config["current_end"]:
+            group = "cur"
+            trend = trend_current
+            start = config["current_start"]
+        elif config["previous_start"] <= operating_date <= config["previous_end"]:
+            group = "prev"
+            trend = trend_previous
+            start = config["previous_start"]
+        else:
+            continue
+        for key, value in _declaration_metrics(declaration).items():
+            totals[group][key] += value
+        index = config["bucket"](operating_date, start)
+        if 0 <= index < len(trend):
+            trend[index] += 1
+    return {
+        "period": period,
+        "asOf": anchor.isoformat(),
+        "dataSource": "DEMO" if is_demo_data_active(db) else "OPERATIONAL",
+        "kpis": {
+            key: {"cur": totals["cur"][key], "prev": totals["prev"][key]}
+            for key in totals["cur"]
+        },
+        "trend": {"labels": config["labels"], "cur": trend_current, "prev": trend_previous},
+        "meta": {
+            "analyticsTitle": config["title"],
+            "trendTitle": config["trend_title"],
+            "trendSub": f"{config['current_start'].isoformat()} → {config['current_end'].isoformat()}",
+            "compareSub": config["compare"],
+        },
+    }
+
+
+@app.get("/api/reports/analytics")
+def report_analytics(
+    period: str = "month",
+    as_of: Optional[date] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
+):
+    if period not in ANALYTICS_PERIODS:
+        raise HTTPException(status_code=422, detail="Kỳ thống kê phải là week, month, quarter hoặc year.")
+    return _analytics_payload(db, user, period, as_of or date.today())
+
+
+@app.get("/api/reports/analytics/export")
+def export_analytics(
+    period: str = "month",
+    as_of: Optional[date] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
+):
+    if period not in ANALYTICS_PERIODS:
+        raise HTTPException(status_code=422, detail="Kỳ thống kê không hợp lệ.")
+    payload = _analytics_payload(db, user, period, as_of or date.today())
+    labels = {"trips": "Lượt tàu", "tons": "Khối lượng (tấn)", "teu": "TEU", "pax": "Hành khách"}
+    rows = [[labels[key], values["cur"], values["prev"], values["cur"] - values["prev"]] for key, values in payload["kpis"].items()]
+    content = make_xlsx(payload["meta"]["analyticsTitle"], ["Chỉ tiêu", "Kỳ này", "Kỳ trước", "Chênh lệch"], rows)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="analytics_{period}_{payload["asOf"]}.xlsx"'},
+    )
+
 @app.get("/api/reports/{kind}")
 def export_report(
     kind: str,
     from_: Optional[str] = Query(default=None, alias="from"),
     to: Optional[str] = None,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER", "CV", "QLC", "BP", "ADMIN")),
+    user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
     if kind not in ("appendix1", "appendix2", "appendix3"):
         raise HTTPException(status_code=404, detail=f"Loại báo cáo '{kind}' không tồn tại.")
@@ -1605,7 +1841,7 @@ def export_report(
         raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.")
 
     query = db.query(Declaration).filter(
-        Declaration.workflow_status.in_(["APPROVED", "ISSUED"])
+        Declaration.workflow_status == "APPROVED"
     )
     if user.role == "CUSTOMER":
         query = query.filter(Declaration.organization_id == user.organization_id)
@@ -1696,7 +1932,7 @@ def _ensure_connector(db: Session) -> IntegrationConnector:
 @app.get("/api/integrations/maritime-authority")
 def get_integration_status(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("BP", "ADMIN")),
+    user: User = Depends(require_roles("ADMIN")),
 ):
     connector = _ensure_connector(db)
     jobs = (
@@ -1734,7 +1970,7 @@ async def prepare_sync(
     to = body.get("to")
 
     query = db.query(Declaration).filter(
-        Declaration.workflow_status == "ISSUED"
+        Declaration.workflow_status == "APPROVED"
     )
     if from_:
         query = query.filter(Declaration.declaration_date >= from_)
@@ -1744,7 +1980,7 @@ async def prepare_sync(
 
     payload_data = [
         {"reference_no": d.reference_no, "vessel_name": d.vessel_name,
-         "permit_no": d.permit_no, "issued_at": d.issued_at}
+         "workflow_status": d.workflow_status}
         for d in decls
     ]
 

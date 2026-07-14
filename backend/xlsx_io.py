@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+import unicodedata
 import zipfile
 from datetime import date, datetime
 from html import escape
@@ -18,6 +19,7 @@ MAX_XLSX_COMPRESSION_RATIO = 100
 MAX_XLSX_XML_PART_BYTES = 8 * 1024 * 1024
 MAX_XLSX_SHARED_STRINGS = 50_000
 MAX_XLSX_CELLS = 100_000
+SAFE_IGNORED_EXTERNAL_RELATIONSHIPS = {"hyperlink", "externalLinkPath"}
 
 
 def _safe_xml(content: bytes, label: str) -> ET.Element:
@@ -50,7 +52,13 @@ def _validate_archive(archive: zipfile.ZipFile) -> None:
         if name.endswith(".rels"):
             rels = archive.read(info)
             if b'TargetMode="External"' in rels or b"TargetMode='External'" in rels:
-                raise ValueError("Workbook không được chứa external relationship.")
+                root = _safe_xml(rels, name)
+                for relationship in root:
+                    if relationship.attrib.get("TargetMode") != "External":
+                        continue
+                    relation_type = relationship.attrib.get("Type", "").rsplit("/", 1)[-1]
+                    if relation_type not in SAFE_IGNORED_EXTERNAL_RELATIONSHIPS:
+                        raise ValueError("Workbook chứa external relationship không được hỗ trợ.")
 
 
 def _col_index(ref: str) -> int:
@@ -125,32 +133,179 @@ def read_workbook(content: bytes) -> dict[str, dict[str, Any]]:
         return sheets
 
 
-def vessel_rows(sheets: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    sheet = sheets.get("HỒ SƠ PHƯƠNG TIỆN") or sheets.get("HO SO PHUONG TIEN")
-    if not sheet:
-        raise ValueError("Khong tim thay sheet HO SO PHUONG TIEN")
-    organization = {
-        "name": sheet.get("B4") or sheet.get("C4") or "Khach hang import",
-        "tax_code": sheet.get("B5") or sheet.get("C5") or "",
-        "address": sheet.get("B6") or sheet.get("C6") or "",
-        "contact_name": sheet.get("B7") or sheet.get("C7") or "",
-        "phone": sheet.get("B8") or sheet.get("C8") or "",
-    }
-    keys = [
-        "name", "registration_no", "registry_or_imo", "vessel_type", "vessel_class",
-        "shell_material", "build_year", "length_m", "width_m", "side_height_m", "draft_m",
-        "deadweight_tons", "gross_tonnage", "engine_power_cv", "cargo_capacity_tons",
-        "container_capacity_teu", "passenger_capacity", "min_crew", "safety_certificate_no",
-        "certificate_issue_date", "certificate_expiry_date", "notes", "updated_at",
-    ]
-    rows: list[dict[str, Any]] = []
-    for row_no in range(11, 1001):
-        values = [sheet.get(f"{chr(66 + i)}{row_no}") for i in range(23)]
-        if not any(value not in (None, "") for value in values):
+def _normalized(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or "")).replace("Đ", "D").replace("đ", "d")
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^A-Z0-9]+", " ", text.upper()).strip()
+
+
+def _cell_parts(ref: str) -> tuple[str, int]:
+    match = re.fullmatch(r"([A-Z]+)(\d+)", ref.upper())
+    return (match.group(1), int(match.group(2))) if match else ("", 0)
+
+
+def _column_index(letters: str) -> int:
+    value = 0
+    for char in letters:
+        value = value * 26 + ord(char) - 64
+    return value
+
+
+VESSEL_HEADER_ALIASES = {
+    "name": ("TEN PHUONG TIEN", "TEN PTTND", "TEN TAU", "TEN SA LAN"),
+    "registration_no": ("SO DANG KY", "SO DK"),
+    "registry_or_imo": ("SO DANG KIEM", "IMO"),
+    "vessel_type": ("LOAI PHUONG TIEN", "LOAI PT", "CONG DUNG"),
+    "vessel_class": ("CAP PHUONG TIEN", "CAP PT", "VUNG HOAT DONG"),
+    "shell_material": ("VAT LIEU VO",),
+    "build_year": ("NAM DONG", "NAM SAN XUAT"),
+    "length_m": ("CHIEU DAI", "LMAX"),
+    "width_m": ("CHIEU RONG",),
+    "side_height_m": ("CHIEU CAO MAN",),
+    "draft_m": ("MON NUOC",),
+    "deadweight_tons": ("TRONG TAI TOAN PHAN", "DWT"),
+    "gross_tonnage": ("DUNG TICH", "GROSS TONNAGE", "GT"),
+    "engine_power_cv": ("CONG SUAT MAY", "CONG SUAT"),
+    "cargo_capacity_tons": ("KHA NANG KHAI THAC TAN", "SUC CHO HANG"),
+    "container_capacity_teu": ("KHA NANG KHAI THAC TEU", "SUC CHO CONTAINER", "TEU"),
+    "passenger_capacity": ("SUC CHO KHACH", "SO HANH KHACH"),
+    "min_crew": ("SO THUYEN VIEN", "DINH BIEN THUYEN VIEN"),
+    "safety_certificate_no": ("SO GCN ATKT", "GCNATKT", "GCN ATKT"),
+    "certificate_issue_date": ("NGAY CAP GCN",),
+    "certificate_expiry_date": ("NGAY HET HAN GCN", "HET HAN GCN", "GCNATKT BVMT"),
+    "notes": ("GHI CHU",),
+    "updated_at": ("NGAY CAP NHAT",),
+}
+
+VESSEL_FLOAT_FIELDS = {
+    "length_m", "width_m", "side_height_m", "draft_m", "deadweight_tons",
+    "gross_tonnage", "engine_power_cv", "cargo_capacity_tons",
+    "container_capacity_teu",
+}
+VESSEL_INTEGER_FIELDS = {"build_year", "passenger_capacity", "min_crew"}
+
+
+def _field_for_header(value: Any) -> str | None:
+    label = _normalized(value)
+    candidates: list[tuple[int, str]] = []
+    for field, aliases in VESSEL_HEADER_ALIASES.items():
+        for alias in aliases:
+            normalized_alias = _normalized(alias)
+            if label == normalized_alias or normalized_alias in label:
+                candidates.append((len(normalized_alias), field))
+    return max(candidates)[1] if candidates else None
+
+
+def _numeric_from_excel(value: Any, *, integer: bool = False) -> tuple[Any, str | None]:
+    """Return the first listed numeric value and flag ambiguous source text.
+
+    Some operational workbooks store two certified configurations in one cell,
+    for example ``2723.79 / 2912.57``. The database schema is scalar, so the
+    first (primary) value is imported and the original cell is retained in the
+    vessel notes instead of failing or silently discarding the ambiguity.
+    """
+    if value in (None, ""):
+        return None, None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return (int(value) if integer else float(value)), None
+
+    source = str(value).strip()
+    tokens = re.findall(r"[-+]?\d[\d.,]*", source)
+    if not tokens:
+        return None, f"Không đọc được giá trị số: {source}"
+    token = tokens[0].rstrip(".,")
+    if "," in token and "." in token:
+        if token.rfind(",") > token.rfind("."):
+            token = token.replace(".", "").replace(",", ".")
+        else:
+            token = token.replace(",", "")
+    elif "," in token:
+        token = token.replace(",", ".")
+    try:
+        parsed = float(token)
+    except ValueError:
+        return None, f"Không đọc được giá trị số: {source}"
+    warning = f"Giữ giá trị đầu tiên từ ô đa giá trị: {source}" if len(tokens) > 1 else None
+    return (int(parsed) if integer else parsed), warning
+
+
+def _detect_vessel_table(sheets: dict[str, dict[str, Any]]) -> tuple[str, dict[str, Any], int, dict[str, str]]:
+    best: tuple[int, str, dict[str, Any], int, dict[str, str]] | None = None
+    for sheet_name, sheet in sheets.items():
+        by_row: dict[int, dict[str, str]] = {}
+        for ref, value in sheet.items():
+            column, row_no = _cell_parts(ref)
+            field = _field_for_header(value)
+            if row_no and field:
+                by_row.setdefault(row_no, {})[field] = column
+        for row_no, mapping in by_row.items():
+            score = len(mapping) + (5 if {"name", "registration_no"}.issubset(mapping) else 0)
+            candidate = (score, sheet_name, sheet, row_no, mapping)
+            if best is None or candidate[0] > best[0]:
+                best = candidate
+    if not best or not {"name", "registration_no"}.issubset(best[4]):
+        raise ValueError("Không tìm thấy bảng phương tiện có cột Tên phương tiện và Số đăng ký.")
+    _, sheet_name, sheet, header_row, mapping = best
+    return sheet_name, sheet, header_row, mapping
+
+
+def _value_after_label(sheet: dict[str, Any], aliases: tuple[str, ...]) -> Any:
+    normalized_aliases = tuple(_normalized(alias) for alias in aliases)
+    for ref, value in sheet.items():
+        label = _normalized(value)
+        if not any(alias == label or alias in label for alias in normalized_aliases):
             continue
-        row = dict(zip(keys, values))
-        if row.get("name") and row.get("registration_no"):
-            rows.append(row)
+        column, row_no = _cell_parts(ref)
+        column_index = _column_index(column)
+        for offset in range(1, 4):
+            candidate = sheet.get(f"{_column_name(column_index + offset)}{row_no}")
+            if candidate not in (None, ""):
+                return candidate
+    return ""
+
+
+def vessel_rows(sheets: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    sheet_name, sheet, header_row, mapping = _detect_vessel_table(sheets)
+    organization = {
+        "name": _value_after_label(sheet, ("Tên doanh nghiệp", "Chủ phương tiện")) or "Khách hàng import",
+        "tax_code": _value_after_label(sheet, ("Mã số thuế",)),
+        "address": _value_after_label(sheet, ("Địa chỉ",)),
+        "contact_name": _value_after_label(sheet, ("Người liên hệ",)),
+        "phone": _value_after_label(sheet, ("Điện thoại",)),
+    }
+    max_row = max((_cell_parts(ref)[1] for ref in sheet), default=header_row)
+    rows: list[dict[str, Any]] = []
+    blank_run = 0
+    for row_no in range(header_row + 1, min(max_row, header_row + 5000) + 1):
+        row = {field: sheet.get(f"{column}{row_no}") for field, column in mapping.items()}
+        if not any(value not in (None, "") for value in row.values()):
+            blank_run += 1
+            if blank_run >= 25 and rows:
+                break
+            continue
+        blank_run = 0
+        mapping_warnings: list[str] = []
+        source_notes: list[str] = []
+        for field in VESSEL_FLOAT_FIELDS | VESSEL_INTEGER_FIELDS:
+            if field not in row or row[field] in (None, ""):
+                continue
+            raw_value = row[field]
+            parsed, warning = _numeric_from_excel(
+                raw_value, integer=field in VESSEL_INTEGER_FIELDS
+            )
+            row[field] = parsed
+            if warning:
+                mapping_warnings.append(f"{field}: {warning}")
+                source_notes.append(f"{field}={raw_value}")
+        if source_notes:
+            existing_notes = str(row.get("notes") or "").strip()
+            source_note = "Giá trị gốc Excel: " + "; ".join(source_notes)
+            row["notes"] = " | ".join(part for part in (existing_notes, source_note) if part)
+        if mapping_warnings:
+            row["_mapping_warnings"] = mapping_warnings
+        row["_source_row"] = row_no
+        row["_source_sheet"] = sheet_name
+        rows.append(row)
     return organization, rows
 
 
@@ -164,13 +319,52 @@ DECLARATION_CELLS = {
 }
 
 
+DECLARATION_LABEL_ALIASES = {
+    "company_name": ("Tên doanh nghiệp", "Đại lý"),
+    "declaration_date": ("Ngày khai báo",),
+    "vessel_name": ("Tên phương tiện", "Tên PTTND"),
+    "registration_no": ("Số đăng ký",),
+    "vessel_type": ("Loại phương tiện", "Công dụng"),
+    "vessel_class": ("Cấp phương tiện", "Cấp PTTND"),
+    "length_m": ("Chiều dài lớn nhất", "Chiều dài"),
+    "deadweight_tons": ("Trọng tải toàn phần",),
+    "gross_tonnage": ("Dung tích",),
+    "certificate_expiry_date": ("Ngày hết hạn GCN",),
+    "crew_count": ("Số thuyền viên",),
+    "passenger_count": ("Số hành khách",),
+    "last_port": ("Cảng rời cuối cùng", "Cảng xuất phát"),
+    "working_port": ("Cảng cầu bến đến làm hàng", "Cảng đến làm hàng"),
+    "destination_port": ("Cảng đích", "Điểm đến cuối cùng"),
+    "eta": ("Thời gian dự kiến đến",),
+    "etd": ("Thời gian dự kiến rời",),
+    "master_name": ("Họ tên thuyền trưởng", "Thuyền trưởng"),
+    "master_phone": ("Số điện thoại thuyền trưởng", "SĐT thuyền trưởng"),
+}
+
+
+def _detect_declaration_sheet(sheets: dict[str, dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    for preferred in ("KHAI BÁO", "KHAI BAO"):
+        if preferred in sheets:
+            return preferred, sheets[preferred]
+    best: tuple[int, str, dict[str, Any]] | None = None
+    aliases = [alias for values in DECLARATION_LABEL_ALIASES.values() for alias in values]
+    for name, sheet in sheets.items():
+        score = sum(1 for value in sheet.values() if any(_normalized(alias) in _normalized(value) for alias in aliases))
+        if best is None or score > best[0]:
+            best = (score, name, sheet)
+    if not best or best[0] < 5:
+        raise ValueError("Không tìm thấy sheet khai báo có đủ nhãn nhận diện.")
+    return best[1], best[2]
+
+
 def declaration_row(sheets: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    sheet = sheets.get("KHAI BÁO") or sheets.get("KHAI BAO")
-    if not sheet:
-        raise ValueError("Khong tim thay sheet KHAI BAO")
-    result = {key: sheet.get(cell) for key, cell in DECLARATION_CELLS.items()}
+    sheet_name, sheet = _detect_declaration_sheet(sheets)
+    result: dict[str, Any] = {}
+    for key, fallback_cell in DECLARATION_CELLS.items():
+        result[key] = _value_after_label(sheet, DECLARATION_LABEL_ALIASES[key]) or sheet.get(fallback_cell)
     result["unload"] = _cargo_from_cells(sheet, 30, 31, 32, 33)
     result["load"] = _cargo_from_cells(sheet, 44, 45, 46, 47)
+    result["_source_sheet"] = sheet_name
     return result
 
 
@@ -243,4 +437,11 @@ def _workbook_rels() -> str:
 def excel_date(value: Any) -> Any:
     if isinstance(value, (int, float)) and value > 20000:
         return date.fromordinal(date(1899, 12, 30).toordinal() + int(value)).isoformat()
+    if isinstance(value, str):
+        stripped = value.strip()
+        for pattern in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(stripped, pattern).date().isoformat()
+            except ValueError:
+                continue
     return value

@@ -9,6 +9,7 @@ Usage:
 import os
 import sys
 from pathlib import Path
+from sqlalchemy import inspect
 
 # Add project root to sys.path
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,12 @@ def main():
         print("Example (PowerShell):", file=sys.stderr)
         print('  $env:ADMIN_USERNAME="admin"', file=sys.stderr)
         print('  $env:ADMIN_PASSWORD="securepassword"', file=sys.stderr)
+        sys.exit(1)
+
+    if not inspect(engine).has_table("users"):
+        print("ERROR: Database schema has not been initialized.", file=sys.stderr)
+        print("Run this command first:", file=sys.stderr)
+        print("  python -m alembic upgrade head", file=sys.stderr)
         sys.exit(1)
 
     db = SessionLocal()

@@ -19,6 +19,7 @@
 | UX-103 | **PASS** | UI/audit dùng “Xác nhận & gửi”, không dùng “Nộp/nộp” cho khách hàng. | Không còn việc trong Recovery UX. |
 | UX-104 | **CHƯA ĐÓNG — NGOÀI GATE NÀY** | Dashboard đã ẩn chức năng theo role và có attention queue. | Task study để xác định thứ tự widget; không tái cấu trúc theo cảm tính. |
 | UX-105 | **PASS** | Full-flow browser UAT xác nhận validation, error summary, focus recovery và wizard không crash. | Không còn việc trong Recovery UX. |
+| UX-108 | **FOLLOW-UP — KHÔNG CHẶN GATE** | Error summary là tiếng Việt nhưng browser-native field messages trong ảnh validation vẫn hiện tiếng Anh, ví dụ “Please fill out this field”. | Chuẩn hóa thông báo validation theo tiếng Việt trong tranche polish nội dung. |
 | UX-106 | **PASS** | “Crew List” đã Việt hóa; Bước 4 hiển thị đúng nội dung tiếng Việt. | Không còn việc trong Recovery UX. |
 | UX-107 | **PASS** | Không còn stage CV/QLC/BP trong UI/runtime; deny-list và regression test chặn client cũ. | Không xóa deny-list/test. |
 | UX-002 cũ | **PASS** | Nhãn “Nháp cục bộ · chưa gửi” phản ánh đúng trạng thái lưu. | Task study đại diện nếu cần đo mức độ hiểu. |

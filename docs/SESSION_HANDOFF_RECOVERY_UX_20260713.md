@@ -66,6 +66,8 @@ không hard-code hoặc commit secret.
 - Analytics API/metrics: cần work order riêng với contract, RBAC và acceptance criteria.
 - Dashboard information architecture: chờ task study nếu Product Owner muốn tái cấu trúc.
 - Tìm kiếm không dấu: chờ quyết định sản phẩm.
+- Validation locale: error summary đã là tiếng Việt nhưng một số thông báo
+  native của trình duyệt còn tiếng Anh; đây là polish follow-up, không chặn Gate 5.
 - Production/staging: cần backup, migration rehearsal, rollback và owner triển khai.
 - Merge/push/release: chưa được tự động cho phép bởi việc đóng UX Gate 5.
 

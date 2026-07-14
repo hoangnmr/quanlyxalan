@@ -678,7 +678,10 @@ function reviewSummaryHtml(d) {
   const isNew = state.declarationVesselMode === 'new';
   const captainName = isNew ? state.declarationNewCrew[0]?.full_name : d.master_name;
   const captainPhone = isNew ? state.declarationNewCrew[0]?.phone : d.master_phone;
-  const checkedCrew = $$('input[name="crew_ids"]:checked', $('#declaration-crew-container')).length;
+  const crewContainer = $('#declaration-crew-container');
+  const checkedCrew = crewContainer
+    ? $$('input[name="crew_ids"]:checked', crewContainer).length
+    : 0;
   const crewTotal = isNew ? state.declarationNewCrew.length : (checkedCrew || (d.crew_ids || []).length);
   return `<section class="form-section"><h3>F. Xem lại & Gửi</h3><div class="section-grid">
     <div class="attachment-field wide-field"><strong>Phương tiện</strong><p>${esc(d.vessel_name || '')} — ${esc(d.registration_no || '')}${isNew ? ' (hồ sơ mới)' : ''}</p></div>

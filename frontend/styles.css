@@ -49,6 +49,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-width: 320px; background: var(--cvf-bg-page); color: var(--cvf-text-primary); font-family: "Inter", "Segoe UI", sans-serif; font-size: 13px; transition: background-color 0.4s ease, color 0.4s ease; }
 button, input, select, textarea { font: inherit; }
@@ -61,7 +62,7 @@ p { color: var(--cvf-text-secondary); line-height: 1.55; }
 code { color: var(--cvf-info); }
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 220px 1fr; }
-.sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: 220px; display: flex; flex-direction: column; padding: 18px 13px; background: var(--cvf-bg-shell); border-right: 1px solid var(--cvf-border); }
+.sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: 220px; min-height: 0; display: flex; flex-direction: column; padding: 18px 13px; overflow-y: auto; overscroll-behavior: contain; background: var(--cvf-bg-shell); border-right: 1px solid var(--cvf-border); }
 .brand { display: flex; gap: 11px; align-items: center; padding: 2px 5px 20px; color: var(--cvf-text-primary); text-decoration: none; }
 .brand-logo-frame { display: grid; place-items: center; width: 43px; height: 43px; flex: 0 0 43px; overflow: hidden; border: 1px solid var(--cvf-border-strong); border-radius: 10px; background: var(--cvf-surface-elevated); box-shadow: 0 8px 24px var(--cvf-accent-glow); }
 .brand-logo-frame img { width: 100%; height: 100%; object-fit: contain; background: var(--cvf-logo-bg); }

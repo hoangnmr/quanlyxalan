@@ -211,7 +211,13 @@ def test_static_frontend(client):
     assert "renderAnalyticsUnavailable();" in app_js
     assert "if (state.currentUser?.role === 'ADMIN') loadIntegration();" in app_js
     assert "btn.style.display = isCustomer ? 'inline-block' : 'none'" in app_js
+    assert "const crewContainer = $('#declaration-crew-container');" in app_js
+    assert "? $$('input[name=\"crew_ids\"]:checked', crewContainer).length" in app_js
     assert "node.setAttribute('role', error ? 'alert' : 'status')" in app_js
+    styles_css = client.get("/styles.css").text
+    assert "[hidden] { display: none !important; }" in styles_css
+    assert "overflow-y: auto" in styles_css
+    assert "overscroll-behavior: contain" in styles_css
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():

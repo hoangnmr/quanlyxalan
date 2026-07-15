@@ -1,6 +1,8 @@
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -9,6 +11,13 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import User
 from .schemas import TokenData
+
+import sys
+
+# Load environment variables from the project root .env file if not running tests
+if "pytest" not in sys.modules:
+    ROOT = Path(__file__).resolve().parents[1]
+    load_dotenv(dotenv_path=ROOT / ".env")
 
 DEFAULT_SECRET = "khai-bao-cang-vu-secret-key-2026"
 SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET)

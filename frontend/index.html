@@ -55,16 +55,16 @@
 
       <main id="main-content" tabindex="-1" aria-busy="false">
         <section class="page active" data-page="dashboard">
-          <div class="page-heading"><div><p class="eyebrow">TÌNH HÌNH HÔM NAY</p><p>Trạng thái hồ sơ phương tiện và các lượt tàu dự kiến.</p></div></div>
-          <section class="dashboard-search panel"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="dashboard-vessel-search" placeholder="Lọc nhanh theo số hiệu tàu hoặc số sà lan"></label><span class="muted">Nhập ít nhất 2 ký tự</span></section>
+          <div class="page-heading"><div><p class="eyebrow">TÌNH HÌNH HÔM NAY</p><p>Trạng thái hồ sơ phương tiện và các lượt Salan dự kiến.</p></div></div>
+          <section class="dashboard-search panel"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="dashboard-vessel-search" placeholder="Lọc nhanh theo số hiệu Salan"></label><span class="muted">Nhập ít nhất 2 ký tự</span></section>
           <div id="dashboard-search-results" class="search-card-grid"></div>
           <div id="stats" class="stat-grid" aria-live="polite"></div>
           <section id="demo-data-notice" class="demo-data-notice" role="status" hidden><strong>Dữ liệu minh họa</strong><span>Đây là dữ liệu mẫu để kiểm tra giao diện. Hệ thống sẽ tự gỡ toàn bộ dữ liệu này khi bạn tạo hoặc import phương tiện thực tế đầu tiên.</span></section>
-          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Nhắc trong ứng dụng hiển thị cảnh báo hạn chứng chỉ ở tổng quan và danh sách thuyền viên. Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input id="in-app-certificate-reminders" type="checkbox"><span>Nhắc trong ứng dụng</span></label></section>
+          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input id="in-app-certificate-reminders" type="checkbox"><span>Nhắc trong ứng dụng</span></label></section>
           <div id="certificate-reminder" class="warning-strip" role="status" aria-live="polite" hidden></div>
           <section id="attention-queue" class="panel attention-queue" hidden><div class="panel-header"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2 id="attention-title">Hàng đợi xử lý</h2></div><button id="attention-open-list" class="soft-button" type="button">Mở danh sách</button></div><div id="attention-content" class="attention-list"></div></section>
           <section id="admin-operations" class="panel" hidden><div class="panel-header"><div><p class="eyebrow">QUẢN TRỊ</p><h2>Tình hình vận hành</h2></div></div><div id="admin-operations-content" class="stat-grid"></div></section>
-          <section id="admin-backup" class="panel" hidden><div class="panel-header"><div><p class="eyebrow">QUẢN TRỊ</p><h2>Sao lưu dữ liệu</h2><p>Tạo bản sao lưu SQLite ngay từ trình duyệt. Khôi phục dữ liệu vẫn phải thực hiện thủ công qua dòng lệnh để tránh ghi đè dữ liệu đang hoạt động.</p></div><button id="trigger-backup" type="button" class="primary-button">Backup ngay</button></div><div id="backup-history" class="table-wrap"></div></section>
+          <section id="admin-backup" class="panel" hidden><div class="panel-header"><div><p class="eyebrow">QUẢN TRỊ</p><h2>Sao lưu dữ liệu</h2><p>Tạo bản sao lưu SQLite ngay từ trình duyệt.</p></div><button id="trigger-backup" type="button" class="primary-button">Backup ngay</button></div><div id="backup-history" class="table-wrap"></div></section>
           <div class="content-grid">
             <section class="panel"><div class="panel-header"><div><p class="eyebrow">HOẠT ĐỘNG GẦN ĐÂY</p><h2>Phiếu khai báo</h2></div><button class="soft-button" data-route-link="declarations">Xem tất cả</button></div><div id="recent-table" class="table-wrap"></div></section>
           </div>
@@ -72,7 +72,7 @@
 
         <section class="page" data-page="vessels">
           <div class="page-heading"><div><p class="eyebrow">DANH MỤC DÙNG LẠI</p><p>Phương tiện lần sau đến Cảng không cần kê khai.</p></div><button class="primary-button" id="add-vessel">+ Thêm phương tiện</button></div>
-          <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="vessel-search" placeholder="Tìm tên tàu hoặc số đăng ký"></label><span id="vessel-count" class="muted"></span></div><div id="vessel-table" class="table-wrap"></div></section>
+          <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="vessel-search" placeholder="Tìm tên Salan hoặc số đăng ký"></label><span id="vessel-count" class="muted"></span></div><div id="vessel-table" class="table-wrap"></div></section>
         </section>
 
         <section class="page" data-page="port-register">
@@ -84,7 +84,7 @@
 
         <section class="page" data-page="declarations">
           <div class="page-heading"><div><p class="eyebrow">MỖI PHƯƠNG TIỆN / MỖI LƯỢT</p><p>Kiểm tra khai báo.</p></div><button class="primary-button" data-action="new-declaration">+ Tạo phiếu</button></div>
-          <section class="panel advanced-filter"><label>Tàu / số đăng ký<input id="declaration-search" placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select id="movement-filter"><option value="">Tất cả</option><option value="ARRIVAL">Vào cảng</option><option value="DEPARTURE">Rời cảng</option></select></label><label>Trạng thái<select id="workflow-filter"><option value="">Tất cả</option><option value="PENDING_REVIEW">Chờ Cảng xử lý</option><option value="CHANGES_REQUESTED">Cần bổ sung</option><option value="APPROVED">Đã duyệt</option></select></label><label>Thuyền trưởng<input id="master-filter" placeholder="Họ tên"></label><label>Từ ngày<input id="declaration-from" type="date"></label><label>Đến ngày<input id="declaration-to" type="date"></label><button id="clear-declaration-filter" class="ghost-button">Đặt lại</button><span id="declaration-count" class="muted"></span></section>
+          <section class="panel advanced-filter"><label>Salan / số đăng ký<input id="declaration-search" placeholder="Ví dụ: SG-1234"></label><label>Loại phiếu<select id="movement-filter"><option value="">Tất cả</option><option value="ARRIVAL">Vào cảng</option><option value="DEPARTURE">Rời cảng</option></select></label><label>Trạng thái<select id="workflow-filter"><option value="">Tất cả</option><option value="PENDING_REVIEW">Chờ Cảng xử lý</option><option value="CHANGES_REQUESTED">Cần bổ sung</option><option value="APPROVED">Đã duyệt</option></select></label><label>Thuyền trưởng<input id="master-filter" placeholder="Họ tên"></label><label>Từ ngày<input id="declaration-from" type="date"></label><label>Đến ngày<input id="declaration-to" type="date"></label><button id="clear-declaration-filter" class="ghost-button">Đặt lại</button><span id="declaration-count" class="muted"></span></section>
           <section class="panel"><div id="declaration-table" class="table-wrap"></div><div id="declaration-pagination" class="pagination" aria-label="Phân trang phiếu khai báo"></div></section>
         </section>
 
@@ -111,17 +111,17 @@
             <div id="analytics-demo-notice" class="demo-data-notice" role="status" hidden><strong>Dữ liệu minh họa</strong><span>Số liệu dùng bộ dữ liệu mẫu để xem giao diện. Khi tạo hoặc import dữ liệu thật, bộ mẫu tự được gỡ và báo cáo chuyển sang dữ liệu vận hành.</span></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
-              <div class="trend-card"><div class="trend-head"><strong id="trend-title">Lượt tàu theo tháng</strong><span class="muted" id="trend-sub">—</span></div><div class="trend-chart" id="trend-chart"></div><div class="trend-legend"><span><i class="dot-cur"></i>Kỳ này</span><span><i class="dot-prev"></i>Cùng kỳ năm trước</span></div></div>
+              <div class="trend-card"><div class="trend-head"><strong id="trend-title">Lượt Salan theo tháng</strong><span class="muted" id="trend-sub">—</span></div><div class="trend-chart" id="trend-chart"></div><div class="trend-legend"><span><i class="dot-cur"></i>Kỳ này</span><span><i class="dot-prev"></i>Cùng kỳ năm trước</span></div></div>
               <div class="compare-card"><div class="compare-head"><strong>So sánh cùng kỳ</strong><span class="muted" id="compare-sub">—</span></div><table><thead><tr><th>Chỉ tiêu</th><th>Kỳ này</th><th>Cùng kỳ</th><th>+/-</th></tr></thead><tbody id="compare-body"></tbody></table></div>
             </div>
           </section>
-          <section class="panel report-filter"><label>Từ ngày<input id="report-from" type="date"></label><label>Đến ngày<input id="report-to" type="date"></label><p><span class="info-dot">i</span> Chỉ phiếu ở trạng thái <strong>Đã duyệt</strong> được đưa vào báo cáo.</p></section>
+          <section class="panel report-filter"><label>Từ ngày<input id="report-from" type="date"></label><label>Đến ngày<input id="report-to" type="date"></label><p><span class="info-dot">@</span> Chỉ phiếu ở trạng thái <strong>Đã duyệt</strong> được đưa vào báo cáo.</p></section>
           <div class="report-grid">
             <article class="panel report-card"><span>PL.01</span><h2>Kế hoạch hoạt động PTTND</h2><p>Kế hoạch theo ngày, vị trí đến/rời, hàng hóa và thuyền trưởng.</p><button class="outline-button" data-report="appendix1">Xuất Excel</button></article>
-            <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt tàu</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt tàu và hành khách.</p><button class="outline-button" data-report="appendix2">Xuất Excel</button></article>
+            <article class="panel report-card"><span>PL.02</span><h2>Khối lượng hàng hóa, lượt Salan</h2><p>Tổng hợp kỳ báo cáo theo nhóm hàng, TEU, lượt Salan và hành khách.</p><button class="outline-button" data-report="appendix2">Xuất Excel</button></article>
             <article class="panel report-card"><span>PL.03</span><h2>Chi tiết phương tiện ra, vào cảng</h2><p>Danh sách từng lượt cùng hành trình và phân loại hàng hóa.</p><button class="outline-button" data-report="appendix3">Xuất Excel</button></article>
           </div>
-          <section id="external-integration-panel" class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI DỮ LIỆU BÊN NGOÀI</p><h2>Chuẩn bị luồng tích hợp API</h2><p>Luồng payload, nhật ký chuẩn bị và adapter đã sẵn sàng ở chế độ thủ công. Hệ thống chưa gửi ra ngoài cho đến khi có đặc tả endpoint, thông tin xác thực và phê duyệt chính thức.</p><div class="integration-readiness"><span><b>Payload</b> Sẵn sàng chuẩn bị</span><span><b>Endpoint</b> Chờ đặc tả</span><span><b>Xác thực</b> Chờ cấu hình</span></div></div><div id="integration-admin-actions" class="integration-state" hidden><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói dữ liệu</button></div><div id="sync-jobs" class="table-wrap span-full" hidden></div></section>
+          <section id="external-integration-panel" class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI DỮ LIỆU BÊN NGOÀI</p><h2>Chuẩn bị luồng tích hợp API</h2><p>Hệ thống chưa gửi ra ngoài cho đến khi có đặc tả endpoint, thông tin xác thực và phê duyệt chính thức.</p><div class="integration-readiness"><span><b>Payload</b> Sẵn sàng chuẩn bị</span><span><b>Endpoint</b> Chờ đặc tả</span><span><b>Xác thực</b> Chờ cấu hình</span></div></div><div id="integration-admin-actions" class="integration-state" hidden><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị gói dữ liệu</button></div><div id="sync-jobs" class="table-wrap span-full" hidden></div></section>
         </section>
       </main>
     </div>
@@ -162,4 +162,3 @@
   <script src="/app.js?v=1.1.8" defer></script>
 </body>
 </html>
-

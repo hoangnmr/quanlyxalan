@@ -3,6 +3,7 @@ const state = {
   declarationFilter: {}, declarationPage: 1, declarationPaging: null, dashboardCertificateWarnings: 0, editingVessel: null, editingDeclaration: null, editingCrew: null, workflowDeclaration: null,
   wizardStep: 1, wizardMaxStep: 1, declarationVesselMode: 'existing', declarationNewCrew: [],
   pendingImport: null,
+  dashboardSearchSequence: 0,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -196,6 +197,18 @@ async function loadDashboard(query = '') {
     renderDashboardMatches(data.matches || []);
   } catch (error) { toast(error.message, true); }
   finally { $('#main-content').setAttribute('aria-busy', 'false'); }
+}
+
+async function searchDashboardVessels(query, sequence) {
+  try {
+    const data = await api(`/api/dashboard?q=${encodeURIComponent(query)}`);
+    if (sequence !== state.dashboardSearchSequence) return;
+    renderDashboardMatches(data.matches || []);
+  } catch (error) {
+    if (sequence !== state.dashboardSearchSequence) return;
+    renderDashboardMatches([]);
+    toast(`Không thể tìm phương tiện: ${error.message}`, true);
+  }
 }
 
 function renderAttentionQueue(queue) {
@@ -1011,14 +1024,22 @@ async function previewImport(input, path, kind) {
 function renderImportPreview() {
   const {kind, preview} = state.pendingImport;
   let warningCount = 0;
+  let conflictCount = 0;
+  let overwritableCount = 0;
   let bodyHtml;
   if (kind === 'vessels') {
     const rows = preview.rows || [];
     warningCount = rows.filter(row => row.missingFields?.length).length;
+    conflictCount = rows.filter(row => row.existing).length;
+    overwritableCount = rows.filter(row => row.existing && !row.ownershipConflict).length;
     bodyHtml = rows.length
       ? `<table class="data-table responsive-table"><thead><tr><th>Dòng</th><th>Tên phương tiện</th><th>Số đăng ký</th><th>Kiểm tra</th></tr></thead><tbody>${rows.map(row => {
           const check = row.missingFields?.length
             ? `<span class="table-badge danger">Thiếu: ${esc(row.missingFields.join(', '))}</span>`
+            : row.ownershipConflict
+              ? '<span class="table-badge danger">Trùng dữ liệu tổ chức khác</span>'
+            : row.existing
+              ? `<span class="table-badge draft" title="${esc((row.changes || []).map(item => `${item.label}: ${item.current ?? '—'} → ${item.incoming ?? '—'}`).join(' · '))}">Đã có · ${(row.changes || []).length} thay đổi</span>`
             : row.mappingWarnings?.length
               ? `<span class="table-badge draft" title="${esc(row.mappingWarnings.join(' · '))}">Hợp lệ · đã chuẩn hóa</span>`
               : '<span class="table-badge submitted">Hợp lệ</span>';
@@ -1035,13 +1056,21 @@ function renderImportPreview() {
   setImportResult(`
     ${mapping ? `<div class="import-mapping-note"><strong>Đã tự nhận diện cấu trúc</strong><span>Sheet: ${esc(mapping.sheet || '—')} · Mapping: theo nhãn cột</span></div>` : ''}
     ${warningCount ? `<div class="warning-strip visible">${kind === 'vessels' ? `Có ${warningCount} dòng thiếu dữ liệu bắt buộc — các dòng này sẽ bị bỏ qua nếu bạn tiếp tục.` : 'File thiếu dữ liệu bắt buộc — không thể import cho đến khi bổ sung.'}</div>` : ''}
+    ${conflictCount ? `<div class="warning-strip visible"><strong>Có ${conflictCount} phương tiện đã tồn tại.</strong> Mặc định hệ thống giữ dữ liệu hiện có. Chỉ chọn ghi đè sau khi xem các thay đổi trong cột Kiểm tra.${preview.previousImportId ? ` File này trùng lần import #${esc(preview.previousImportId)}.` : ''}</div>` : ''}
     ${bodyHtml}
     <div class="modal-actions">
       <button type="button" class="ghost-button" id="cancel-import">Huỷ</button>
-      <button type="button" class="primary-button" id="confirm-import" ${kind === 'declaration' && warningCount ? 'disabled' : ''}>Xác nhận import</button>
+      <button type="button" class="outline-button" id="confirm-import" ${kind === 'declaration' && warningCount ? 'disabled' : ''}>${conflictCount ? 'Giữ dữ liệu hiện có & tiếp tục' : 'Xác nhận import'}</button>
+      ${overwritableCount ? `<button type="button" class="primary-button" id="overwrite-import">Ghi đè ${overwritableCount} bản ghi</button>` : ''}
     </div>`);
   $('#cancel-import').onclick = cancelImport;
-  $('#confirm-import').onclick = confirmImport;
+  $('#confirm-import').onclick = () => confirmImport(false);
+  const overwriteButton = $('#overwrite-import');
+  if (overwriteButton) overwriteButton.onclick = () => {
+    if (window.confirm(`Ghi đè ${overwritableCount} phương tiện bằng dữ liệu đã chuẩn hóa trong file Excel?`)) {
+      confirmImport(true);
+    }
+  };
 }
 
 function cancelImport() {
@@ -1051,19 +1080,20 @@ function cancelImport() {
   setImportResult('Chưa có file nào được import trong phiên này.', true);
 }
 
-async function confirmImport() {
+async function confirmImport(overwriteExisting = false) {
   const {path, file} = state.pendingImport;
-  const button = $('#confirm-import');
+  const button = overwriteExisting ? $('#overwrite-import') : $('#confirm-import');
   button.disabled = true;
-  button.textContent = 'Đang import…';
+  button.textContent = overwriteExisting ? 'Đang ghi đè…' : 'Đang import…';
   try {
-    const result = await api(path, {method:'POST', headers:IMPORT_FILE_HEADERS, body:file});
+    const requestPath = overwriteExisting ? `${path}?overwrite_existing=true` : path;
+    const result = await api(requestPath, {method:'POST', headers:IMPORT_FILE_HEADERS, body:file});
     if (result.idempotent) {
       setImportResult(`<div><strong>File đã được nhập trước đó</strong><p>Không tạo thêm bản ghi. Kết quả lần nhập gốc: ${result.accepted || 0} bản ghi, ${result.rejected?.length || 0} dòng bị từ chối.</p><small>Mã import: ${esc(result.importJobId || '—')}</small></div>`);
       toast('Không tạo bản ghi trùng — file này đã được nhập trước đó.');
     } else {
-      setImportResult(`<div><strong>Import thành công</strong><p>Đã nhận ${result.accepted || 0} bản ghi.${result.rejected?.length ? ` Có ${result.rejected.length} dòng bị từ chối.` : ''}</p>${result.rejected?.length ? `<ul>${result.rejected.map(item => `<li>Dòng ${item.sourceRow}: ${esc(item.error)}</li>`).join('')}</ul>` : ''}</div>`);
-      toast('Đã map dữ liệu Excel vào hệ thống.');
+      setImportResult(`<div><strong>Import thành công</strong><p>Thêm mới: ${result.created || 0} · Cập nhật: ${result.updated || 0} · Giữ dữ liệu cũ: ${result.skipped || 0}.${result.rejected?.length ? ` Có ${result.rejected.length} dòng bị từ chối.` : ''}</p>${result.rejected?.length ? `<ul>${result.rejected.map(item => `<li>Dòng ${item.sourceRow}: ${esc(item.error)}</li>`).join('')}</ul>` : ''}</div>`);
+      toast(overwriteExisting ? 'Đã ghi đè các bản ghi được chọn từ Excel.' : 'Đã nhập dữ liệu mới và giữ nguyên các bản ghi đã có.');
     }
     state.pendingImport = null;
     $('#import-vessels').value = '';
@@ -1246,10 +1276,16 @@ async function init() {
     if (addCrewBtn) addCrewBtn.style.display = isReviewer ? 'none' : 'inline-block';
 
     const importNav = $('nav a[href="#import"]');
-    if (importNav) importNav.style.display = (isCustomer || isAdmin) ? 'block' : 'none';
+    if (importNav) {
+      importNav.style.removeProperty('display');
+      importNav.hidden = !(isCustomer || isAdmin);
+    }
 
     const reportsNav = $('nav a[href="#reports"]');
-    if (reportsNav) reportsNav.style.display = 'block';
+    if (reportsNav) {
+      reportsNav.style.removeProperty('display');
+      reportsNav.hidden = false;
+    }
 
     const integrationActions = $('#integration-admin-actions');
     const integrationJobs = $('#sync-jobs');
@@ -1274,7 +1310,16 @@ async function init() {
   $('#add-vessel').onclick = () => openVessel();
   $('#vessel-search').addEventListener('input', renderVessels);
   let dashboardTimer;
-  $('#dashboard-vessel-search').addEventListener('input', event => { clearTimeout(dashboardTimer); const query = event.target.value.trim(); dashboardTimer = setTimeout(() => loadDashboard(query.length >= 2 ? query : ''), 220); });
+  $('#dashboard-vessel-search').addEventListener('input', event => {
+    clearTimeout(dashboardTimer);
+    const query = event.target.value.trim();
+    const sequence = ++state.dashboardSearchSequence;
+    if (query.length < 2) {
+      renderDashboardMatches([]);
+      return;
+    }
+    dashboardTimer = setTimeout(() => searchDashboardVessels(query, sequence), 300);
+  });
   $('#crew-search').addEventListener('input', renderCrew);
   $('#vessel-form').addEventListener('submit', saveVessel);
   $('#crew-form').addEventListener('submit', saveCrew);

@@ -26,6 +26,7 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 # ── Now import backend (picks up TEST_DATABASE_URL) ───────────────────────────
 import pytest
 from fastapi.testclient import TestClient
+import backend.app as app_module
 
 from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organization, Vessel
 from backend.database import engine, SessionLocal, now_iso
@@ -224,6 +225,14 @@ def test_static_frontend(client):
     assert "Không thể nhập dòng này. Hãy kiểm tra định dạng số, ngày hoặc mã đăng ký trùng." in Path(__file__).resolve().parents[1].joinpath("backend", "app.py").read_text(encoding="utf-8")
     assert "File đã được nhập trước đó" in app_js
     assert "Không tạo thêm bản ghi" in app_js
+    assert "searchDashboardVessels(query, sequence)" in app_js
+    assert "dashboardTimer = setTimeout(() => loadDashboard" not in app_js
+    assert "importNav.style.removeProperty('display')" in app_js
+    assert "reportsNav.style.removeProperty('display')" in app_js
+    assert "importNav.style.display = 'block'" not in app_js
+    assert "reportsNav.style.display = 'block'" not in app_js
+    assert "Giữ dữ liệu hiện có & tiếp tục" in app_js
+    assert "overwrite_existing=true" in app_js
     styles_css = client.get("/styles.css").text
     assert "[hidden] { display: none !important; }" in styles_css
     assert "overflow-y: auto" in styles_css
@@ -837,8 +846,8 @@ def test_xlsx_ignores_non_executed_external_link_path_and_detects_headers():
             '</Relationships>',
         )
     organization, rows = vessel_rows(read_workbook(output.getvalue()))
-    assert organization["name"] == "Khách hàng import"
-    assert rows[0]["name"] == "Sà lan kiểm thử"
+    assert organization["name"] == "KHÁCH HÀNG IMPORT"
+    assert rows[0]["name"] == "SÀ LAN KIỂM THỬ"
     assert rows[0]["registration_no"] == "SG-SMART-001"
     assert rows[0]["deadweight_tons"] == 850
     assert rows[0]["_source_row"] == 4
@@ -975,6 +984,7 @@ def test_all_frontend_routes_registered():
         "/api/health",
         "/api/ready",
         "/api/admin/operations-summary",
+        "/api/admin/backups",
         "/api/catalogs",
         "/api/dashboard",
         "/api/organizations",
@@ -1078,7 +1088,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert preview.status_code == 200
     assert preview.json()["preview"] is True
-    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.2"
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.3"
     db = SessionLocal()
     assert db.query(ImportJob).count() == before
     db.close()
@@ -1102,7 +1112,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
 
 
 def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth_headers):
-    registration = f"SG-SMART-{uuid.uuid4().hex[:10]}"
+    registration = f"SG-SMART-{uuid.uuid4().hex[:10]}".upper()
     workbook = make_xlsx(
         "Danh mục tùy biến",
         ["Ghi chú", "Số đăng ký", "Tên tàu", "Cấp PT", "Loại PT", "DWT", "Sức chở hàng"],
@@ -1131,3 +1141,90 @@ def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth
         db.commit()
     finally:
         db.close()
+
+
+def test_vessel_import_normalizes_text_and_requires_explicit_overwrite(client, auth_headers):
+    registration = f"SG-NORM-{uuid.uuid4().hex[:10]}".upper()
+    db = SessionLocal()
+    try:
+        org = db.query(Organization).filter(Organization.name == "Test Org").one()
+        vessel = Vessel(
+            organization_id=org.id,
+            name="THƯỢNG HẢI 07",
+            registration_no=registration,
+            vessel_type="CHỞ HÀNG KHÔ HOẶC CÔNG TE NƠ",
+            vessel_class="VR-SII",
+            created_at=now_iso(),
+            updated_at=now_iso(),
+        )
+        db.add(vessel)
+        db.commit()
+    finally:
+        db.close()
+
+    workbook = make_xlsx(
+        "Dữ liệu sửa lỗi",
+        ["Tên tàu", "Số đăng ký", "Loại PT", "Cấp PT"],
+        [["  Thượng   Hải 07  ", f" {registration.lower()} ", "Chở hàng khô hoặc côngtenơ", "vr-sii"]],
+    )
+    headers = {**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    preview = client.post("/api/import/vessels?preview=true", content=workbook, headers=headers)
+    assert preview.status_code == 200
+    row = preview.json()["rows"][0]
+    assert row["name"] == "THƯỢNG HẢI 07"
+    assert row["registration_no"] == registration
+    assert row["vessel_type"] == "CHỞ HÀNG KHÔ HOẶC CONTAINER"
+    assert row["vessel_class"] == "VR-SII"
+    assert row["existing"] is True
+    assert preview.json()["conflictCount"] == 1
+    assert row["mappingWarnings"]
+
+    keep_existing = client.post("/api/import/vessels", content=workbook, headers=headers)
+    assert keep_existing.status_code == 200
+    assert keep_existing.json()["created"] == 0
+    assert keep_existing.json()["updated"] == 0
+    assert keep_existing.json()["skipped"] == 1
+
+    db = SessionLocal()
+    try:
+        unchanged = db.query(Vessel).filter(Vessel.registration_no == registration).one()
+        assert unchanged.vessel_type == "CHỞ HÀNG KHÔ HOẶC CÔNG TE NƠ"
+    finally:
+        db.close()
+
+    overwrite = client.post(
+        "/api/import/vessels?overwrite_existing=true", content=workbook, headers=headers
+    )
+    assert overwrite.status_code == 200
+    assert overwrite.json()["updated"] == 1
+    assert overwrite.json()["reapplied"] is True
+
+    db = SessionLocal()
+    try:
+        updated = db.query(Vessel).filter(Vessel.registration_no == registration).one()
+        assert updated.name == "THƯỢNG HẢI 07"
+        assert updated.vessel_type == "CHỞ HÀNG KHÔ HOẶC CONTAINER"
+        checksum = overwrite.json()["checksum"]
+        db.query(ImportJob).filter(ImportJob.source_checksum == checksum).delete(synchronize_session=False)
+        db.delete(updated)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_admin_backup_routes_are_registered_and_role_scoped(
+    client, auth_headers, customer_headers, tmp_path, monkeypatch,
+):
+    backup_dir = tmp_path / "backups"
+    monkeypatch.setattr(app_module, "BACKUP_DIR", backup_dir)
+    assert client.get("/api/admin/backups", headers=auth_headers).json() == []
+    forbidden = client.get("/api/admin/backups", headers=customer_headers)
+    assert forbidden.status_code == 403
+
+    created = client.post("/api/admin/backups", headers=auth_headers)
+    assert created.status_code == 200
+    assert created.json()["integrityCheck"] == "ok"
+    assert (backup_dir / created.json()["filename"]).exists()
+    listed = client.get("/api/admin/backups", headers=auth_headers)
+    assert listed.status_code == 200
+    assert [item["filename"] for item in listed.json()] == [created.json()["filename"]]

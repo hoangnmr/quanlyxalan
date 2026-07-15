@@ -21,6 +21,57 @@ MAX_XLSX_SHARED_STRINGS = 50_000
 MAX_XLSX_CELLS = 100_000
 SAFE_IGNORED_EXTERNAL_RELATIONSHIPS = {"hyperlink", "externalLinkPath"}
 
+VESSEL_IMPORT_TEXT_FIELDS = {
+    "name", "registration_no", "registry_or_imo", "vessel_type",
+    "vessel_class", "shell_material", "safety_certificate_no", "notes",
+}
+
+
+def import_match_key(value: Any) -> str:
+    """Accent/spacing-insensitive key used only for controlled matching."""
+    text = unicodedata.normalize("NFKD", str(value or "")).replace("Đ", "D").replace("đ", "d")
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^A-Z0-9]+", "", text.upper())
+
+
+VESSEL_TYPE_CANONICAL = {
+    import_match_key("SÀ LAN"): "SÀ LAN",
+    import_match_key("SALAN"): "SÀ LAN",
+    import_match_key("CHỞ HÀNG KHÔ"): "CHỞ HÀNG KHÔ",
+    import_match_key("CONTAINER"): "CONTAINER",
+    import_match_key("CÔNG TE NƠ"): "CONTAINER",
+    import_match_key("CÔNG-TÊ-NƠ"): "CONTAINER",
+    import_match_key("CHỞ HÀNG KHÔ HOẶC CONTAINER"): "CHỞ HÀNG KHÔ HOẶC CONTAINER",
+    import_match_key("CHỞ HÀNG KHÔ HOẶC CÔNG TE NƠ"): "CHỞ HÀNG KHÔ HOẶC CONTAINER",
+}
+
+
+def normalize_import_text(value: Any, *, field: str = "") -> tuple[str, str | None]:
+    """Normalize imported text without guessing arbitrary Vietnamese names.
+
+    All imported text is NFC-normalized, whitespace-collapsed and uppercased.
+    Field-specific aliases correct known operational vocabulary despite missing
+    accents, extra spaces or words typed together. Free-form names are never
+    dictionary-guessed because an incorrect vessel name is worse than a visible
+    preview warning.
+    """
+    source = unicodedata.normalize("NFC", str(value or ""))
+    collapsed = re.sub(r"\s+", " ", source.replace("\u00a0", " ")).strip()
+    normalized = collapsed.upper()
+    if field == "registration_no":
+        normalized = re.sub(r"\s*-\s*", "-", normalized)
+    elif field == "name":
+        normalized = re.sub(r"(?<=\D)(?=\d)|(?<=\d)(?=\D)", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+    elif field == "vessel_type":
+        normalized = VESSEL_TYPE_CANONICAL.get(import_match_key(normalized), normalized)
+
+    if normalized == source:
+        return normalized, None
+    if normalized == collapsed.upper() and collapsed == source.strip():
+        return normalized, None  # case-only normalization is expected, not noisy
+    return normalized, f"Chuẩn hóa '{source}' → '{normalized}'"
+
 
 def _safe_xml(content: bytes, label: str) -> ET.Element:
     if len(content) > MAX_XLSX_XML_PART_BYTES:
@@ -273,6 +324,11 @@ def vessel_rows(sheets: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list
         "contact_name": _value_after_label(sheet, ("Người liên hệ",)),
         "phone": _value_after_label(sheet, ("Điện thoại",)),
     }
+    for field in ("name", "tax_code", "address", "contact_name"):
+        if organization.get(field) not in (None, ""):
+            organization[field] = normalize_import_text(
+                organization[field], field=field
+            )[0]
     max_row = max((_cell_parts(ref)[1] for ref in sheet), default=header_row)
     rows: list[dict[str, Any]] = []
     blank_run = 0
@@ -286,6 +342,13 @@ def vessel_rows(sheets: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list
         blank_run = 0
         mapping_warnings: list[str] = []
         source_notes: list[str] = []
+        for field in VESSEL_IMPORT_TEXT_FIELDS:
+            if field not in row or row[field] in (None, ""):
+                continue
+            normalized, warning = normalize_import_text(row[field], field=field)
+            row[field] = normalized
+            if warning:
+                mapping_warnings.append(f"{field}: {warning}")
         for field in VESSEL_FLOAT_FIELDS | VESSEL_INTEGER_FIELDS:
             if field not in row or row[field] in (None, ""):
                 continue

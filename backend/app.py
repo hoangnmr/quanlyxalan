@@ -11,7 +11,7 @@ import hashlib
 import logging
 import os
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -38,14 +38,16 @@ from .models import (
     SyncJob, User, Vessel,
 )
 from .xlsx_io import declaration_row, make_xlsx, read_workbook, vessel_rows, excel_date
+from scripts.backup_local import backup as create_local_backup, prune as prune_local_backups
 
-IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.2"
+IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.3"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
 
 ROOT = Path(__file__).resolve().parents[1]
 access_logger = configure_local_logging(ROOT)
 ATTACHMENT_DIR = ROOT / "data" / "attachments"
 ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
+BACKUP_DIR = ROOT / "data" / "backups"
 attachment_storage = get_attachment_storage(ATTACHMENT_DIR / "quarantine")
 attachment_scanner = ScannerNotConfigured()
 
@@ -595,8 +597,7 @@ def admin_operations_summary(
         1 for vessel in db.query(Vessel).all()
         if certificate_status(vessel.certificate_expiry_date) in {"EXPIRING", "EXPIRED"}
     )
-    backup_dir = ROOT / "data" / "backups"
-    backups = list(backup_dir.glob("*.db")) if backup_dir.exists() else []
+    backups = list(BACKUP_DIR.glob("*.db")) if BACKUP_DIR.exists() else []
     latest_backup = max(backups, key=lambda item: item.stat().st_mtime).name if backups else None
     return {
         "period": {"from": year_start, "to": today.isoformat()},
@@ -606,6 +607,70 @@ def admin_operations_summary(
         "storage": {"attachments": db.query(Attachment).count(), "backups": len(backups), "latestBackup": latest_backup},
         "security": {"failedLogins": db.query(AuditEvent).filter(AuditEvent.action.like("LOGIN_FAILURE%")).count(), "disabledUsers": db.query(User).filter(User.is_active == 0).count()},
     }
+
+
+def _backup_record(path: Path) -> dict[str, Any]:
+    manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+    manifest: dict[str, Any] = {}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+    created_at = manifest.get("created_at") or datetime.fromtimestamp(
+        path.stat().st_mtime, timezone.utc
+    ).isoformat()
+    return {
+        "filename": path.name,
+        "createdAt": created_at,
+        "sizeBytes": path.stat().st_size,
+        "integrityCheck": manifest.get("integrity_check", "unknown"),
+        "sha256": manifest.get("sha256", ""),
+    }
+
+
+@app.get("/api/admin/backups")
+def list_admin_backups(user: User = Depends(require_roles("ADMIN"))):
+    del user
+    if not BACKUP_DIR.exists():
+        return []
+    return [
+        _backup_record(path)
+        for path in sorted(
+            BACKUP_DIR.glob("cang_vu-*.db"),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+    ]
+
+
+@app.post("/api/admin/backups")
+def create_admin_backup(
+    db: Session = Depends(get_db), user: User = Depends(require_roles("ADMIN")),
+):
+    database = engine.url.database
+    if engine.url.get_backend_name() != "sqlite" or not database or database == ":memory:":
+        raise HTTPException(
+            status_code=503,
+            detail="Sao lưu trực tiếp chỉ khả dụng với cấu hình SQLite cục bộ.",
+        )
+    source = Path(database)
+    if not source.exists():
+        raise HTTPException(status_code=503, detail="Không tìm thấy cơ sở dữ liệu để sao lưu.")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    destination = BACKUP_DIR / f"cang_vu-{stamp}.db"
+    try:
+        create_local_backup(source, destination)
+        removed = prune_local_backups(BACKUP_DIR)
+    except Exception as exc:
+        access_logger.exception("Local backup failed")
+        raise HTTPException(status_code=500, detail="Không thể tạo bản sao lưu cục bộ.") from exc
+    audit(
+        db, "BACKUP", 0, "CREATE", destination.name,
+        actor_user_id=user.id, organization_id=user.organization_id,
+    )
+    db.commit()
+    return {**_backup_record(destination), "pruned": len(removed)}
 
 
 def _get_or_create_org(db: Session, name: Optional[str]) -> Optional[Organization]:
@@ -1388,10 +1453,52 @@ def get_suggestions(
 # IMPORT (Excel)
 # ══════════════════════════════════════════════════════════════════════════════
 
+VESSEL_IMPORT_COMPARE_FIELDS = {
+    "name": "Tên phương tiện",
+    "vessel_type": "Loại phương tiện",
+    "vessel_class": "Cấp phương tiện",
+    "registry_or_imo": "Số đăng kiểm / IMO",
+    "shell_material": "Vật liệu vỏ",
+    "build_year": "Năm đóng",
+    "length_m": "Chiều dài",
+    "width_m": "Chiều rộng",
+    "side_height_m": "Chiều cao mạn",
+    "draft_m": "Mớn nước",
+    "deadweight_tons": "Trọng tải",
+    "gross_tonnage": "Dung tích",
+    "engine_power_cv": "Công suất",
+    "cargo_capacity_tons": "Sức chở hàng",
+    "container_capacity_teu": "Sức chở container",
+    "passenger_capacity": "Sức chở khách",
+    "min_crew": "Số thuyền viên",
+    "safety_certificate_no": "Số chứng nhận an toàn",
+    "certificate_issue_date": "Ngày cấp chứng nhận",
+    "certificate_expiry_date": "Ngày hết hạn chứng nhận",
+    "notes": "Ghi chú",
+}
+
+
+def _vessel_import_changes(existing: Vessel, row: dict[str, Any]) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    for field, label in VESSEL_IMPORT_COMPARE_FIELDS.items():
+        if field not in row:
+            continue
+        incoming = excel_date(row[field]) if "date" in field else row[field]
+        current = getattr(existing, field, None)
+        if current != incoming:
+            changes.append({
+                "field": field,
+                "label": label,
+                "current": current,
+                "incoming": incoming,
+            })
+    return changes
+
 @app.post("/api/import/vessels")
 async def import_vessels(
     request: Request,
     preview: bool = False,
+    overwrite_existing: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
@@ -1420,6 +1527,7 @@ async def import_vessels(
         "vessel_class": "Cấp phương tiện",
     }
     preview_rows = []
+    conflict_count = 0
     for row in rows:
         clean_row = {key: value for key, value in row.items() if not key.startswith("_")}
         clean_row["sourceRow"] = row.get("_source_row")
@@ -1428,7 +1536,32 @@ async def import_vessels(
         clean_row["missingFields"] = [
             label for field, label in required_vessel_fields.items() if not row.get(field)
         ]
+        existing = db.query(Vessel).filter(
+            Vessel.registration_no == row.get("registration_no")
+        ).first() if row.get("registration_no") else None
+        if existing:
+            conflict_count += 1
+            same_scope = user.role == "ADMIN" or existing.organization_id == user.organization_id
+            clean_row["existing"] = True
+            clean_row["ownershipConflict"] = not same_scope
+            if same_scope:
+                clean_row["existingRecord"] = {
+                    "id": existing.id,
+                    "name": existing.name,
+                    "registration_no": existing.registration_no,
+                }
+                clean_row["changes"] = _vessel_import_changes(existing, row)
+        else:
+            clean_row["existing"] = False
+            clean_row["ownershipConflict"] = False
+            clean_row["changes"] = []
         preview_rows.append(clean_row)
+    prior = db.query(ImportJob).filter(
+        ImportJob.organization_id == org_id,
+        ImportJob.import_kind == "VESSELS",
+        ImportJob.source_checksum == checksum,
+        ImportJob.mapping_version == IMPORT_MAPPING_VERSION,
+    ).first()
     if preview:
         db.rollback()
         return {
@@ -1441,16 +1574,12 @@ async def import_vessels(
                 "sheet": rows[0].get("_source_sheet") if rows else None,
             },
             "rows": preview_rows,
+            "conflictCount": conflict_count,
+            "previousImportId": prior.id if prior else None,
             "accepted": 0,
             "rejected": [],
         }
-    prior = db.query(ImportJob).filter(
-        ImportJob.organization_id == org_id,
-        ImportJob.import_kind == "VESSELS",
-        ImportJob.source_checksum == checksum,
-        ImportJob.mapping_version == IMPORT_MAPPING_VERSION,
-    ).first()
-    if prior:
+    if prior and not overwrite_existing:
         result = json.loads(prior.result_json)
         result["idempotent"] = True
         result["importJobId"] = prior.id
@@ -1463,6 +1592,9 @@ async def import_vessels(
     )
 
     accepted = 0
+    created = 0
+    updated = 0
+    skipped = 0
     rejected: list[dict] = []
     for row in rows:
         source_row = row.get("_source_row")
@@ -1482,6 +1614,9 @@ async def import_vessels(
                     Vessel.registration_no == row.get("registration_no")
                 ).first()
                 if existing:
+                    if not overwrite_existing:
+                        skipped += 1
+                        continue
                     verify_organization_ownership(user, existing.organization_id)
                     for k, v in row.items():
                         if hasattr(existing, k) and k not in ("id", "created_at", "organization_id"):
@@ -1489,6 +1624,7 @@ async def import_vessels(
                     existing.organization_id = org_id
                     existing.updated_at = now_iso()
                     existing.version += 1
+                    updated += 1
                 else:
                     safe = {
                         k: (excel_date(v) if "date" in k else v)
@@ -1499,6 +1635,7 @@ async def import_vessels(
                     safe["created_at"] = now_iso()
                     safe["updated_at"] = now_iso()
                     db.add(Vessel(**safe))
+                    created += 1
                 db.flush()
             accepted += 1
         except Exception:
@@ -1513,11 +1650,22 @@ async def import_vessels(
             })
     result = {
         "accepted": accepted,
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
         "rejected": rejected,
         "mappingVersion": IMPORT_MAPPING_VERSION,
         "checksum": checksum,
         "idempotent": False,
     }
+    if prior:
+        result["reapplied"] = True
+        result["importJobId"] = prior.id
+        prior.accepted_count = accepted
+        prior.rejected_count = len(rejected)
+        prior.result_json = json.dumps(result, ensure_ascii=False)
+        db.commit()
+        return result
     job = ImportJob(
         organization_id=org_id, import_kind="VESSELS", source_checksum=checksum,
         mapping_version=IMPORT_MAPPING_VERSION, accepted_count=accepted,

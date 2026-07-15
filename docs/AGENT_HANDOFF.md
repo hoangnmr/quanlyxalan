@@ -430,3 +430,35 @@ Evidence available:
 - The local reference workbook remains untracked and is not part of the merge.
 - Production deployment/readiness and external API activation remain outside
   this closure.
+
+---
+
+## Post-integration corrective: sidebar, search and Excel conflict handling — 2026-07-15
+
+- **Status**: IN REVIEW — automated regression PASS; user visual review pending.
+- **Phase**: REVIEW
+- **Risk Level**: R2 (explicit overwrite of existing imported records).
+
+Implemented:
+
+- Preserved flex layout for the Import Excel and Báo cáo hoạt động Cảng links;
+  role visibility now uses `hidden` instead of overriding the links with
+  `display: block`, so each icon remains to the left of its label.
+- Isolated dashboard type-ahead from the full dashboard/admin refresh. Searches
+  start at two characters, are debounced and ignore stale responses.
+- Added the missing ADMIN backup list/create API used by the existing dashboard,
+  removing the unrelated `Not Found` toast source.
+- Advanced vessel import mapping to `KBCV-IMPORT-1.3`: imported text is Unicode
+  normalized, uppercased and whitespace-collapsed; registration formatting and
+  controlled vessel-type variants such as `công te nơ`/`côngtenơ` are
+  canonicalized without guessing arbitrary vessel names.
+- Duplicate registrations are previewed with field-level changes. The safe
+  default keeps existing data; overwrite requires a separate button and browser
+  confirmation before the API accepts `overwrite_existing=true`.
+
+Verification:
+
+- `pytest -q`: 82 passed.
+- `node --check frontend/app.js`: PASS.
+- `git diff --check`: PASS.
+- Manual browser/visual review remains with the user and is not claimed here.

@@ -2,7 +2,8 @@ const state = {
   catalogs: {}, vessels: [], declarations: [], crew: [],
   declarationFilter: {}, declarationPage: 1, declarationPaging: null, dashboardCertificateWarnings: 0, editingVessel: null, editingDeclaration: null, editingCrew: null, workflowDeclaration: null,
   wizardStep: 1, wizardMaxStep: 1, declarationVesselMode: 'existing', declarationNewCrew: [],
-  pendingImport: null,
+  pendingImport: null, importResultTarget: 'main',
+  portRegisterItems: [], portRegisterStats: {}, vesselSaveContext: 'customer-record',
   dashboardSearchSequence: 0,
 };
 const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó'];
@@ -382,9 +383,11 @@ function renderVesselProfiles() {
   });
 }
 
-function openVessel(id = null) {
-  const v = id ? state.vessels.find(item => item.id === id) : {};
+function openVessel(id = null, portRegister = false) {
+  const records = portRegister ? state.portRegisterItems : state.vessels;
+  const v = id ? records.find(item => item.id === id) : {};
   state.editingVessel = v || {};
+  state.vesselSaveContext = portRegister ? 'port-register' : 'customer-record';
   state.editingVesselProfiles = (v.operating_profiles?.length ? v.operating_profiles : [{
     activity_area: v.vessel_class || '',
     deadweight_tons: v.deadweight_tons ?? '',
@@ -447,10 +450,12 @@ async function saveVessel(event) {
   }
   setSubmitting(form, event.submitter, true, 'Đang lưu…');
   try {
-    await api('/api/vessels', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    const path = state.vesselSaveContext === 'port-register' ? '/api/vessels?port_register=true' : '/api/vessels';
+    await api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     $('#vessel-dialog').close();
     toast('Đã lưu hồ sơ phương tiện.');
     await loadVessels();
+    if (state.vesselSaveContext === 'port-register') await loadPortRegister();
   } catch (error) { toast(error.message, true); }
   finally { setSubmitting(form, event.submitter, false); }
 }
@@ -743,8 +748,30 @@ function reviewSummaryHtml(d) {
 }
 
 async function loadPortRegister() {
-  await loadVessels();
+  try {
+    const data = await api('/api/port-vessel-register');
+    state.portRegisterItems = data.items || [];
+    state.portRegisterStats = data.stats || {};
+    renderPortRegisterStats(data);
+  } catch (error) { toast(error.message, true); return; }
   renderPortRegister();
+}
+
+function renderPortRegisterStats(data) {
+  const stats = data.stats || {};
+  const cards = [
+    ['SALAN THEO DÕI', stats.vessels || 0, 'Hồ sơ nội bộ của Cảng'],
+    ['VÙNG HOẠT ĐỘNG', stats.operatingProfiles || 0, `${stats.multiAreaVessels || 0} Salan có nhiều vùng`],
+    ['NĂNG LỰC TEU', number(stats.teuCapacity).toLocaleString('vi-VN'), 'Tổng năng lực đã ghi nhận'],
+    ['CẢNH BÁO GCN', stats.certificateWarnings || 0, 'Hết hạn hoặc còn dưới 30 ngày'],
+  ];
+  $('#port-register-stats').innerHTML = cards.map(card => `<article class="stat-card"><p>${card[0]}</p><strong>${card[1]}</strong><small>${card[2]}</small></article>`).join('');
+  const renderBars = (selector, items) => {
+    const max = Math.max(...items.map(item => item.value), 1);
+    $(selector).innerHTML = items.length ? items.map(item => `<div class="summary-bar"><span>${esc(item.label)}</span><div><i style="width:${Math.max(4, item.value / max * 100)}%"></i></div><strong>${item.value}</strong></div>`).join('') : '<p class="muted">Chưa có dữ liệu.</p>';
+  };
+  renderBars('#port-register-by-area', data.byArea || []);
+  renderBars('#port-register-by-type', data.byType || []);
 }
 
 function profileText(vessel, field, fallback = '') {
@@ -756,10 +783,10 @@ function renderPortRegister() {
   const input = $('#port-register-search');
   if (!input) return;
   const term = input.value.trim().toLowerCase();
-  const items = state.vessels.filter(v => `${v.name} ${v.registration_no} ${v.tracking_master_name || ''}`.toLowerCase().includes(term));
+  const items = state.portRegisterItems.filter(v => `${v.name} ${v.registration_no} ${v.tracking_master_name || ''}`.toLowerCase().includes(term));
   $('#port-register-count').textContent = `${items.length} Salan`;
   $('#port-register-table').innerHTML = items.length ? `<table class="data-table port-register-table"><thead><tr><th>STT</th><th>Tên phương tiện</th><th>Số đăng ký</th><th>Loại / công dụng</th><th>Vùng hoạt động</th><th>Chiều dài (m)</th><th>Trọng tải toàn phần (tấn)</th><th>Dung tích (m³)</th><th>Khả năng khai thác (tấn)</th><th>Khả năng khai thác (TEU)</th><th>Hạn GCN ATKT & BVMT</th><th>Số thuyền viên</th><th>Thuyền trưởng</th><th>Điện thoại</th><th></th></tr></thead><tbody>${items.map((v, index) => `<tr><td>${index + 1}</td><td><strong>${esc(v.name)}</strong></td><td>${esc(v.registration_no)}</td><td>${esc(v.vessel_type)}</td><td>${esc(profileText(v, 'activity_area', v.vessel_class))}</td><td>${esc(v.length_m ?? '')}</td><td>${esc(profileText(v, 'deadweight_tons', v.deadweight_tons ?? ''))}</td><td>${esc(v.gross_tonnage ?? '')}</td><td>${esc(profileText(v, 'cargo_capacity_tons', v.cargo_capacity_tons ?? ''))}</td><td>${esc(v.container_capacity_teu ?? '')}</td><td>${fmtDate(v.certificate_expiry_date)}</td><td>${esc(v.min_crew ?? '')}</td><td>${esc(v.tracking_master_name || '')}</td><td>${esc(v.tracking_master_phone || '')}</td><td><button class="table-icon-button" data-edit-port-vessel="${v.id}" title="Chỉnh sửa ${esc(v.name)}" aria-label="Chỉnh sửa ${esc(v.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg></button></td></tr>`).join('')}</tbody></table>` : empty('Chưa có dữ liệu Salan', 'Import file theo dõi hoặc thêm thủ công một Salan.');
-  $$('[data-edit-port-vessel]').forEach(button => button.onclick = () => openVessel(Number(button.dataset.editPortVessel)));
+  $$('[data-edit-port-vessel]').forEach(button => button.onclick = () => openVessel(Number(button.dataset.editPortVessel), true));
 }
 
 function renderDeclarationWizard() {
@@ -1058,7 +1085,7 @@ function syncDeclarationUrl() {
 const IMPORT_FILE_HEADERS = {'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
 
 function setImportResult(html, isEmptyPlaceholder = false) {
-  const container = $('#import-result');
+  const container = state.importResultTarget === 'port-register' ? $('#port-import-result') : $('#import-result');
   container.classList.toggle('empty-state', isEmptyPlaceholder);
   container.innerHTML = html;
 }
@@ -1066,6 +1093,10 @@ function setImportResult(html, isEmptyPlaceholder = false) {
 async function previewImport(input, path, kind) {
   const file = input.files[0];
   if (!file) return;
+  state.importResultTarget = path.includes('/port-vessel-register') ? 'port-register' : 'main';
+  if (state.importResultTarget === 'port-register' && !$('#port-import-dialog').open) {
+    $('#port-import-dialog').showModal();
+  }
   setImportResult('Đang đọc và kiểm tra file…');
   try {
     const preview = await api(`${path}?preview=true`, {method:'POST', headers:IMPORT_FILE_HEADERS, body:file});
@@ -1150,7 +1181,10 @@ function cancelImport() {
   $('#import-vessels').value = '';
   $('#import-declaration').value = '';
   $('#import-crew').value = '';
+  if ($('#import-port-register')) $('#import-port-register').value = '';
   setImportResult('Chưa có file nào được import trong phiên này.', true);
+  if ($('#port-import-dialog').open) $('#port-import-dialog').close();
+  state.importResultTarget = 'main';
 }
 
 async function confirmImport(overwriteExisting = false) {
@@ -1172,7 +1206,12 @@ async function confirmImport(overwriteExisting = false) {
     $('#import-vessels').value = '';
     $('#import-declaration').value = '';
     $('#import-crew').value = '';
-    await Promise.all([loadVessels(), loadDeclarations(), loadCrew(), loadDashboard()]);
+    if ($('#import-port-register')) $('#import-port-register').value = '';
+    const refreshes = [loadVessels(), loadDeclarations(), loadCrew(), loadDashboard()];
+    if (['PORT_STAFF', 'ADMIN'].includes(state.currentUser?.role)) refreshes.push(loadPortRegister());
+    await Promise.all(refreshes);
+    if (state.importResultTarget === 'port-register' && $('#port-import-dialog').open) $('#port-import-dialog').close();
+    state.importResultTarget = 'main';
   } catch (error) {
     setImportResult(`<div><strong>Không thể import</strong><p>${esc(error.message)}</p></div>`);
     toast(error.message, true);
@@ -1403,7 +1442,7 @@ async function init() {
   $$('[data-route-link]').forEach(button => button.onclick = () => location.hash = button.dataset.routeLink);
   $$('[data-action="new-declaration"]').forEach(button => button.onclick = () => openDeclaration());
   $('#add-vessel').onclick = () => openVessel();
-  $('#add-port-vessel').onclick = () => openVessel();
+  $('#add-port-vessel').onclick = () => openVessel(null, true);
   $('#vessel-search').addEventListener('input', renderVessels);
   $('#port-register-search').addEventListener('input', renderPortRegister);
   $('#export-port-register').onclick = () => downloadFile('/api/port-vessel-register/export', `DU_LIEU_SA_LAN_${new Date().toISOString().slice(0, 10)}.xlsx`).catch(error => toast(error.message, true));
@@ -1434,6 +1473,8 @@ async function init() {
   $('#import-vessels').onchange = event => previewImport(event.target, '/api/import/vessels', 'vessels');
   $('#import-declaration').onchange = event => previewImport(event.target, '/api/import/declaration', 'declaration');
   $('#import-crew').onchange = event => previewImport(event.target, '/api/import/crew', 'crew');
+  $('#import-port-register').onchange = event => previewImport(event.target, '/api/import/port-vessel-register', 'vessels');
+  $('#close-port-import').onclick = cancelImport;
   $$('[data-report]').forEach(button => button.onclick = () => exportReport(button.dataset.report));
   $('#export-analytics').onclick = exportAnalyticsReport;
   $('#trigger-backup').onclick = triggerBackup;

@@ -539,3 +539,6 @@ def test_alembic_fresh_database_reaches_t2_head(monkeypatch, tmp_path):
     assert "cv_approval" not in declaration_columns
     assert "correlation_id" in {column["name"] for column in inspector.get_columns("audit_events")}
     assert "birth_date" in {column["name"] for column in inspector.get_columns("crew_members")}
+    vessel_columns = {column["name"] for column in inspector.get_columns("vessels")}
+    assert {"is_port_tracked", "port_tracking_updated_at"}.issubset(vessel_columns)
+    assert "vessel_operating_profiles" in inspector.get_table_names()

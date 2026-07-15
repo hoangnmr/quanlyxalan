@@ -222,6 +222,17 @@ nav a span svg {
 }
 
 .port-register-wrap { max-width: 100%; overflow-x: auto; }
+.port-register-stats { margin-bottom: 16px; }
+.port-register-dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.port-import-button { display: inline-flex; align-items: center; margin: 0; }
+.import-dialog-content { max-height: calc(100vh - 130px); padding: 18px 20px; overflow: auto; }
+.import-dialog-content .modal-actions { margin: 18px -20px -18px; }
+.summary-bars { display: grid; gap: 11px; }
+.summary-bar { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(120px, 2fr) 34px; align-items: center; gap: 10px; font-size: 11px; }
+.summary-bar > span { overflow: hidden; color: var(--cvf-text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.summary-bar > div { height: 8px; overflow: hidden; border-radius: 999px; background: var(--cvf-border); }
+.summary-bar i { display: block; height: 100%; border-radius: inherit; background: var(--cvf-accent); }
+.summary-bar strong { text-align: right; }
 .port-register-table { min-width: 1850px; }
 .port-register-table th { white-space: normal; vertical-align: bottom; }
 .port-register-table td { white-space: nowrap; }
@@ -232,4 +243,4 @@ nav a span svg {
 .operating-profile-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) 34px; align-items: end; gap: 10px; padding: 10px 0; }
 .operating-profile-row + .operating-profile-row { border-top: 1px solid var(--cvf-border); }
 .operating-profile-row .remove-profile { margin-bottom: 2px; font-size: 20px; }
-@media (max-width: 760px) { .operating-profile-row { grid-template-columns: 1fr; }.operating-profile-row .remove-profile { justify-self: end; } }
+@media (max-width: 760px) { .port-register-dashboard { grid-template-columns: 1fr; }.operating-profile-row { grid-template-columns: 1fr; }.operating-profile-row .remove-profile { justify-self: end; } }

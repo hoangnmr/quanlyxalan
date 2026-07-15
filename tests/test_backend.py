@@ -191,10 +191,12 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.1.6' in res.text
-    assert '/app.js?v=1.1.7' in res.text
+    assert '/styles.css?v=1.1.7' in res.text
+    assert '/app.js?v=1.1.8' in res.text
     assert 'data-page="port-register"' in res.text
     assert 'id="export-port-register"' in res.text
+    assert 'id="import-port-register"' in res.text
+    assert 'id="port-import-dialog"' in res.text
     assert 'id="analytics-unavailable"' in res.text
     assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
     assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
@@ -1027,6 +1029,7 @@ def test_all_frontend_routes_registered():
         "/api/vessels",
         "/api/vessels/{vessel_id}/verify-registry",
         "/api/port-vessel-register/export",
+        "/api/port-vessel-register",
         "/api/crew",
         "/api/declarations",
         "/api/declarations/{declaration_id}/attachments",
@@ -1034,6 +1037,7 @@ def test_all_frontend_routes_registered():
         "/api/declarations/{declaration_id}/workflow",
         "/api/suggestions",
         "/api/import/vessels",
+        "/api/import/port-vessel-register",
         "/api/import/crew",
         "/api/import/declaration",
         "/api/reports/analytics",
@@ -1196,6 +1200,7 @@ def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth
         vessel = db.query(Vessel).filter(Vessel.registration_no == registration).one()
         assert vessel.deadweight_tons == 950.5
         assert vessel.cargo_capacity_tons == 900.25
+        assert vessel.is_port_tracked == 0
         assert [(p.activity_area, p.deadweight_tons, p.cargo_capacity_tons) for p in vessel.operating_profiles] == [
             ("VR-SII", 950.5, 900.25),
             ("VR-SII", 980.5, 930.25),
@@ -1231,7 +1236,7 @@ def test_port_tracking_import_preserves_dual_operating_profiles_and_exports_them
         **port_staff_headers,
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
-    preview = client.post("/api/import/vessels?preview=true", content=workbook, headers=headers)
+    preview = client.post("/api/import/port-vessel-register?preview=true", content=workbook, headers=headers)
     assert preview.status_code == 200, preview.text
     row = preview.json()["rows"][0]
     assert row["mappingWarnings"] == []
@@ -1239,9 +1244,16 @@ def test_port_tracking_import_preserves_dual_operating_profiles_and_exports_them
         {"sequence": 1, "activity_area": "VR-SI", "deadweight_tons": 2723.79, "cargo_capacity_tons": 2698.79},
         {"sequence": 2, "activity_area": "VR-SII", "deadweight_tons": 2912.57, "cargo_capacity_tons": 2887.57},
     ]
-    imported = client.post("/api/import/vessels", content=workbook, headers=headers)
+    imported = client.post("/api/import/port-vessel-register", content=workbook, headers=headers)
     assert imported.status_code == 200, imported.text
     assert imported.json()["created"] == 1
+
+    register = client.get("/api/port-vessel-register", headers=port_staff_headers)
+    assert register.status_code == 200
+    tracked = next(item for item in register.json()["items"] if item["registration_no"] == registration)
+    assert tracked["is_port_tracked"] == 1
+    assert register.json()["stats"]["vessels"] >= 1
+    assert register.json()["stats"]["multiAreaVessels"] >= 1
 
     exported = client.get("/api/port-vessel-register/export", headers=port_staff_headers)
     assert exported.status_code == 200
@@ -1258,6 +1270,8 @@ def test_port_tracking_import_preserves_dual_operating_profiles_and_exports_them
         assert vessel.tracking_master_name == "NGUYỄN VĂN KIỂM THỬ"
         assert vessel.tracking_master_phone == "0900000000"
         assert len(vessel.operating_profiles) == 2
+        job = db.query(ImportJob).filter(ImportJob.source_checksum == imported.json()["checksum"]).one()
+        assert job.import_kind == "PORT_VESSEL_REGISTER"
         db.query(ImportJob).filter(ImportJob.source_checksum == imported.json()["checksum"]).delete(synchronize_session=False)
         db.delete(vessel)
         db.commit()
@@ -1265,9 +1279,41 @@ def test_port_tracking_import_preserves_dual_operating_profiles_and_exports_them
         db.close()
 
 
+def test_customer_cannot_access_internal_port_register(client, customer_headers):
+    assert client.get("/api/port-vessel-register", headers=customer_headers).status_code == 403
+    workbook = make_xlsx(
+        "DỮ LIỆU SÀ LAN",
+        ["Tên phương tiện", "Số đăng ký", "Loại phương tiện", "Cấp PT"],
+        [["SALAN KHÔNG ĐƯỢC PHÉP", "SG-DENIED", "SÀ LAN", "VR-SI"]],
+    )
+    response = client.post(
+        "/api/import/port-vessel-register",
+        content=workbook,
+        headers={
+            **customer_headers,
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        },
+    )
+    assert response.status_code == 403
+
+
+def test_port_tracking_parser_keeps_blank_contact_fields_as_empty_text():
+    workbook = make_xlsx(
+        "DỮ LIỆU SÀ LAN",
+        [
+            "Tên phương tiện", "Số đăng ký", "Loại phương tiện", "Cấp PT",
+            "Thuyền trưởng", "Số điện thoại liên hệ",
+        ],
+        [["SALAN KHÔNG CÓ LIÊN HỆ", "SG-BLANK-CONTACT", "SÀ LAN", "VR-SI", None, None]],
+    )
+    _, rows = vessel_rows(read_workbook(workbook))
+    assert rows[0]["tracking_master_name"] == ""
+    assert rows[0]["tracking_master_phone"] == ""
+
+
 def test_port_staff_can_add_salan_manually_with_two_operating_profiles(client, port_staff_headers):
     registration = f"SG-MANUAL-{uuid.uuid4().hex[:8]}".upper()
-    response = client.post("/api/vessels", headers=port_staff_headers, json={
+    response = client.post("/api/vessels?port_register=true", headers=port_staff_headers, json={
         "organization_name": "TEST PORT REGISTER OWNER",
         "name": "SALAN NHẬP THỦ CÔNG",
         "registration_no": registration,
@@ -1284,6 +1330,7 @@ def test_port_staff_can_add_salan_manually_with_two_operating_profiles(client, p
     data = response.json()
     assert data["vessel_class"] == "VR-SI / VR-SII"
     assert data["deadweight_tons"] == 1000
+    assert data["is_port_tracked"] == 1
     assert len(data["operating_profiles"]) == 2
 
     db = SessionLocal()

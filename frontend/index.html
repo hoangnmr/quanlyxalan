@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.1.6">
+  <link rel="stylesheet" href="/styles.css?v=1.1.7">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -76,7 +76,9 @@
         </section>
 
         <section class="page" data-page="port-register">
-          <div class="page-heading"><div><p class="eyebrow">THEO DÕI CỦA CẢNG</p><p>Quản lý đầy đủ thông tin Salan theo file theo dõi nghiệp vụ.</p></div><div class="panel-actions"><button class="outline-button" id="export-port-register">Xuất Excel</button><button class="primary-button" id="add-port-vessel">+ Thêm Salan</button></div></div>
+          <div class="page-heading"><div><p class="eyebrow">THEO DÕI NỘI BỘ CỦA CẢNG</p><p>Dữ liệu vận hành riêng do Nhân viên Cảng/Admin cập nhật, không thay thế hồ sơ khách hàng khai báo.</p></div><div class="panel-actions"><label class="file-button port-import-button">Import file theo dõi<input type="file" id="import-port-register" accept=".xlsx"></label><button class="outline-button" id="export-port-register">Xuất báo cáo Excel</button><button class="primary-button" id="add-port-vessel">+ Thêm Salan</button></div></div>
+          <div id="port-register-stats" class="stat-grid port-register-stats"></div>
+          <div class="port-register-dashboard"><section class="panel"><div class="panel-header"><div><p class="eyebrow">PHÂN BỔ VÙNG HOẠT ĐỘNG</p><h2>Số Salan theo vùng</h2></div></div><div id="port-register-by-area" class="summary-bars"></div></section><section class="panel"><div class="panel-header"><div><p class="eyebrow">CƠ CẤU PHƯƠNG TIỆN</p><h2>Số Salan theo công dụng</h2></div></div><div id="port-register-by-type" class="summary-bars"></div></section></div>
           <section class="panel"><div class="filter-bar"><label class="search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M20 20l-4.8-4.8"></path></svg></span><input id="port-register-search" placeholder="Tìm tên Salan, số đăng ký hoặc thuyền trưởng"></label><span id="port-register-count" class="muted"></span></div><div id="port-register-table" class="table-wrap port-register-wrap"></div></section>
         </section>
 
@@ -95,7 +97,7 @@
         <section class="page" data-page="import">
           <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Hệ thống tự nhận diện sheet, hàng tiêu đề và tên cột; file mẫu vẫn được hỗ trợ.</p></div></div>
           <div class="import-grid">
-            <section class="panel upload-card" id="import-vessels-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện</h2><p>Tự nhận diện sheet, hàng tiêu đề và tên cột. File mẫu hoặc bảng Excel có đủ Tên phương tiện, Số đăng ký, Loại và Cấp phương tiện đều có thể kiểm tra trước khi nhập.</p><label class="file-button">Chọn file<input type="file" id="import-vessels" accept=".xlsx"></label></section>
+            <section class="panel upload-card" id="import-vessels-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện khách hàng gửi</h2><p>Dùng khi khách hàng gửi Excel và đề nghị Cảng nhập thay. Dữ liệu phục vụ khai báo của khách hàng, không tự đưa vào Sổ theo dõi nội bộ của Cảng.</p><label class="file-button">Chọn file khách hàng<input type="file" id="import-vessels" accept=".xlsx"></label></section>
             <section class="panel upload-card" id="import-crew-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span><h2>Thông tin thuyền viên</h2><p>Dành cho nhân viên Cảng cập nhật file khách hàng gửi. File cần có Tên doanh nghiệp, Họ và tên, Chức danh; hỗ trợ thêm Ngày sinh, CCCD/Hộ chiếu và thông tin chứng chỉ.</p><label class="file-button">Chọn file<input type="file" id="import-crew" accept=".xlsx"></label></section>
             <section class="panel upload-card" id="import-declaration-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Tự dò nhãn dữ liệu trong workbook; file mẫu <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code> có đủ dữ liệu là có thể nhập.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
           </div>
@@ -125,6 +127,7 @@
     </div>
   </div>
 
+  <dialog id="port-import-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">SỔ THEO DÕI NỘI BỘ</p><h2>Kiểm tra file trước khi nhập</h2></div><button type="button" class="icon-button" id="close-port-import" aria-label="Đóng">×</button></div><div id="port-import-result" class="import-dialog-content"></div></dialog>
   <dialog id="vessel-dialog" class="modal"><form id="vessel-form"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ DÙNG LẠI</p><h2>Thông tin phương tiện</h2></div><button type="button" class="icon-button" data-close-dialog="vessel-dialog" aria-label="Đóng">×</button></div><div id="vessel-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="vessel-dialog">Hủy</button><button type="submit" class="primary-button" id="save-vessel">Lưu hồ sơ</button></div></form></dialog>
 
   <dialog id="crew-dialog" class="modal"><form id="crew-form"><div class="modal-header"><div><p class="eyebrow">DANH SÁCH THUYỀN VIÊN</p><h2>Thông tin và chứng chỉ chuyên môn</h2></div><button type="button" class="icon-button" data-close-dialog="crew-dialog" aria-label="Đóng">×</button></div><div id="crew-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="crew-dialog">Hủy</button><button type="submit" class="primary-button">Lưu thuyền viên</button></div></form></dialog>
@@ -156,7 +159,7 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.1.7" defer></script>
+  <script src="/app.js?v=1.1.8" defer></script>
 </body>
 </html>
 

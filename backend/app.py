@@ -963,12 +963,62 @@ def _joined_profile_value(vessel: Vessel, field: str) -> Any:
     return " / ".join(f"{value:g}" for value in values)
 
 
+@app.get("/api/port-vessel-register")
+def get_port_vessel_register(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PORT_STAFF", "ADMIN")),
+):
+    vessels = (
+        db.query(Vessel)
+        .filter(Vessel.is_port_tracked == 1)
+        .order_by(Vessel.name, Vessel.registration_no)
+        .all()
+    )
+    profile_count = sum(len(vessel.operating_profiles) for vessel in vessels)
+    multi_area_count = sum(len(vessel.operating_profiles) > 1 for vessel in vessels)
+    certificate_warnings = sum(
+        certificate_status(vessel.certificate_expiry_date) in {"EXPIRING", "EXPIRED"}
+        for vessel in vessels
+    )
+    teu_capacity = sum(vessel.container_capacity_teu or 0 for vessel in vessels)
+    area_counts: dict[str, int] = {}
+    type_counts: dict[str, int] = {}
+    for vessel in vessels:
+        type_counts[vessel.vessel_type] = type_counts.get(vessel.vessel_type, 0) + 1
+        areas = {profile.activity_area for profile in vessel.operating_profiles if profile.activity_area}
+        for area in areas:
+            area_counts[area] = area_counts.get(area, 0) + 1
+    return {
+        "items": [_vessel_dict(vessel) for vessel in vessels],
+        "stats": {
+            "vessels": len(vessels),
+            "operatingProfiles": profile_count,
+            "multiAreaVessels": multi_area_count,
+            "certificateWarnings": certificate_warnings,
+            "teuCapacity": teu_capacity,
+        },
+        "byArea": [
+            {"label": label, "value": value}
+            for label, value in sorted(area_counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "byType": [
+            {"label": label, "value": value}
+            for label, value in sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+    }
+
+
 @app.get("/api/port-vessel-register/export")
 def export_port_vessel_register(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("PORT_STAFF", "ADMIN")),
 ):
-    vessels = db.query(Vessel).order_by(Vessel.name, Vessel.registration_no).all()
+    vessels = (
+        db.query(Vessel)
+        .filter(Vessel.is_port_tracked == 1)
+        .order_by(Vessel.name, Vessel.registration_no)
+        .all()
+    )
     headers = [
         "STT", "TÊN PHƯƠNG TIỆN", "SỐ ĐĂNG KÝ", "LOẠI PHƯƠNG TIỆN (CÔNG DỤNG)",
         "CẤP PT (VÙNG HOẠT ĐỘNG)", "CHIỀU DÀI (M)", "TRỌNG TẢI TOÀN PHẦN (TẤN)",
@@ -1007,9 +1057,12 @@ def export_port_vessel_register(
 @app.post("/api/vessels")
 def save_vessel(
     payload: VesselSaveRequest,
+    port_register: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
+    if port_register and user.role == "CUSTOMER":
+        raise HTTPException(status_code=403, detail="Sổ theo dõi Salan chỉ dành cho Nhân viên Cảng và Admin.")
     if user.role == "CUSTOMER":
         # Force organization to the customer's bound organization
         org_id = user.organization_id
@@ -1034,6 +1087,9 @@ def save_vessel(
     )
     data["organization_id"] = org_id
     data["updated_at"] = now_iso()
+    if port_register:
+        data["is_port_tracked"] = 1
+        data["port_tracking_updated_at"] = data["updated_at"]
 
     if payload.id:
         vessel = db.query(Vessel).filter(Vessel.id == payload.id).first()
@@ -1646,6 +1702,7 @@ def _vessel_import_changes(existing: Vessel, row: dict[str, Any]) -> list[dict[s
         })
     return changes
 
+@app.post("/api/import/port-vessel-register")
 @app.post("/api/import/vessels")
 async def import_vessels(
     request: Request,
@@ -1654,6 +1711,10 @@ async def import_vessels(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("CUSTOMER", "PORT_STAFF", "ADMIN")),
 ):
+    is_port_register = request.url.path.endswith("/port-vessel-register")
+    if is_port_register and user.role == "CUSTOMER":
+        raise HTTPException(status_code=403, detail="Sổ theo dõi Salan chỉ dành cho Nhân viên Cảng và Admin.")
+    import_kind = "PORT_VESSEL_REGISTER" if is_port_register else "VESSELS"
     content = await request.body()
     if not content:
         raise HTTPException(status_code=400, detail="File trống.")
@@ -1710,7 +1771,7 @@ async def import_vessels(
         preview_rows.append(clean_row)
     prior = db.query(ImportJob).filter(
         ImportJob.organization_id == org_id,
-        ImportJob.import_kind == "VESSELS",
+        ImportJob.import_kind == import_kind,
         ImportJob.source_checksum == checksum,
         ImportJob.mapping_version == IMPORT_MAPPING_VERSION,
     ).first()
@@ -1776,6 +1837,9 @@ async def import_vessels(
                     _sync_vessel_operating_profiles(existing, row.get("operating_profiles", []))
                     existing.organization_id = org_id
                     existing.updated_at = now_iso()
+                    if is_port_register:
+                        existing.is_port_tracked = 1
+                        existing.port_tracking_updated_at = existing.updated_at
                     existing.version += 1
                     updated += 1
                 else:
@@ -1787,6 +1851,9 @@ async def import_vessels(
                     safe["organization_id"] = org_id
                     safe["created_at"] = now_iso()
                     safe["updated_at"] = now_iso()
+                    if is_port_register:
+                        safe["is_port_tracked"] = 1
+                        safe["port_tracking_updated_at"] = safe["updated_at"]
                     vessel = Vessel(**safe)
                     db.add(vessel)
                     db.flush()
@@ -1823,7 +1890,7 @@ async def import_vessels(
         db.commit()
         return result
     job = ImportJob(
-        organization_id=org_id, import_kind="VESSELS", source_checksum=checksum,
+        organization_id=org_id, import_kind=import_kind, source_checksum=checksum,
         mapping_version=IMPORT_MAPPING_VERSION, accepted_count=accepted,
         rejected_count=len(rejected), result_json=json.dumps(result, ensure_ascii=False),
         created_by_user_id=user.id, created_at=now_iso(),

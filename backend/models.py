@@ -65,6 +65,8 @@ class Vessel(Base):
     certificate_expiry_date = Column(String)
     tracking_master_name = Column(String, nullable=False, default="")
     tracking_master_phone = Column(String, nullable=False, default="")
+    is_port_tracked = Column(Integer, nullable=False, default=0)
+    port_tracking_updated_at = Column(String)
     registry_verification_status = Column(String, nullable=False, default="NOT_VERIFIED")
     registry_verified_at = Column(String)
     registry_verification_source = Column(String, nullable=False, default="")

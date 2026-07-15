@@ -502,6 +502,49 @@ Verification:
 
 ---
 
+## Separate customer vessel import from the internal Port register — 2026-07-15
+
+- **Status**: IN REVIEW — implementation and automated regression PASS; user visual review pending.
+- **Phase**: REVIEW
+- **Risk Level**: R2 (data-scope migration, role isolation and controlled overwrite import).
+
+Corrected business interpretation:
+
+- `Hồ sơ phương tiện khách hàng gửi` remains the proxy-entry path used when a
+  customer asks the Port to import on their behalf. These records support the
+  customer declaration flow and are not automatically classified as internal
+  Port tracking records.
+- `Sổ theo dõi Salan` is a separate internal scope for PORT_STAFF and ADMIN.
+  It has its own import endpoint and `PORT_VESSEL_REGISTER` import-job type,
+  while reusing the normalized vessel identity and multi-area operating
+  profiles to avoid duplicate physical-vessel records.
+
+Implemented:
+
+- Added Alembic revision `k10f0f000010` with `is_port_tracked` and
+  `port_tracking_updated_at`; CUSTOMER access to the internal register,
+  internal import and internal manual-add mode is denied.
+- Added a dedicated import control and preview dialog inside the left-side
+  `Sổ theo dõi Salan` page. The generic Import Excel page now explicitly labels
+  the old card as customer-supplied vessel data.
+- Added leadership summary cards for tracked Salan, operating profiles,
+  multi-area vessels, TEU capacity and certificate warnings, plus breakdowns
+  by activity area and vessel purpose.
+- Internal export includes only records classified in the Port register.
+- Local SQLite was backed up before migration, upgraded to
+  `k10f0f000010 (head)`, then the provided tracking workbook was re-imported
+  through the dedicated endpoint: 47 accepted, 47 updated, 0 rejected;
+  integrity check returned `ok`.
+
+Verification:
+
+- `pytest -q`: 90 passed.
+- `node --check frontend/app.js`: PASS.
+- Alembic upgrade/downgrade rehearsal and fresh-head assertions: PASS.
+- Manual browser/visual review remains with the user and is not claimed here.
+
+---
+
 ## Customer flow and crew ownership correction — 2026-07-15
 
 - **Status**: IN REVIEW — automated regression PASS; user visual review pending.

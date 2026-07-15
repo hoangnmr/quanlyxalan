@@ -379,6 +379,9 @@ def vessel_rows(sheets: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list
             row[field] = normalized
             if warning:
                 mapping_warnings.append(f"{field}: {warning}")
+        for field in ("tracking_master_name", "tracking_master_phone"):
+            if field in row and row[field] is None:
+                row[field] = ""
         for field in VESSEL_FLOAT_FIELDS | VESSEL_INTEGER_FIELDS:
             if field not in row or row[field] in (None, ""):
                 continue

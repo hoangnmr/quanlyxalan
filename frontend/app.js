@@ -5,6 +5,7 @@ const state = {
   pendingImport: null,
   dashboardSearchSequence: 0,
 };
+const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó'];
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -343,7 +344,7 @@ function openCrew(id = null) {
   state.editingCrew = item || {};
   $('#crew-fields').innerHTML = `
     ${field('full_name','Họ và tên',item.full_name,'text','required class="span-2"')}
-    ${selectField('crew_role','Chức danh',['Thuyền trưởng','Máy trưởng','Thuyền phó','Máy phó','Thủy thủ','Thợ máy','Khác'],item.crew_role,'required')}
+    ${selectField('crew_role','Chức danh',CREW_ROLES,item.crew_role,'required')}
     ${field('birth_date','Ngày sinh (không bắt buộc)',item.birth_date,'date')}
     ${field('phone','Số điện thoại',item.phone,'tel')}
     ${field('identity_no','CCCD / Hộ chiếu',item.identity_no)}
@@ -485,7 +486,7 @@ const DECLARATION_STEPS = [
   { label: 'Xem lại & Gửi' },
 ];
 
-function newCrewRowTemplate(role = 'Thủy thủ') {
+function newCrewRowTemplate(role = 'Thuyền viên') {
   return { full_name: '', crew_role: role, phone: '', professional_certificate_type: '', professional_certificate_no: '', certificate_expiry_date: '' };
 }
 
@@ -681,7 +682,7 @@ function newCrewRowsHtml() {
       <label class="wide-field">${index === 0 ? '* Thuyền trưởng — Họ tên' : 'Họ tên thuyền viên'}<input data-crew-field="full_name" data-crew-row="${index}" value="${esc(row.full_name)}" ${index === 0 ? 'required' : ''}></label>
       ${index === 0
         ? `<input type="hidden" data-crew-field="crew_role" data-crew-row="0" value="Thuyền trưởng">`
-        : `<label>Chức danh<select data-crew-field="crew_role" data-crew-row="${index}">${['Máy trưởng','Thuyền phó','Máy phó','Thủy thủ','Thợ máy','Khác'].map(r => `<option ${row.crew_role === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>`}
+        : `<label>Chức danh<select data-crew-field="crew_role" data-crew-row="${index}">${CREW_ROLES.filter(r => r !== 'Thuyền trưởng').map(r => `<option ${row.crew_role === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>`}
       <label>${index === 0 ? '* Số điện thoại' : 'Số điện thoại'}<input data-crew-field="phone" data-crew-row="${index}" value="${esc(row.phone)}" type="tel" ${index === 0 ? 'required' : ''}></label>
       <label>${index === 0 ? '* Loại chứng chỉ chuyên môn' : 'Loại chứng chỉ chuyên môn'}<input data-crew-field="professional_certificate_type" data-crew-row="${index}" value="${esc(row.professional_certificate_type)}" ${index === 0 ? 'required' : ''}></label>
       <label>${index === 0 ? '* Số chứng chỉ' : 'Số chứng chỉ'}<input data-crew-field="professional_certificate_no" data-crew-row="${index}" value="${esc(row.professional_certificate_no)}" ${index === 0 ? 'required' : ''}></label>

@@ -45,6 +45,8 @@ from scripts.backup_local import backup as create_local_backup, prune as prune_l
 
 IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.3"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
+CREW_ROLES = ("Thuyền trưởng", "Máy trưởng", "Thuyền viên", "Thuyền phó")
+CREW_ROLE_CANONICAL = {import_match_key(role): role for role in CREW_ROLES}
 
 ROOT = Path(__file__).resolve().parents[1]
 access_logger = configure_local_logging(ROOT)
@@ -304,13 +306,21 @@ class CrewSaveRequest(BaseModel):
     certificate_expiry_date: Optional[str] = None
     notes: str = ""
 
-    @field_validator("full_name", "crew_role", "professional_certificate_type", "professional_certificate_no")
+    @field_validator("full_name", "professional_certificate_type", "professional_certificate_no")
     @classmethod
     def required_crew_text(cls, value: str) -> str:
         value = value.strip()
         if not value:
             raise ValueError("Trường này là bắt buộc.")
         return value
+
+    @field_validator("crew_role")
+    @classmethod
+    def valid_crew_role(cls, value: str) -> str:
+        canonical = CREW_ROLE_CANONICAL.get(import_match_key(value))
+        if not canonical:
+            raise ValueError(f"Chức danh phải là một trong: {', '.join(CREW_ROLES)}.")
+        return canonical
 
 
 class DeclarationSaveRequest(BaseModel):
@@ -1762,9 +1772,17 @@ async def import_crew(
     prepared: list[tuple[dict[str, Any], Organization | None, CrewMember | None]] = []
     preview_rows: list[dict[str, Any]] = []
     for row in rows:
+        raw_role = str(row.get("crew_role") or "")
+        canonical_role = CREW_ROLE_CANONICAL.get(import_match_key(raw_role))
+        if canonical_role:
+            row["crew_role"] = canonical_role
+        elif raw_role:
+            row["_invalid_crew_role"] = raw_role
         organization = _import_organization(db, str(row.get("organization_name") or ""))
         existing = _existing_import_crew(db, organization.id, row) if organization else None
         missing = [label for field, label in required_fields.items() if not row.get(field)]
+        if row.get("_invalid_crew_role"):
+            missing.append("Chức danh hợp lệ")
         if row.get("organization_name") and not organization:
             missing.append("Doanh nghiệp đã có trong hệ thống")
         clean = {key: value for key, value in row.items() if not key.startswith("_")}
@@ -1824,6 +1842,8 @@ async def import_crew(
     rejected: list[dict[str, Any]] = []
     for row, organization, existing in prepared:
         missing = [label for field, label in required_fields.items() if not row.get(field)]
+        if row.get("_invalid_crew_role"):
+            missing.append("Chức danh hợp lệ")
         if row.get("organization_name") and not organization:
             missing.append("Doanh nghiệp đã có trong hệ thống")
         if missing:

@@ -191,8 +191,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.1.3' in res.text
-    assert '/app.js?v=1.1.4' in res.text
+    assert '/styles.css?v=1.1.4' in res.text
+    assert '/app.js?v=1.1.5' in res.text
     assert 'id="analytics-unavailable"' in res.text
     assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
     assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
@@ -238,6 +238,9 @@ def test_static_frontend(client):
     assert "field('birth_date','Ngày sinh (không bắt buộc)'" in app_js
     assert 'name="vessel_id"><option value="">Chưa phân công' not in app_js
     assert "previewImport(event.target, '/api/import/crew', 'crew')" in app_js
+    assert "const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó']" in app_js
+    assert "'Máy phó'" not in app_js
+    assert "'Thủy thủ'" not in app_js
     styles_css = client.get("/styles.css").text
     assert "[hidden] { display: none !important; }" in styles_css
     assert "overflow-y: auto" in styles_css
@@ -245,6 +248,8 @@ def test_static_frontend(client):
     assert ".data-nav { margin-top: 0" in styles_css
     assert ".sidebar-footer { margin-top: auto" in styles_css
     assert ".integration-readiness" in styles_css
+    assert "#crew-dialog { width: min(740px" in styles_css
+    assert "#crew-fields input, #crew-fields select { min-height: 34px" in styles_css
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():
@@ -495,11 +500,21 @@ def test_crew_create(client, auth_headers):
 def test_port_staff_cannot_manually_assign_or_edit_crew(client, port_staff_headers):
     response = client.post("/api/crew", json={
         "full_name": "Không được tạo thủ công",
-        "crew_role": "Thủy thủ",
+        "crew_role": "Thuyền viên",
         "professional_certificate_type": "Chứng chỉ",
         "professional_certificate_no": "PORT-MANUAL-DENIED",
     }, headers=port_staff_headers)
     assert response.status_code == 403
+
+
+def test_crew_role_catalog_rejects_unapproved_role(client, customer_headers):
+    response = client.post("/api/crew", json={
+        "full_name": "Vai trò không hợp lệ",
+        "crew_role": "Thủy thủ",
+        "professional_certificate_type": "Chứng chỉ",
+        "professional_certificate_no": "ROLE-DENIED",
+    }, headers=customer_headers)
+    assert response.status_code == 422
 
 
 def test_crew_list(client, auth_headers):
@@ -1238,7 +1253,7 @@ def test_port_staff_imports_crew_without_vessel_assignment(
     certificate_no = f"CREW-{uuid.uuid4().hex[:10]}".upper()
     created = client.post("/api/crew", json={
         "full_name": "NGUYỄN VĂN KIỂM THỬ",
-        "crew_role": "THỦY THỦ",
+        "crew_role": "THUYỀN VIÊN",
         "professional_certificate_type": "CHỨNG CHỈ THỦY THỦ",
         "professional_certificate_no": certificate_no,
         "phone": "0900000001",
@@ -1254,7 +1269,7 @@ def test_port_staff_imports_crew_without_vessel_assignment(
             "Ngày hết hạn",
         ],
         [[
-            " test   org ", " Nguyễn Văn Kiểm Thử ", "Thủy thủ", "12/04/1985",
+            " test   org ", " Nguyễn Văn Kiểm Thử ", "Thuyền viên", "12/04/1985",
             "0900000099", "079123456789", "Chứng chỉ thủy thủ", certificate_no,
             "31/12/2030",
         ]],
@@ -1268,6 +1283,7 @@ def test_port_staff_imports_crew_without_vessel_assignment(
     row = preview.json()["rows"][0]
     assert row["organization_name"] == "TEST ORG"
     assert row["full_name"] == "NGUYỄN VĂN KIỂM THỬ"
+    assert row["crew_role"] == "Thuyền viên"
     assert row["birth_date"] == "1985-04-12"
     assert row["existing"] is True
     assert row["missingFields"] == []

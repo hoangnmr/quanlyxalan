@@ -486,12 +486,17 @@ Implemented:
   crew records and always clear legacy vessel assignment.
 - Simplified the sidebar identity display to one role pill while retaining the
   logout action.
+- Locked the crew-role catalog across manual entry, wizard entry and XLSX import
+  to Thuyền trưởng, Máy trưởng, Thuyền viên and Thuyền phó. Alembic revision
+  `i08f0f000008` consolidates legacy roles into Thuyền viên.
+- Reduced only the crew modal's width, field height, spacing and notes height;
+  other operational forms retain their existing sizing.
 - Local SQLite was backed up before migration and upgraded to
-  `h07f0f000007 (head)`.
+  `i08f0f000008 (head)`.
 
 Verification:
 
-- `pytest -q`: 84 passed.
+- `pytest -q`: 85 passed.
 - `node --check frontend/app.js`: PASS.
 - Alembic fresh-database head test includes `crew_members.birth_date`.
 - Manual browser/visual review remains with the user and is not claimed here.

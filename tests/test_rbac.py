@@ -322,7 +322,7 @@ def test_customer_cannot_update_other_tenant_crew(client):
     response = client.post("/api/crew", headers=headers_b, json={
         "id": crew_a.id,
         "full_name": "Overwritten",
-        "crew_role": "Thủy thủ",
+        "crew_role": "Thuyền viên",
         "professional_certificate_type": "An toàn",
         "professional_certificate_no": "CERT-A",
     })

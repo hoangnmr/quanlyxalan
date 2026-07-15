@@ -1911,7 +1911,7 @@ async def import_declaration(
     request: Request,
     preview: bool = False,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("CUSTOMER")),
+    user: User = Depends(require_roles("CUSTOMER", "ADMIN")),
 ):
     content = await request.body()
     if not content:
@@ -1933,8 +1933,42 @@ async def import_declaration(
             "accepted": 0,
             "rejected": [],
         }
+    row["created_at"] = now_iso()
+    row["updated_at"] = now_iso()
+    row["reference_no"] = f"TT-IMP-{datetime.now():%Y%m%d-%H%M%S}-{datetime.now().microsecond:06d}"
+    row["workflow_status"] = "DRAFT"
+    row["status"] = "DRAFT"
+    row["unload_json"] = json.dumps(cargo(row.pop("unload", {})), ensure_ascii=False)
+    row["load_json"] = json.dumps(cargo(row.pop("load", {})), ensure_ascii=False)
+
+    safe = {k: v for k, v in row.items() if not k.startswith("_") and hasattr(Declaration, k)}
+    imported_company_name = str(safe.get("company_name") or "").strip()
+    if not safe.get("declaration_date"):
+        safe["declaration_date"] = date.today().isoformat()
+    for required in ("company_name", "vessel_name", "registration_no", "vessel_type",
+                     "vessel_class", "last_port", "working_port", "eta", "etd",
+                     "master_name", "master_phone"):
+        if not safe.get(required):
+            safe[required] = "N/A"
+
+    # CUSTOMER imports stay tenant-bound. ADMIN may import a declaration sent by
+    # any customer and the workbook company name selects (or creates) its tenant.
+    if user.role == "CUSTOMER":
+        target_organization = user.organization
+    else:
+        if not imported_company_name:
+            raise HTTPException(status_code=422, detail="File phải có tên doanh nghiệp để Admin nhập phiếu khai báo.")
+        target_organization = _import_organization(db, imported_company_name)
+        if target_organization is None:
+            target_organization = _get_or_create_org(db, imported_company_name)
+    if target_organization is None:
+        raise HTTPException(status_code=422, detail="File phải có tên doanh nghiệp để Admin nhập phiếu khai báo.")
+
+    target_organization_id = target_organization.id
+    safe["organization_id"] = target_organization_id
+
     prior = db.query(ImportJob).filter(
-        ImportJob.organization_id == user.organization_id,
+        ImportJob.organization_id == target_organization_id,
         ImportJob.import_kind == "DECLARATION",
         ImportJob.source_checksum == checksum,
         ImportJob.mapping_version == IMPORT_MAPPING_VERSION,
@@ -1945,36 +1979,12 @@ async def import_declaration(
         result["importJobId"] = prior.id
         return result
 
-    row["created_at"] = now_iso()
-    row["updated_at"] = now_iso()
-    row["reference_no"] = f"TT-IMP-{datetime.now():%Y%m%d-%H%M%S}-{datetime.now().microsecond:06d}"
-    row["workflow_status"] = "DRAFT"
-    row["status"] = "DRAFT"
-    row["unload_json"] = json.dumps(cargo(row.pop("unload", {})), ensure_ascii=False)
-    row["load_json"] = json.dumps(cargo(row.pop("load", {})), ensure_ascii=False)
-
-    safe = {k: v for k, v in row.items() if not k.startswith("_") and hasattr(Declaration, k)}
-    if not safe.get("declaration_date"):
-        safe["declaration_date"] = date.today().isoformat()
-    for required in ("company_name", "vessel_name", "registration_no", "vessel_type",
-                     "vessel_class", "last_port", "working_port", "eta", "etd",
-                     "master_name", "master_phone"):
-        if not safe.get(required):
-            safe[required] = "N/A"
-
-    # Enforce CUSTOMER organization binding. Preserve the workbook company name
-    # long enough to replace a sentinel demo organization profile.
-    imported_company_name = str(safe.get("company_name") or "").strip()
-    safe["organization_id"] = user.organization_id
-
     remove_demo_data_for_real_input(
         db,
-        retain_organization_id=user.organization_id,
+        retain_organization_id=target_organization_id,
         organization_data={"name": imported_company_name},
     )
-    organization = db.query(Organization).filter(Organization.id == user.organization_id).first()
-    if organization:
-        safe["company_name"] = organization.name
+    safe["company_name"] = target_organization.name
 
     decl = Declaration(**safe)
     db.add(decl)
@@ -1985,7 +1995,7 @@ async def import_declaration(
         "idempotent": False,
     }
     job = ImportJob(
-        organization_id=user.organization_id, import_kind="DECLARATION",
+        organization_id=target_organization_id, import_kind="DECLARATION",
         source_checksum=checksum, mapping_version=IMPORT_MAPPING_VERSION,
         accepted_count=1, rejected_count=0,
         result_json=json.dumps(result, ensure_ascii=False),

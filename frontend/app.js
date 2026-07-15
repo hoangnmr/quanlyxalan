@@ -180,24 +180,10 @@ async function loadDashboard(query = '') {
     state.dashboardCertificateWarnings = data.stats.certificateWarnings;
     renderNotificationPreferences(state.dashboardCertificateWarnings);
     renderAttentionQueue(data.attention);
-    if (state.currentUser?.role === 'ADMIN') {
-      const admin = await api('/api/admin/operations-summary');
-      const adminCards = [
-        ['PHIẾU ĐÃ DUYỆT', admin.operations.approved, `${admin.operations.tons.toLocaleString('vi-VN')} tấn · ${admin.operations.teu.toLocaleString('vi-VN')} TEU`],
-        ['CHỜ CẢNG XỬ LÝ', admin.operations.pending, 'Nhân viên Cảng xem xét hồ sơ'],
-        ['CẢNH BÁO CHỨNG CHỈ', admin.fleet.certificateWarnings, `${admin.fleet.vessels} phương tiện`],
-        ['IMPORT', admin.imports.jobs, `${admin.imports.rejectedRows} dòng bị từ chối`],
-        ['BACKUP', admin.storage.backups, admin.storage.latestBackup || 'Chưa có backup'],
-        ['AN NINH', admin.security.failedLogins, `${admin.security.disabledUsers} tài khoản bị khóa`],
-      ];
-      $('#admin-operations').hidden = false;
-      $('#admin-operations-content').innerHTML = adminCards.map(card => `<article class="stat-card"><p>${card[0]}</p><strong>${card[1]}</strong><small>${esc(card[2])}</small></article>`).join('');
-      $('#admin-backup').hidden = false;
-      loadBackupHistory();
-    } else {
-      $('#admin-operations').hidden = true;
-      $('#admin-backup').hidden = true;
-    }
+    // Technical operations and database backup details remain available through
+    // protected APIs, but are not end-user dashboard content (including ADMIN).
+    $('#admin-operations').hidden = true;
+    $('#admin-backup').hidden = true;
     $('#recent-table').innerHTML = declarationTable(data.recent);
     renderDashboardMatches(data.matches || []);
   } catch (error) { toast(error.message, true); }
@@ -343,7 +329,7 @@ function openCrew(id = null) {
   const item = id ? state.crew.find(row => row.id === id) : {};
   state.editingCrew = item || {};
   $('#crew-fields').innerHTML = `
-    ${field('full_name','Họ và tên',item.full_name,'text','required class="span-2"')}
+    ${field('full_name','Họ và tên',item.full_name,'text','required')}
     ${selectField('crew_role','Chức danh',CREW_ROLES,item.crew_role,'required')}
     ${field('birth_date','Ngày sinh (không bắt buộc)',item.birth_date,'date')}
     ${field('phone','Số điện thoại',item.phone,'tel')}
@@ -352,7 +338,7 @@ function openCrew(id = null) {
     ${field('professional_certificate_no','Số chứng chỉ',item.professional_certificate_no,'text','required')}
     ${field('certificate_issue_date','Ngày cấp',item.certificate_issue_date,'date')}
     ${field('certificate_expiry_date','Ngày hết hạn',item.certificate_expiry_date,'date','required')}
-    <label class="span-3">Ghi chú<textarea name="notes">${esc(item.notes || '')}</textarea></label>`;
+    <label class="span-2">Ghi chú<textarea name="notes">${esc(item.notes || '')}</textarea></label>`;
   $('#crew-dialog').showModal();
 }
 
@@ -701,13 +687,16 @@ function reviewSummaryHtml(d) {
     ? $$('input[name="crew_ids"]:checked', crewContainer).length
     : 0;
   const crewTotal = isNew ? state.declarationNewCrew.length : (checkedCrew || (d.crew_ids || []).length);
-  return `<section class="form-section"><h3>F. Xem lại & Gửi</h3><div class="section-grid">
+  const isAdmin = state.currentUser?.role === 'ADMIN';
+  return `<section class="form-section"><h3>F. ${isAdmin ? 'Xem lại & Lưu' : 'Xem lại & Gửi'}</h3><div class="section-grid">
     <div class="attachment-field wide-field"><strong>Phương tiện</strong><p>${esc(d.vessel_name || '')} — ${esc(d.registration_no || '')}${isNew ? ' (hồ sơ mới)' : ''}</p></div>
     <div class="attachment-field wide-field"><strong>Thuyền trưởng</strong><p>${captainName ? `${esc(captainName)}${captainPhone ? ` · ${esc(captainPhone)}` : ''}` : 'Chưa có thông tin'}</p></div>
     <div class="attachment-field"><strong>Thuyền viên đi theo</strong><p>${crewTotal} người</p></div>
     <div class="attachment-field"><strong>Hành trình</strong><p>${esc(d.last_port || '')} → ${esc(d.working_port || '')}${d.destination_port ? ` → ${esc(d.destination_port)}` : ''}</p></div>
   </div>
-  <p class="muted">Kiểm tra kỹ thông tin trước khi bấm “Xác nhận & gửi”. Sau khi gửi, thông tin được khóa trong khi Cảng xem xét.</p></section>`;
+  <p class="muted">${isAdmin
+    ? 'Kiểm tra kỹ thông tin trước khi lưu phiếu thủ công.'
+    : 'Kiểm tra kỹ thông tin trước khi bấm “Xác nhận & gửi”. Sau khi gửi, thông tin được khóa trong khi Cảng xem xét.'}</p></section>`;
 }
 
 function renderDeclarationWizard() {
@@ -1290,7 +1279,15 @@ async function init() {
     const isAdmin = state.currentUser.role === 'ADMIN';
     const isReviewer = state.currentUser.role === 'PORT_STAFF';
 
-    $$('[data-action="new-declaration"]').forEach(btn => { btn.hidden = !isCustomer; });
+    const canCreateDeclaration = isCustomer || isAdmin;
+    $$('[data-action="new-declaration"]').forEach(btn => { btn.hidden = !canCreateDeclaration; });
+    $('#submit-declaration').hidden = !isCustomer;
+    $('#save-draft').textContent = isAdmin ? 'Lưu phiếu' : 'Lưu nháp';
+    const reviewStrip = $('.review-strip');
+    reviewStrip.querySelector('strong').textContent = isAdmin ? 'Kiểm tra trước khi lưu' : 'Kiểm tra trước khi xác nhận';
+    reviewStrip.querySelector('p').textContent = isAdmin
+      ? 'Dấu * là bắt buộc. Phiếu do Admin tạo được lưu để kiểm soát và bổ sung thủ công.'
+      : 'Dấu * là bắt buộc. Sau khi gửi, Cảng sẽ xem xét và phản hồi.';
     const addVesselBtn = $('#add-vessel');
     if (addVesselBtn) addVesselBtn.hidden = isReviewer || isCustomer;
     const addCrewBtn = $('#add-crew');
@@ -1317,7 +1314,7 @@ async function init() {
     $('.data-nav').hidden = isCustomer;
     $('#import-vessels-card').hidden = !isAdmin;
     $('#import-crew-card').hidden = !(isReviewer || isAdmin);
-    $('#import-declaration-card').hidden = true;
+    $('#import-declaration-card').hidden = !isAdmin;
 
     const integrationActions = $('#integration-admin-actions');
     const integrationJobs = $('#sync-jobs');

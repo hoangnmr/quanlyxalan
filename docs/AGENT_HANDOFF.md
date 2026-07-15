@@ -474,7 +474,7 @@ Verification:
 Implemented:
 
 - CUSTOMER navigation is limited to Phiếu khai báo and Danh sách thuyền viên;
-  direct declaration creation remains a CUSTOMER-only six-step wizard.
+  the six-step wizard is also available to ADMIN for controlled manual entry.
 - PORT_STAFF cannot manually create, edit or assign crew. Permanent vessel
   assignment was removed from the crew form and import path; crew selection is
   now made by the CUSTOMER for each declaration.
@@ -489,8 +489,8 @@ Implemented:
 - Locked the crew-role catalog across manual entry, wizard entry and XLSX import
   to Thuyền trưởng, Máy trưởng, Thuyền viên and Thuyền phó. Alembic revision
   `i08f0f000008` consolidates legacy roles into Thuyền viên.
-- Reduced only the crew modal's width, field height, spacing and notes height;
-  other operational forms retain their existing sizing.
+- Rebalanced the crew modal into two columns with readable default typography
+  and control height; other operational forms retain their existing sizing.
 - Local SQLite was backed up before migration and upgraded to
   `i08f0f000008 (head)`.
 
@@ -499,4 +499,34 @@ Verification:
 - `pytest -q`: 85 passed.
 - `node --check frontend/app.js`: PASS.
 - Alembic fresh-database head test includes `crew_members.birth_date`.
+- Manual browser/visual review remains with the user and is not claimed here.
+
+---
+
+## End-user admin and controlled import correction — 2026-07-15
+
+- **Status**: IN REVIEW — automated regression PASS; user visual review pending.
+- **Phase**: REVIEW
+- **Risk Level**: R2 (ADMIN declaration creation and cross-tenant import).
+
+Implemented:
+
+- ADMIN can open `+ Tạo phiếu`, use the complete declaration wizard and save a
+  manually created declaration. Customer confirmation remains CUSTOMER-only.
+- Restored the Phiếu khai báo Excel card for ADMIN, alongside Hồ sơ phương tiện
+  and Thông tin thuyền viên. The backend binds an ADMIN import to the normalized
+  company named in the workbook and preserves tenant-aware idempotency.
+- Technical operations, security, import counters and SQLite backup filenames
+  remain protected by ADMIN APIs but are no longer loaded into the end-user
+  dashboard.
+- Crew form now uses a balanced two-column grid while retaining the shared
+  readable label font, input font and 38px control height.
+- Desktop import cards use a three-column layout, collapsing to two and then one
+  column at responsive breakpoints.
+
+Verification:
+
+- `pytest -q`: 86 passed.
+- `node --check frontend/app.js`: PASS.
+- `git diff --check`: PASS.
 - Manual browser/visual review remains with the user and is not claimed here.

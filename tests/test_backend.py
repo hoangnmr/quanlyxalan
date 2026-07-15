@@ -191,8 +191,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.1.4' in res.text
-    assert '/app.js?v=1.1.5' in res.text
+    assert '/styles.css?v=1.1.5' in res.text
+    assert '/app.js?v=1.1.6' in res.text
     assert 'id="analytics-unavailable"' in res.text
     assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
     assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
@@ -205,7 +205,7 @@ def test_static_frontend(client):
     assert "function bindLoginForm()" in app_js
     assert "bindLoginForm();" in app_js
     assert "Tiến trình duyệt" in app_js
-    assert "Nhân viên Cảng" in app_js
+    assert "nhân viên Cảng" in f"{res.text}\n{app_js}"
     assert "CV = Cảng vụ viên" not in app_js
     assert "Theo các bước CV · QLC · BP" not in app_js
     assert "PORT_APPROVE" in app_js
@@ -218,7 +218,7 @@ def test_static_frontend(client):
     assert "PORT_STAFF:'Port staff'" in app_js
     assert "ADMIN:'Admin'" in app_js
     assert "if (state.currentUser?.role === 'ADMIN') loadIntegration();" in app_js
-    assert "btn.hidden = !isCustomer" in app_js
+    assert "btn.hidden = !canCreateDeclaration" in app_js
     assert "!['declarations', 'crew'].includes(link.dataset.route)" in app_js
     assert "$('#user-display').innerHTML = `<span class=\"role-pill\"" in app_js
     assert "const crewContainer = $('#declaration-crew-container');" in app_js
@@ -248,8 +248,8 @@ def test_static_frontend(client):
     assert ".data-nav { margin-top: 0" in styles_css
     assert ".sidebar-footer { margin-top: auto" in styles_css
     assert ".integration-readiness" in styles_css
-    assert "#crew-dialog { width: min(740px" in styles_css
-    assert "#crew-fields input, #crew-fields select { min-height: 34px" in styles_css
+    assert "#crew-dialog { width: min(720px" in styles_css
+    assert "#crew-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }" in styles_css
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():
@@ -1144,6 +1144,28 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     assert repeated.status_code == 200
     assert repeated.json()["idempotent"] is True
     assert repeated.json()["id"] == first.json()["id"]
+
+    from openpyxl import load_workbook
+    admin_workbook = load_workbook(io.BytesIO(declaration_content))
+    admin_workbook["KHAI BÁO"]["C6"] = f"DOANH NGHIỆP ADMIN {uuid.uuid4().hex[:8].upper()}"
+    admin_buffer = io.BytesIO()
+    admin_workbook.save(admin_buffer)
+    admin_content = admin_buffer.getvalue()
+
+    admin_preview = client.post(
+        "/api/import/declaration?preview=true",
+        content=admin_content,
+        headers={**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    )
+    assert admin_preview.status_code == 200
+    assert admin_preview.json()["preview"] is True
+    admin_import = client.post(
+        "/api/import/declaration",
+        content=admin_content,
+        headers={**auth_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    )
+    assert admin_import.status_code == 200, admin_import.text
+    assert admin_import.json()["accepted"] == 1
 
 
 def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth_headers):

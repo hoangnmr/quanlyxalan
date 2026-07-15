@@ -62,6 +62,20 @@ def test_role_dashboard_layout():
     assert "const isReviewer = state.currentUser.role === 'PORT_STAFF'" in app_js
     assert 'id="admin-operations"' in index_html
     assert 'id="integration-admin-actions"' in index_html
+    assert "btn.hidden = !canCreateDeclaration" in app_js
+    assert "$('#import-declaration-card').hidden = !isAdmin" in app_js
+    assert "$('#admin-operations').hidden = true" in app_js
+    assert "api('/api/admin/operations-summary')" not in app_js
+
+
+def test_crew_form_keeps_readable_controls_with_compact_two_column_layout():
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    assert "field('full_name','Họ và tên',item.full_name,'text','required')" in app_js
+    assert '#crew-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }' in styles_css
+    assert '#crew-fields label { gap: 4px; font-size: 10px; }' not in styles_css
+    assert '#crew-fields input, #crew-fields select { min-height: 34px' not in styles_css
 
 
 def test_terminology_standardized():

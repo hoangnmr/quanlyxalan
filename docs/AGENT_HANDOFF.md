@@ -980,3 +980,71 @@ declarations must not remove the 47 known Salan rows from PL.01/PL.03.
 - Next move: provide at least one representative real workbook per appendix,
   then run full Spreadsheets skill inspection and close HDEC-01–HDEC-09 before
   schema or code work.
+
+---
+
+## Historical TOS workbook audit and owner time disposition — 2026-07-18
+
+- **Status**: H0 AUDIT COMPLETE; H0 remains OPEN on owner decisions and missing
+  historical PL.01/PL.02 samples. BUILD is not authorized.
+- **Phase**: INTAKE; bounded H1 parser/data-contract DESIGN is eligible, but
+  final H1 approval is not yet granted.
+- Codex Desktop inspected five workbooks/six sheets read-only with the
+  Spreadsheets skill and `@oai/artifact-tool`, covering 100% of used ranges
+  across thirteen local renders. No workbook was modified and no raw render is
+  committed.
+- Evidence:
+  `docs/HISTORICAL_TOS_WORKBOOK_AUDIT_20260717.md` and
+  `docs/historical_tos_mapping_draft.json`.
+- Verified sample facts: 40 Berth calls; 1,067 cargo rows across 38 detail call
+  keys; all detail rows exact-match a Berth key; two Berth calls have no cargo.
+  Salan linking produced 10 exact, 26 controlled-normalized, four unmatched
+  and zero ambiguous candidates.
+- Verified PL.03 mapping: B=`Tên PTTND`, AG=`Ngày đến cảng`, AH=`Ngày rời
+  cảng`, AI=`Đại lý PTND`; historical and blank PL.03 variants share 35
+  physical columns but differ in hidden state, data rows and footer position.
+- Owner closed `TOS-PL03-TIME-01`: the supplied legacy PL.03 used inaccurate
+  ETA-derived time. Matched TOS ATB/ATD are authoritative for reconstructed
+  historical PL.01/PL.03; legacy AG/AH remain reported provenance only.
+- Owner closed the remaining core TOS baseline: Detail/R is tonnes per
+  container and both full/empty container weight contributes to report tonnes;
+  F/E independently selects full/empty TEU columns. The four movement methods
+  are approved as load/unload mappings.
+- The legacy PL.03 is a non-authoritative manual summary and no longer blocks
+  TOS parser design on 73-versus-40 row reproduction. Reporting month uses ATB;
+  matched TOS wins actual time/berth/cargo while live retains declaration-only
+  facts and the call counts once.
+- Overlapping updated TOS imports require an explicit PORT_STAFF/ADMIN revision
+  choice. Historical data/provenance/source receipt retention is at least five
+  years, with user export as an additional copy channel.
+- Owner closed HDEC-02 with a multi-port product decision. Cảng Tân Thuận is
+  the first tenant, not a hardcoded boundary. Shared/versioned government PL
+  report contracts use tenant-scoped data and identity; every import/report
+  belongs to one authenticated reporting unit, and port/vendor TOS differences
+  use versioned source adapters. Mixed-unit batches cannot commit silently and
+  ordinary port roles cannot cross tenant boundaries.
+- Historical PL.01/PL.02 variant audit is deferred until files are supplied.
+  Historical label/coverage fixtures remain DESIGN items.
+- Next governed move: draft the bounded H1 schema/parser/API/UI acceptance
+  contract. Do not implement migration, parser, database import or dashboard
+  before explicit BUILD authorization.
+
+---
+
+## Historical TOS H1 approval and BUILD transition — 2026-07-18
+
+- **Status**: H1 APPROVED; H2 BUILD IN PROGRESS.
+- **Risk Level**: R2; owner explicitly authorized the transition on 2026-07-18.
+- Approved boundary: multi-port, tenant-isolated historical/TOS schema,
+  migration, provenance, idempotency and acceptance-test foundation first;
+  parser/API and UI follow the ordered roadmap gates.
+- Cảng Tân Thuận remains the first tenant, not a hardcoded product boundary.
+- Historical PL.01/PL.02 variants remain deferred. Unsupported layouts,
+  labels, cargo classes and invalid-value paths must fail closed until covered
+  by audited evidence or sanitized golden fixtures.
+- Raw operational workbooks and renders remain outside Git.
+- This transition does not authorize production deployment, external data
+  transmission, or skipping REVIEW and FREEZE.
+- Next governed move: commit the approved design checkpoint, then implement H2
+  with migration upgrade/rollback, tenant-isolation, idempotency and audit
+  tests before starting H3.

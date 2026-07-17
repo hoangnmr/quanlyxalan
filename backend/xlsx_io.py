@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import math
 import re
 import unicodedata
 import zipfile
@@ -827,7 +828,23 @@ def _make_appendix3_xlsx(rows: list[list[Any]], template_path: Path) -> bytes:
     ws["Y6"] = "Quá cảnh\n(không bốc dỡ)"
     ws.column_dimensions["D"].width = max(ws.column_dimensions["D"].width or 0, 18)
     for target_row in range(10, 10 + desired_rows):
-        ws.row_dimensions[target_row].height = max(ws.row_dimensions[target_row].height or 0, 66)
+        estimated_lines = 1
+        for column_number in range(1, 36):
+            cell = ws.cell(target_row, column_number)
+            if cell.value is None or not cell.alignment.wrap_text:
+                continue
+            column_width = ws.column_dimensions[cell.column_letter].width or 8.43
+            chars_per_line = max(int(column_width), 1)
+            cell_lines = sum(
+                max(1, math.ceil(len(line) / chars_per_line))
+                for line in str(cell.value).splitlines() or [""]
+            )
+            estimated_lines = max(estimated_lines, cell_lines)
+        ws.row_dimensions[target_row].height = max(
+            ws.row_dimensions[target_row].height or 0,
+            66,
+            min(180, estimated_lines * 18),
+        )
     ws.sheet_view.showGridLines = False
     ws.freeze_panes = "A10"
     ws.print_area = f"A5:AI{9 + desired_rows}"

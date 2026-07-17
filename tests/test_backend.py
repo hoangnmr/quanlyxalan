@@ -1223,6 +1223,9 @@ def test_appendix_month_ytd_operating_date_adjustment_and_vessel_grain(
         assert sheet3["J7"].value == "TEUs"
         assert sheet3["K7"].value == "TEUs Rỗng"
         assert sheet3.column_dimensions["D"].width >= 18
+        assert sheet3.cell(row, 33).value.count("\n") == 1
+        assert sheet3.cell(row, 34).value.count("\n") == 1
+        assert sheet3.row_dimensions[row].height >= 108
     finally:
         db = SessionLocal()
         try:

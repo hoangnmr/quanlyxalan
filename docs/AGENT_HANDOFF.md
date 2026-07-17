@@ -904,3 +904,24 @@ declarations must not remove the 47 known Salan rows from PL.01/PL.03.
   files contain 47 PL.01 rows, blank PL.02 metrics and 47 PL.03 rows.
 - The updated Desktop work order now checks both the operational 47-Salan set
   and the isolated positive fixture before recommending tranche closure.
+
+---
+
+## PL.03 focused visual-regression follow-up — 2026-07-17
+
+- Full Desktop Spreadsheet regression passed all zero-path and positive mapping
+  checks but found one visual defect: `B/PL.03!AG10:AH10` clipped the second
+  arrival/departure timestamp at the fixed 66-pt data-row height.
+- The exporter now derives PL.03 data-row height from wrapped cell content;
+  the positive fixture row is 108 pt while the FORM column widths and values
+  remain unchanged.
+- Automated evidence: targeted test PASS and complete suite `95 passed`.
+- Regenerated workbooks are in `outputs/appendix-positive-fixture-20260717/`
+  and `outputs/appendix-operational-review-20260717/`.
+- Run
+  `docs/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_20260717.md`.
+  Keep the Spreadsheet release gate OPEN until the focused artifact-tool render
+  confirms `AG10:AH10` is fully legible and no PL.03 layout regression exists.
+- Live business data evidence remains NOT PROVABLE because the operational DB
+  still has no approved declarations; synthetic fixture PASS proves only the
+  exporter implementation path.

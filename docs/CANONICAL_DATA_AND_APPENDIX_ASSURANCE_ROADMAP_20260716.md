@@ -293,3 +293,19 @@ known static columns are exported and missing activity remains blank. PL.02
 remains activity-only. Operational review workbooks now prove the 47-row/blank
 baseline structurally; the synthetic positive set proves activity mapping. Both
 sets must pass Desktop Spreadsheet regression before tranche closure.
+
+### Spreadsheet regression status — 2026-07-17
+
+The first full Desktop regression inspected six workbooks and reviewed 24
+artifact-tool renders covering 100% of every used range. Operational zero-path,
+positive mapping, APPX-01–04 and MAP-01–05 passed at implementation level;
+live business data remains NOT PROVABLE until approved operational declarations
+exist. The only release-gate defect was clipped multi-value timestamps at
+`B/PL.03!AG10:AH10` because the exporter fixed every PL.03 data row at 66 pt.
+
+The exporter now estimates PL.03 row height from wrapped content across all 35
+columns. The positive fixture row is 108 pt, the targeted regression test and
+the complete 95-test suite pass, and both review sets were regenerated. T2/T3
+remain BUILD IN PROGRESS until
+`WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_20260717.md` returns a
+visual PASS. Do not treat implementation PASS as proof of live customer data.

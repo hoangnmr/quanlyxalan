@@ -116,7 +116,10 @@ class Declaration(Base):
     passenger_count = Column(Integer, nullable=False, default=0)
     last_port = Column(String, nullable=False)
     working_port = Column(String, nullable=False)
+    departure_berth = Column(String, nullable=False, default="")
     destination_port = Column(String, nullable=False, default="")
+    agent_ptnd_name = Column(String, nullable=False, default="")
+    is_passenger_call = Column(Integer, nullable=False, default=0)
     eta = Column(String, nullable=False)
     etd = Column(String, nullable=False)
     unload_json = Column(Text, nullable=False)
@@ -139,6 +142,19 @@ class Declaration(Base):
     crew_links = relationship("DeclarationCrew", back_populates="declaration", cascade="all, delete-orphan")
     events = relationship("DeclarationEvent", back_populates="declaration", cascade="all, delete-orphan")
     attachments = relationship("Attachment", back_populates="declaration", cascade="all, delete-orphan")
+
+
+class ReportAdjustment(Base):
+    __tablename__ = "report_adjustments"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    report_kind = Column(String, nullable=False, default="appendix2")
+    report_month = Column(String, nullable=False)
+    metric = Column(String, nullable=False)
+    delta = Column(Float, nullable=False)
+    reason = Column(Text, nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(String, nullable=False, default=now_iso)
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"

@@ -1,0 +1,21 @@
+{
+  "version": "KBCV-CANONICAL-1.0",
+  "approved_for_build": "2026-07-17",
+  "eligibility": {"workflow_status": "APPROVED", "tenant_scoped": true},
+  "operating_dates": {
+    "arrival": ["actual_arrival_at", "eta"],
+    "departure": ["actual_departure_at", "etd"],
+    "forbidden_period_field": "declaration_date"
+  },
+  "new_declaration_fields": {
+    "departure_berth": {"type": "string", "snapshot": true},
+    "agent_ptnd_name": {"type": "string", "snapshot": true},
+    "is_passenger_call": {"type": "boolean", "snapshot": true}
+  },
+  "appendix2": {"period": "calendar_month", "cumulative_start": "year_start", "blank_when_absent": true},
+  "appendix3": {
+    "grain": "canonical_vessel",
+    "numeric_rule": "sum",
+    "text_rule": "distinct_chronological_line_break"
+  }
+}

@@ -881,6 +881,7 @@ function renderDeclarationWizard() {
         ${field('certificate_expiry_date','Hạn GCN ATKT & BVMT',d.certificate_expiry_date,'date',isNew ? '' : 'readonly class="locked-field"')}
         ${field('crew_count','Số thuyền viên tối thiểu',d.crew_count,'number',isNew ? 'min="0"' : 'min="0" readonly class="locked-field"')}
         ${field('passenger_count','Số hành khách',d.passenger_count,'number','min="0"')}
+        <label class="wide-field"><span>Phân loại lượt tàu khách</span><span class="checkbox-line"><input name="is_passenger_call" type="checkbox" ${d.is_passenger_call ? 'checked' : ''}> Phương tiện/lượt này được tính là lượt tàu khách, kể cả khi số hành khách bằng 0</span></label>
         <div class="record-lock-note wide-field" ${isNew ? 'hidden' : ''}><strong>Thông tin hồ sơ phương tiện chỉ đọc</strong><span>Chọn đúng phương tiện để hệ thống tự điền. Khi hồ sơ thay đổi, Quản trị viên cập nhật tại mục Hồ sơ phương tiện.</span></div>
         <p class="muted wide-field" ${isNew ? '' : 'hidden'}>Hồ sơ phương tiện mới sẽ được lưu khi phiếu được xác nhận gửi, để lần sau có thể chọn lại.</p>
       </div></section>
@@ -889,7 +890,9 @@ function renderDeclarationWizard() {
       <section class="form-section"><h3>B. Hành trình</h3><div class="section-grid">
         ${field('last_port','Cảng rời cuối cùng',d.last_port,'text','required list="ports-list"')}
         ${field('working_port','Cảng / cầu bến đến làm hàng',d.working_port,'text','required list="ports-list"')}
+        ${field('departure_berth','Cảng / cầu bến rời',d.departure_berth,'text','list="ports-list"')}
         ${field('destination_port','Cảng đích',d.destination_port,'text','list="ports-list"')}
+        ${field('agent_ptnd_name','Đại lý PTND',d.agent_ptnd_name,'text','class="wide-field"')}
         ${field('eta','Thời gian dự kiến đến',d.eta,'datetime-local','required')}
         ${field('etd','Thời gian dự kiến rời',d.etd,'datetime-local','required')}
         ${field('actual_arrival_at','Thời gian đến thực tế',d.actual_arrival_at,'datetime-local')}
@@ -966,11 +969,13 @@ function calculateCargo(prefix) {
 }
 
 function declarationData() {
-  const data = values($('#declaration-form'));
+  const form = $('#declaration-form');
+  const data = values(form);
   // Blank optional number/date inputs arrive as "" via FormData, which the backend's
   // numeric fields reject outright — drop them so the schema's own default applies.
   Object.keys(data).forEach(key => { if (data[key] === '') delete data[key]; });
   data.crew_ids = [...$('#declaration-form').querySelectorAll('[name="crew_ids"]:checked')].map(input => Number(input.value));
+  data.is_passenger_call = Boolean(form.elements.is_passenger_call?.checked);
   delete data.attachments;
   delete data.vessel_mode;
   ['unload','load'].forEach(prefix => {
@@ -1292,10 +1297,38 @@ async function downloadFile(path, filename) {
 }
 
 async function exportReport(kind) {
-  const from = $('#report-from').value || '1900-01-01';
-  const to = $('#report-to').value || '2999-12-31';
+  let from = $('#report-from').value || '1900-01-01';
+  let to = $('#report-to').value || '2999-12-31';
+  if (kind === 'appendix2') {
+    const month = $('#report-month').value;
+    if (!month) { toast('Vui lòng chọn tháng báo cáo PL.02.', true); return; }
+    const [year, monthNumber] = month.split('-').map(Number);
+    from = `${month}-01`;
+    to = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+  }
   try {
     await downloadFile(`/api/reports/${kind}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, `report_${kind}_${from}_${to}.xlsx`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadReportAdjustments() {
+  const month = $('#report-month').value;
+  if (!month || !['PORT_STAFF', 'ADMIN'].includes(state.currentUser?.role)) return;
+  const items = await api(`/api/reports/appendix2/adjustments?report_month=${encodeURIComponent(month)}`);
+  $('#report-adjustment-history').innerHTML = items.length
+    ? `<table class="data-table responsive-table"><thead><tr><th>Thời gian</th><th>Chỉ tiêu</th><th>Delta</th><th>Lý do</th></tr></thead><tbody>${items.map(item => `<tr><td data-label="Thời gian">${fmtDate(item.created_at)}</td><td data-label="Chỉ tiêu">${item.metric === 'calls' ? 'Lượt tàu' : 'Lượt tàu khách'}</td><td data-label="Delta">${item.delta > 0 ? '+' : ''}${item.delta}</td><td data-label="Lý do">${esc(item.reason)}</td></tr>`).join('')}</tbody></table>`
+    : 'Chưa có điều chỉnh trong tháng.';
+}
+
+async function saveReportAdjustment(event) {
+  event.preventDefault();
+  const data = values(event.currentTarget);
+  try {
+    await api('/api/reports/appendix2/adjustments', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...data, delta:Number(data.delta)})});
+    event.currentTarget.elements.delta.value = '';
+    event.currentTarget.elements.reason.value = '';
+    await loadReportAdjustments();
+    toast('Đã ghi điều chỉnh PL.02 vào nhật ký audit.');
   } catch (error) { toast(error.message, true); }
 }
 
@@ -1484,6 +1517,7 @@ async function init() {
     const integrationJobs = $('#sync-jobs');
     if (integrationActions) integrationActions.hidden = !isAdmin;
     if (integrationJobs) integrationJobs.hidden = !isAdmin;
+    $('#report-adjustment-panel').hidden = !(isReviewer || isAdmin);
 
   } catch (err) {
     state.currentUser = null;
@@ -1527,6 +1561,11 @@ async function init() {
   $('#declaration-form').addEventListener('submit', saveDeclaration);
   $('#workflow-form').addEventListener('submit', saveWorkflow);
   $('#in-app-certificate-reminders').addEventListener('change', saveNotificationPreferences);
+  $('#report-adjustment-form').addEventListener('submit', saveReportAdjustment);
+  $('#report-month').addEventListener('change', event => {
+    $('#report-adjustment-form').elements.report_month.value = event.target.value;
+    loadReportAdjustments().catch(error => toast(error.message, true));
+  });
 
   $('#add-crew').onclick = () => openCrew();
   $$('[data-close-dialog]').forEach(button => button.onclick = () => document.getElementById(button.dataset.closeDialog).close());
@@ -1544,6 +1583,9 @@ async function init() {
   $('#trigger-backup').onclick = triggerBackup;
   $('#prepare-sync').onclick = prepareSync;
   const today = new Date(); $('#report-to').value = today.toISOString().slice(0,10); $('#report-from').value = `${today.getFullYear()}-01-01`;
+  $('#report-month').value = today.toISOString().slice(0, 7);
+  $('#report-adjustment-form').elements.report_month.value = $('#report-month').value;
+  if (['PORT_STAFF', 'ADMIN'].includes(state.currentUser?.role)) loadReportAdjustments().catch(error => toast(error.message, true));
   try {
     [state.catalogs, state.vessels, state.crew] = await Promise.all([api('/api/catalogs'), api('/api/vessels'), api('/api/crew')]);
     $('#api-state').className = 'state-badge ok'; $('#api-state').textContent = 'Đã kết nối';

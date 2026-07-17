@@ -1,11 +1,11 @@
 # Roadmap — Canonical Data and Appendix Assurance
 
-Status: T0 CLOSED — T1 DESIGN AUTHORIZED; BUILD NOT AUTHORIZED
+Status: T0/T1 CLOSED — BUILD AUTHORIZED; T2 IN PROGRESS
 Date: 2026-07-16
 Updated: 2026-07-17 — incorporated the 67-column mapping and owner decision register
 Project: Khai-bao-Cang-vu-recovery-ux
-Current phase: DESIGN
-Next implementation phase: BUILD after T1 approval
+Current phase: BUILD
+Next implementation phase: REVIEW after T2/T3 implementation
 Risk level: R2
 
 ## 1. Outcome
@@ -138,7 +138,7 @@ Exit gate:
 
 ### T1 — Canonical data contract and index
 
-Status: IN PROGRESS — DESIGN ONLY
+Status: CLOSED — DESIGN CONTRACT RECORDED; OWNER AUTHORIZED BUILD 2026-07-17
 Phase: DESIGN
 
 Deliverables:
@@ -162,13 +162,17 @@ Deliverables:
 
 Exit gate:
 
-- Human review approves entity ownership, field precedence, tenant scope and
-  report inclusion rules before any schema or application change.
+- **PASSED 2026-07-17:** entity ownership, field precedence, tenant scope,
+  PL.02 adjustment and PL.03 aggregation are recorded in `DATA_PLATFORM_README.md`,
+  `DATA_INDEX.md`, `DATA_FIELD_CATALOG.md`, `DATA_INHERITANCE_RULES.md` and
+  `data_field_manifest.json`.
+- **PASSED 2026-07-17:** the owner's instruction `Tiến hành sửa` authorizes the
+  documented implementation plan in `REPORT_IMPLEMENTATION_PLAN_20260717.md`.
 
 ### T2 — Canonical foundation and provenance
 
-Status: NOT STARTED
-Phase: BUILD after T1 approval
+Status: IN PROGRESS
+Phase: BUILD
 
 Actions:
 
@@ -277,8 +281,8 @@ human review at the T1 gate.
 
 ## 6. Current hold point
 
-The repository is now in DESIGN. T0 is closed and T1 documentation may proceed.
-No code, schema, template or operational-data change is authorized yet. The
-safe next move is to complete the T1 canonical field catalog, inheritance
-rules, PL.03 vessel-aggregation contract, PL.02 adjustment contract, dashboard
-projections and acceptance tests, then obtain human approval before BUILD.
+The repository is in BUILD. T0 and T1 are closed; T2 is implementing the
+approved canonical snapshots and report-adjustment audit model. The 2026-07-17
+Desktop Spreadsheet QA is the visual baseline: APPX-04 is closed by exception,
+while APPX-01–03 and MAP-01–05 remain open until positive fixtures and fresh
+Spreadsheet renders pass. No upstream CVF-core change is authorized here.

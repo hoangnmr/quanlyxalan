@@ -11,6 +11,7 @@ import hashlib
 import logging
 import os
 import uuid
+from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -35,7 +36,7 @@ from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, engin
 from .models import (
     Attachment, AuditEvent, Base, CrewMember, Declaration,
     DeclarationCrew, DeclarationEvent, ImportJob, IntegrationConnector, Organization,
-    SyncJob, User, Vessel, VesselOperatingProfile,
+    ReportAdjustment, SyncJob, User, Vessel, VesselOperatingProfile,
 )
 from .xlsx_io import (
     crew_rows, declaration_row, excel_date, import_match_key, make_report_xlsx,
@@ -43,7 +44,7 @@ from .xlsx_io import (
 )
 from scripts.backup_local import backup as create_local_backup, prune as prune_local_backups
 
-IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.4"
+IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.5"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
 CREW_ROLES = ("Thuyền trưởng", "Máy trưởng", "Thuyền viên", "Thuyền phó")
 CREW_ROLE_CANONICAL = {import_match_key(role): role for role in CREW_ROLES}
@@ -382,7 +383,10 @@ class DeclarationSaveRequest(BaseModel):
     passenger_count: int = 0
     last_port: str
     working_port: str
+    departure_berth: str = ""
     destination_port: str = ""
+    agent_ptnd_name: str = ""
+    is_passenger_call: bool = False
     eta: str
     etd: str
     master_name: str
@@ -448,6 +452,39 @@ class PrepareSyncRequest(BaseModel):
 
 class NotificationPreferenceRequest(BaseModel):
     in_app_certificate_reminders: bool = True
+
+
+class ReportAdjustmentRequest(BaseModel):
+    report_month: str
+    metric: str
+    delta: float
+    reason: str
+    organization_id: Optional[int] = None
+
+    @field_validator("report_month")
+    @classmethod
+    def valid_report_month(cls, value: str) -> str:
+        try:
+            datetime.strptime(value, "%Y-%m")
+        except ValueError as exc:
+            raise ValueError("Tháng báo cáo phải có định dạng YYYY-MM.") from exc
+        return value
+
+    @field_validator("metric")
+    @classmethod
+    def valid_metric(cls, value: str) -> str:
+        allowed = {"calls", "passenger_calls"}
+        if value not in allowed:
+            raise ValueError(f"Chỉ tiêu điều chỉnh phải là một trong: {', '.join(sorted(allowed))}.")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def required_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 5:
+            raise ValueError("Lý do điều chỉnh phải có ít nhất 5 ký tự.")
+        return value
 
 
 # ── Catalog constants ──────────────────────────────────────────────────────────
@@ -1434,7 +1471,8 @@ def save_declaration(
             "declaration_date", "vessel_name", "registration_no",
             "vessel_type", "vessel_class", "length_m", "deadweight_tons", "gross_tonnage",
             "certificate_expiry_date", "crew_count", "passenger_count", "last_port",
-            "working_port", "destination_port", "eta", "etd", "master_name", "master_phone",
+            "working_port", "departure_berth", "destination_port", "agent_ptnd_name",
+            "is_passenger_call", "eta", "etd", "master_name", "master_phone",
             "movement_type", "purpose", "cargo_description",
             "actual_arrival_at", "actual_departure_at", "vessel_id",
         ):
@@ -1468,7 +1506,10 @@ def save_declaration(
             passenger_count=payload.passenger_count,
             last_port=payload.last_port,
             working_port=payload.working_port,
+            departure_berth=payload.departure_berth,
             destination_port=payload.destination_port,
+            agent_ptnd_name=payload.agent_ptnd_name,
+            is_passenger_call=1 if payload.is_passenger_call else 0,
             eta=payload.eta,
             etd=payload.etd,
             master_name=payload.master_name,
@@ -2351,14 +2392,43 @@ def _analytics_period(period: str, anchor: date) -> dict[str, Any]:
     }
 
 
+def _date_from_value(raw: Any) -> date | None:
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except ValueError:
+        return None
+
+
+def _arrival_operating_date(declaration: Declaration) -> date | None:
+    for raw in (declaration.actual_arrival_at, declaration.eta):
+        value = _date_from_value(raw)
+        if value:
+            return value
+    return None
+
+
+def _departure_operating_date(declaration: Declaration) -> date | None:
+    for raw in (declaration.actual_departure_at, declaration.etd):
+        value = _date_from_value(raw)
+        if value:
+            return value
+    return None
+
+
 def _declaration_operating_date(declaration: Declaration) -> date | None:
-    for raw in (declaration.actual_arrival_at, declaration.eta, declaration.declaration_date):
+    values = (
+        (declaration.actual_departure_at, declaration.etd)
+        if declaration.movement_type == "DEPARTURE"
+        else (declaration.actual_arrival_at, declaration.eta)
+    )
+    for raw in values:
         if not raw:
             continue
-        try:
-            return date.fromisoformat(str(raw)[:10])
-        except ValueError:
-            continue
+        value = _date_from_value(raw)
+        if value:
+            return value
     return None
 
 
@@ -2525,10 +2595,10 @@ def _appendix1_rows(db: Session, declarations: list[Declaration]) -> list[list[A
             _report_static_value(vessel, declaration, "vessel_type") or "",
             _report_static_value(vessel, declaration, "certificate_expiry_date") or "",
             capacity,
-            getattr(vessel, "passenger_capacity", None) or declaration.passenger_count or 0,
+            getattr(vessel, "passenger_capacity", None) if vessel else None,
             declaration.working_port,
             declaration.actual_arrival_at or declaration.eta,
-            declaration.destination_port or declaration.working_port,
+            declaration.departure_berth or "",
             declaration.actual_departure_at or declaration.etd,
             _cargo_summary(json.loads(declaration.unload_json or "{}")),
             _cargo_summary(json.loads(declaration.load_json or "{}")),
@@ -2541,36 +2611,57 @@ def _appendix1_rows(db: Session, declarations: list[Declaration]) -> list[list[A
     return rows
 
 
-def _report_period_metrics(declarations: list[Declaration]) -> dict[str, float]:
+def _report_period_metrics(declarations: list[Declaration]) -> dict[str, float | None]:
     metrics = {
-        "container_tons": 0.0, "container_teu": 0.0,
-        "dry_tons": 0.0, "liquid_tons": 0.0, "foreign_tons": 0.0,
-        "calls": float(len(declarations)), "passenger_calls": 0.0, "passengers": 0.0,
+        "container_tons": None, "container_teu": None,
+        "dry_tons": None, "liquid_tons": None, "foreign_tons": None,
+        "calls": None,
+        "passenger_calls": None, "passengers": None,
     }
+
+    def add(key: str, value: float, *, applicable: bool = False) -> None:
+        if not applicable and not value:
+            return
+        metrics[key] = float(metrics[key] or 0) + value
+
     for declaration in declarations:
-        metrics["passengers"] += float(declaration.passenger_count or 0)
-        if declaration.passenger_count:
-            metrics["passenger_calls"] += 1
+        if declaration.movement_type == "ARRIVAL":
+            add("calls", 1.0, applicable=True)
+        add("passengers", float(declaration.passenger_count or 0), applicable=bool(declaration.passenger_count))
+        if declaration.movement_type == "ARRIVAL" and declaration.is_passenger_call:
+            add("passenger_calls", 1.0, applicable=True)
         for item in (json.loads(declaration.unload_json or "{}"), json.loads(declaration.load_json or "{}")):
             cargo_key = import_match_key(item.get("cargo_type"))
             movement_key = import_match_key(item.get("movement_type"))
             tons = float(item.get("tons") or 0)
             teu = float(item.get("teu") or 0)
             if "CONTAINER" in cargo_key or "CONGTENO" in cargo_key:
-                metrics["container_tons"] += tons
-                metrics["container_teu"] += teu
+                add("container_tons", tons, applicable=bool(tons))
+                add("container_teu", teu, applicable=bool(teu))
             elif "HANGKHO" in cargo_key or cargo_key == "KHO":
-                metrics["dry_tons"] += tons
+                add("dry_tons", tons, applicable=bool(tons))
             elif "HANGLONG" in cargo_key or cargo_key == "LONG":
-                metrics["liquid_tons"] += tons
+                add("liquid_tons", tons, applicable=bool(tons))
             if "NHAPKHAU" in movement_key or "XUATKHAU" in movement_key:
-                metrics["foreign_tons"] += tons
+                add("foreign_tons", tons, applicable=bool(tons))
     return metrics
 
 
-def _appendix2_rows(current: list[Declaration], cumulative: list[Declaration]) -> list[list[Any]]:
+def _appendix2_rows(
+    current: list[Declaration],
+    cumulative: list[Declaration],
+    current_adjustments: Optional[dict[str, float]] = None,
+    cumulative_adjustments: Optional[dict[str, float]] = None,
+) -> list[list[Any]]:
     current_metrics = _report_period_metrics(current)
     cumulative_metrics = _report_period_metrics(cumulative)
+    for metrics, adjustments in (
+        (current_metrics, current_adjustments or {}),
+        (cumulative_metrics, cumulative_adjustments or {}),
+    ):
+        for key, delta in adjustments.items():
+            if key in metrics and delta:
+                metrics[key] = float(metrics[key] or 0) + float(delta)
     values = [
         current_metrics["container_tons"], current_metrics["container_teu"],
         cumulative_metrics["container_tons"], cumulative_metrics["container_teu"],
@@ -2587,7 +2678,7 @@ def _appendix2_rows(current: list[Declaration], cumulative: list[Declaration]) -
     ]
 
 
-def _cargo_column_start(movement_type: str) -> int:
+def _cargo_column_start(movement_type: str, cargo_direction: str = "") -> int:
     key = import_match_key(movement_type)
     if "XUATKHAU" in key:
         return 8
@@ -2597,51 +2688,153 @@ def _cargo_column_start(movement_type: str) -> int:
         return 14
     if "NOIDIAROI" in key:
         return 17
+    if "NOIDIA" in key:
+        if cargo_direction == "unload":
+            return 14
+        if cargo_direction == "load":
+            return 17
     if "CHUYENTAI" in key:
         return 20
     if "QUACANH" in key and ("BOCDO" in key or "XEPDO" in key):
         return 22
     if "QUACANH" in key or "QUACANG" in key:
         return 24
-    return 14
+    raise ValueError(f"Không nhận diện được nhóm hàng hóa '{movement_type or '(trống)'}'.")
+
+
+def _distinct_join(values: list[Any]) -> str:
+    result: list[str] = []
+    for value in values:
+        text_value = str(value or "").strip()
+        if text_value and text_value not in result:
+            result.append(text_value)
+    return "\n".join(result)
 
 
 def _appendix3_rows(db: Session, declarations: list[Declaration]) -> list[list[Any]]:
     rows: list[list[Any]] = []
+    groups: dict[str, list[Declaration]] = {}
     for declaration in declarations:
+        key = f"id:{declaration.vessel_id}" if declaration.vessel_id else f"reg:{import_match_key(declaration.registration_no)}"
+        groups.setdefault(key, []).append(declaration)
+
+    ordered_groups = sorted(groups.values(), key=lambda items: (_declaration_operating_date(items[0]) or date.max, items[0].id))
+    for group in ordered_groups:
+        group.sort(key=lambda item: (_declaration_operating_date(item) or date.max, item.id))
+        declaration = group[0]
         vessel = _report_vessel(db, declaration)
-        cargo_items = [
-            item for item in (
-                json.loads(declaration.unload_json or "{}"),
-                json.loads(declaration.load_json or "{}"),
-            ) if any((item.get("cargo_type"), item.get("cargo_name"), item.get("tons"), item.get("teu")))
-        ] or [{}]
-        for item in cargo_items:
-            row: list[Any] = [None] * 35
-            row[0] = len(rows) + 1
-            row[1] = _report_static_value(vessel, declaration, "name") or declaration.vessel_name
-            row[2] = _report_static_value(vessel, declaration, "registration_no") or declaration.registration_no
-            row[3] = _report_static_value(vessel, declaration, "vessel_type") or ""
-            row[4] = _report_static_value(vessel, declaration, "vessel_class") or ""
-            row[5] = _report_static_value(vessel, declaration, "length_m") or 0
-            row[6] = _joined_profile_value(vessel, "deadweight_tons") if vessel else (declaration.deadweight_tons or 0)
-            row[7] = _report_static_value(vessel, declaration, "gross_tonnage") or 0
-            cargo_start = _cargo_column_start(str(item.get("movement_type") or ""))
-            row[cargo_start] = float(item.get("tons") or 0)
-            row[cargo_start + 1] = float(item.get("teu") or 0)
-            if cargo_start in {8, 11, 14, 17}:
-                row[cargo_start + 2] = float(item.get("empty_teu") or 0)
-            if declaration.passenger_count:
-                row[26 if declaration.movement_type == "ARRIVAL" else 27] = declaration.passenger_count
-            row[28] = item.get("cargo_name") or item.get("cargo_type") or ""
-            row[29] = declaration.last_port
-            row[30] = declaration.working_port
-            row[31] = declaration.destination_port
-            row[32] = declaration.actual_arrival_at or declaration.eta
-            row[33] = declaration.actual_departure_at or declaration.etd
-            row[34] = declaration.company_name
-            rows.append(row)
+        row: list[Any] = [None] * 35
+        row[0] = len(rows) + 1
+        row[1] = _report_static_value(vessel, declaration, "name") or declaration.vessel_name
+        row[2] = _report_static_value(vessel, declaration, "registration_no") or declaration.registration_no
+        row[3] = _report_static_value(vessel, declaration, "vessel_type") or ""
+        row[4] = _report_static_value(vessel, declaration, "vessel_class") or ""
+        row[5] = _report_static_value(vessel, declaration, "length_m")
+        row[6] = _joined_profile_value(vessel, "deadweight_tons") if vessel else declaration.deadweight_tons
+        row[7] = _report_static_value(vessel, declaration, "gross_tonnage")
+        cargo_names: list[str] = []
+        for item_declaration in group:
+            for cargo_direction, item in (
+                ("unload", json.loads(item_declaration.unload_json or "{}")),
+                ("load", json.loads(item_declaration.load_json or "{}")),
+            ):
+                if not any((item.get("cargo_type"), item.get("cargo_name"), item.get("tons"), item.get("teu"), item.get("empty_teu"))):
+                    continue
+                cargo_start = _cargo_column_start(str(item.get("movement_type") or ""), cargo_direction)
+                for offset, item_key in ((0, "tons"), (1, "teu")):
+                    value = float(item.get(item_key) or 0)
+                    if value:
+                        row[cargo_start + offset] = float(row[cargo_start + offset] or 0) + value
+                if cargo_start in {8, 11, 14, 17}:
+                    empty_teu = float(item.get("empty_teu") or 0)
+                    if empty_teu:
+                        row[cargo_start + 2] = float(row[cargo_start + 2] or 0) + empty_teu
+                cargo_names.append(str(item.get("cargo_name") or item.get("cargo_type") or ""))
+        for item_declaration in group:
+            if item_declaration.passenger_count:
+                column = 26 if item_declaration.movement_type == "ARRIVAL" else 27
+                row[column] = int(row[column] or 0) + int(item_declaration.passenger_count)
+        row[28] = _distinct_join(cargo_names)
+        row[29] = _distinct_join([item.last_port for item in group])
+        row[30] = _distinct_join([item.working_port for item in group])
+        row[31] = _distinct_join([item.destination_port for item in group])
+        row[32] = _distinct_join([item.actual_arrival_at or item.eta for item in group])
+        row[33] = _distinct_join([item.actual_departure_at or item.etd for item in group])
+        row[34] = _distinct_join([item.agent_ptnd_name for item in group])
+        rows.append(row)
     return rows
+
+
+def _report_adjustment_totals(
+    db: Session,
+    start_month: str,
+    end_month: str,
+    organization_id: Optional[int],
+) -> dict[str, float]:
+    query = db.query(ReportAdjustment).filter(
+        ReportAdjustment.report_kind == "appendix2",
+        ReportAdjustment.report_month >= start_month,
+        ReportAdjustment.report_month <= end_month,
+    )
+    if organization_id is None:
+        query = query.filter(ReportAdjustment.organization_id.is_(None))
+    else:
+        query = query.filter(ReportAdjustment.organization_id == organization_id)
+    totals: dict[str, float] = {}
+    for adjustment in query.all():
+        totals[adjustment.metric] = totals.get(adjustment.metric, 0.0) + adjustment.delta
+    return totals
+
+
+@app.get("/api/reports/appendix2/adjustments")
+def list_appendix2_adjustments(
+    report_month: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PORT_STAFF", "ADMIN")),
+):
+    query = db.query(ReportAdjustment).filter(ReportAdjustment.report_kind == "appendix2")
+    if report_month:
+        try:
+            datetime.strptime(report_month, "%Y-%m")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Tháng báo cáo phải có định dạng YYYY-MM.") from exc
+        query = query.filter(ReportAdjustment.report_month == report_month)
+    return [
+        {column.name: getattr(item, column.name) for column in item.__table__.columns}
+        for item in query.order_by(ReportAdjustment.created_at.desc(), ReportAdjustment.id.desc()).all()
+    ]
+
+
+@app.post("/api/reports/appendix2/adjustments")
+def create_appendix2_adjustment(
+    payload: ReportAdjustmentRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PORT_STAFF", "ADMIN")),
+):
+    if payload.organization_id is not None:
+        organization = db.query(Organization).filter(Organization.id == payload.organization_id).first()
+        if not organization:
+            raise HTTPException(status_code=404, detail="Không tìm thấy đơn vị cần điều chỉnh.")
+    adjustment = ReportAdjustment(
+        report_kind="appendix2",
+        report_month=payload.report_month,
+        metric=payload.metric,
+        delta=payload.delta,
+        reason=payload.reason,
+        organization_id=payload.organization_id,
+        actor_user_id=user.id,
+        created_at=now_iso(),
+    )
+    db.add(adjustment)
+    db.flush()
+    audit(
+        db, "REPORT_ADJUSTMENT", adjustment.id, "CREATE",
+        f"PL.02 {payload.report_month} {payload.metric} {payload.delta:+g}: {payload.reason}",
+        actor_user_id=user.id, organization_id=payload.organization_id,
+    )
+    db.commit()
+    db.refresh(adjustment)
+    return {column.name: getattr(adjustment, column.name) for column in adjustment.__table__.columns}
 
 @app.get("/api/reports/{kind}")
 def export_report(
@@ -2674,37 +2867,50 @@ def export_report(
         raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.")
 
     query = _approved_report_query(db, user)
-    decls = (
-        query.filter(
-            Declaration.declaration_date >= from_,
-            Declaration.declaration_date <= to,
-        )
-        .order_by(Declaration.declaration_date, Declaration.id)
-        .all()
-    )
+    approved = query.order_by(Declaration.id).all()
+
+    if kind == "appendix2":
+        report_start = date(report_end.year, report_end.month, 1)
+        report_end = date(report_end.year, report_end.month, monthrange(report_end.year, report_end.month)[1])
+        from_ = report_start.isoformat()
+        to = report_end.isoformat()
+        decls = [item for item in approved if (value := _arrival_operating_date(item)) and report_start <= value <= report_end]
+    else:
+        decls = [item for item in approved if (value := _declaration_operating_date(item)) and report_start <= value <= report_end]
+    decls.sort(key=lambda item: (_declaration_operating_date(item) or date.max, item.id))
 
     if kind == "appendix1":
         rows = _appendix1_rows(db, decls)
 
     elif kind == "appendix2":
-        cumulative = (
-            _approved_report_query(db, user)
-            .filter(
-                Declaration.declaration_date >= date(report_end.year, 1, 1).isoformat(),
-                Declaration.declaration_date <= to,
-            )
-            .order_by(Declaration.declaration_date, Declaration.id)
-            .all()
+        cumulative_start = date(report_end.year, 1, 1)
+        cumulative = [
+            item for item in approved
+            if (value := _arrival_operating_date(item)) and cumulative_start <= value <= report_end
+        ]
+        organization_id = user.organization_id if user.role == "CUSTOMER" else None
+        month_key = report_end.strftime("%Y-%m")
+        rows = _appendix2_rows(
+            decls,
+            cumulative,
+            _report_adjustment_totals(db, month_key, month_key, organization_id),
+            _report_adjustment_totals(db, f"{report_end.year}-01", month_key, organization_id),
         )
-        rows = _appendix2_rows(decls, cumulative)
 
     else:  # appendix3
-        rows = _appendix3_rows(db, decls)
+        try:
+            rows = _appendix3_rows(db, decls)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    reporting_unit = user.organization.name if user.organization else "CÔNG TY CỔ PHẦN CẢNG TÂN THUẬN"
     xlsx_bytes = make_report_xlsx(
         kind,
         rows,
         appendix3_template=ROOT / "templates" / "Phụ lục 3.xlsx",
+        report_from=report_start,
+        report_to=report_end,
+        reporting_unit=reporting_unit,
     )
     filename = f"report_{kind}_{from_ or 'all'}_{to or 'all'}.xlsx"
     return Response(

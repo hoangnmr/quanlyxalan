@@ -855,3 +855,36 @@ Boundary:
 - No commit or push was made.
 - Do not start BUILD until the T1 data contract and acceptance-test plan receive
   human approval.
+
+---
+
+## Canonical report BUILD in progress — 2026-07-17
+
+- **Status**: T1 CLOSED; T2/T3 BUILD IN PROGRESS; visual Spreadsheet gate pending.
+- **Risk**: R2.
+- **Authorization**: owner instruction `Tiến hành sửa`.
+
+Implemented in the working tree:
+
+- T1 canonical README, index, field catalog, inheritance rules and machine-readable manifest.
+- Declaration snapshots `departure_berth`, `agent_ptnd_name`, `is_passenger_call`.
+- Append-only PL.02 call-adjustment model/API with PORT_STAFF/ADMIN role control, reason and audit event.
+- Official operating-date filter (ATA→ETA / ATD→ETD); `declaration_date` removed from report-period fallback.
+- PL.02 calendar-month + January-to-month aggregation and blank-when-absent behavior.
+- PL.03 one row per canonical vessel, additive numeric aggregation and distinct chronological text aggregation.
+- Full title/metadata/form blocks for PL.01 and PL.02; corrected `tháng báo cáo`, `TEUs`, `TEUs Rỗng`, `Quá cảnh`; PL.03 column-D clipping repair.
+- Web month selector, controlled PL.02 adjustment panel and declaration inputs for the new snapshots.
+
+Evidence:
+
+- `python -m pytest -q`: 94 passed.
+- Python compile, `node --check frontend/app.js` and `git diff --check`: passed.
+- Local DB backed up to `data/backups/cang_vu-20260717-145400.db` with manifest, then migrated to `l11f0f000011`.
+- Operational DB remains 47 vessels, 0 declarations, 0 approved declarations and 0 adjustments.
+- Synthetic positive workbooks were generated at `outputs/appendix-positive-fixture-20260717/` without reading or mutating the operational DB.
+
+Open gate:
+
+- Browser interaction QA is blocked because the managed browser policy rejects localhost; only static frontend and API regression checks are complete.
+- Run `docs/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_20260717.md` in Codex Desktop. Do not close APPX/MAP implementation items until its artifact-tool renders pass.
+- No commit or push has been made for this BUILD tranche.

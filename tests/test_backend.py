@@ -29,7 +29,7 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 import backend.app as app_module
 
-from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organization, Vessel, VesselOperatingProfile
+from backend.models import AuditEvent, Base, Declaration, ImportJob, ReportAdjustment, User, Organization, Vessel, VesselOperatingProfile
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db, DEMO_ORGANIZATION_TAX_CODE, remove_demo_data_for_real_input
@@ -905,11 +905,12 @@ def test_xlsx_report_appendix1(client, auth_headers):
         assert "xl/worksheets/sheet1.xml" in archive.namelist()
     sheet = load_workbook(io.BytesIO(res.content)).active
     assert sheet.max_column == 16
-    assert {"A1:A4", "B1:H1", "I1:O1", "P1:P4"}.issubset(
+    assert {"A1:P1", "A3:P3", "A7:A10", "B7:H7", "I7:O7", "P7:P10"}.issubset(
         {str(cell_range) for cell_range in sheet.merged_cells.ranges}
     )
-    assert sheet["B1"].value == "PHƯƠNG TIỆN"
-    assert sheet["I1"].value == "HOẠT ĐỘNG"
+    assert sheet["A3"].value == "KẾ HOẠCH HOẠT ĐỘNG CỦA PHƯƠNG TIỆN THỦY NỘI ĐỊA"
+    assert sheet["B7"].value == "PHƯƠNG TIỆN"
+    assert sheet["I7"].value == "HOẠT ĐỘNG"
 
 
 def test_xlsx_report_appendix2(client, auth_headers):
@@ -917,11 +918,13 @@ def test_xlsx_report_appendix2(client, auth_headers):
     assert res.status_code == 200
     sheet = load_workbook(io.BytesIO(res.content)).active
     assert sheet.max_column == 16
-    assert {"C1:F1", "G1:H1", "I1:J1", "K1:L1", "M1:N1", "O1:P1"}.issubset(
+    assert {"A1:P1", "A3:P3", "C7:F7", "G7:H7", "I7:J7", "K7:L7", "M7:N7", "O7:P7"}.issubset(
         {str(cell_range) for cell_range in sheet.merged_cells.ranges}
     )
-    assert sheet["C1"].value == "Container"
-    assert [sheet.cell(4, column).value for column in range(3, 17)] == list(range(1, 15))
+    assert sheet["C7"].value == "Container"
+    assert sheet["C8"].value == "Thực hiện tháng báo cáo"
+    assert sheet["E8"].value == "Lũy kế đến tháng báo cáo"
+    assert [sheet.cell(10, column).value for column in range(3, 17)] == list(range(1, 15))
 
 
 def test_xlsx_report_appendix3(client, auth_headers):
@@ -1065,17 +1068,14 @@ def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client,
         row_number for row_number in range(10, sheet3.max_row + 1)
         if sheet3.cell(row_number, 3).value == tracked_registration
     ]
-    assert len(matching_rows) == 2
+    assert len(matching_rows) == 1
     assert sheet3.cell(matching_rows[0], 2).value == "SỔ THEO DÕI 01"
     assert sheet3.cell(matching_rows[0], 5).value == "VR-SII"
     assert sheet3.cell(matching_rows[0], 7).value == "987 / 1020"
-    exported_rows = [
-        [sheet3.cell(row_number, column_number).value for column_number in range(1, 36)]
-        for row_number in matching_rows
-    ]
-    assert {row[28] for row in exported_rows} == {"Hàng A", "Hàng B"}
-    assert any(row[11] == 12 and row[12] == 2 for row in exported_rows)
-    assert any(row[8] == 20 and row[9] == 2 for row in exported_rows)
+    exported_row = [sheet3.cell(matching_rows[0], column_number).value for column_number in range(1, 36)]
+    assert exported_row[28] == "Hàng A\nHàng B"
+    assert exported_row[11] == 12 and exported_row[12] == 2
+    assert exported_row[8] == 20 and exported_row[9] == 2
 
     db = SessionLocal()
     try:
@@ -1086,6 +1086,99 @@ def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client,
         db.commit()
     finally:
         db.close()
+
+
+def test_appendix_month_ytd_operating_date_adjustment_and_vessel_grain(
+    client, customer_headers, port_staff_headers,
+):
+    registration = _reg()
+    created_ids = []
+    fixtures = (
+        {
+            "declaration_date": "2045-07-20", "eta": "2045-01-15T08:00", "etd": "2045-01-15T18:00",
+            "registration_no": registration, "agent_ptnd_name": "Đại lý A",
+            "unload": {"cargo_type": "Container", "movement_type": "Nhập khẩu", "cargo_name": "Hàng tháng 1", "cont20_full": 1, "tons": 10},
+        },
+        {
+            "declaration_date": "2045-01-02", "eta": "2045-07-12T08:00", "etd": "2045-07-12T18:00",
+            "registration_no": registration, "working_port": "Cầu A", "departure_berth": "Cầu B", "destination_port": "Cảng C",
+            "agent_ptnd_name": "Đại lý B", "is_passenger_call": True, "passenger_count": 0,
+            "load": {"cargo_type": "Container", "movement_type": "Xuất khẩu", "cargo_name": "Hàng tháng 7", "cont40_full": 1, "tons": 20},
+        },
+        {
+            "declaration_date": "2045-07-01", "eta": "2045-08-01T08:00", "etd": "2045-08-01T18:00",
+            "registration_no": _reg(), "unload": {"cargo_type": "Hàng khô", "movement_type": "Nội địa", "tons": 99},
+        },
+    )
+    for payload in fixtures:
+        response = client.post("/api/declarations", json=_minimal_declaration(**payload), headers=customer_headers)
+        assert response.status_code == 200
+        created_ids.append(response.json()["id"])
+    db = SessionLocal()
+    try:
+        for declaration in db.query(Declaration).filter(Declaration.id.in_(created_ids)).all():
+            declaration.workflow_status = "APPROVED"
+            declaration.status = "SUBMITTED"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        appendix2 = client.get("/api/reports/appendix2?from=2045-01-01&to=2045-07-20", headers=port_staff_headers)
+        assert appendix2.status_code == 200
+        sheet2 = load_workbook(io.BytesIO(appendix2.content)).active
+        assert sheet2["A4"].value == "Tháng 07 năm 2045"
+        assert sheet2.cell(12, 3).value == 20
+        assert sheet2.cell(12, 5).value == 30
+        assert sheet2.cell(12, 13).value == 1
+        assert sheet2.cell(12, 14).value == 2
+        assert sheet2.cell(12, 15).value == 1
+        assert sheet2.cell(12, 16).value is None
+
+        appendix1 = client.get("/api/reports/appendix1?from=2045-07-01&to=2045-07-31", headers=customer_headers)
+        sheet1 = load_workbook(io.BytesIO(appendix1.content)).active
+        appendix1_row = next(row for row in range(11, sheet1.max_row + 1) if sheet1.cell(row, 3).value == registration)
+        assert sheet1.cell(appendix1_row, 8).value is None
+        assert sheet1.cell(appendix1_row, 9).value == "Cầu A"
+        assert sheet1.cell(appendix1_row, 11).value == "Cầu B"
+
+        assert client.post(
+            "/api/reports/appendix2/adjustments",
+            json={"report_month": "2045-07", "metric": "calls", "delta": 2, "reason": "Điều chỉnh theo sổ trực ca"},
+            headers=customer_headers,
+        ).status_code == 403
+        adjusted = client.post(
+            "/api/reports/appendix2/adjustments",
+            json={"report_month": "2045-07", "metric": "calls", "delta": 2, "reason": "Điều chỉnh theo sổ trực ca"},
+            headers=port_staff_headers,
+        )
+        assert adjusted.status_code == 200
+        adjustment_id = adjusted.json()["id"]
+        adjusted_sheet = load_workbook(io.BytesIO(client.get(
+            "/api/reports/appendix2?to=2045-07-20", headers=port_staff_headers,
+        ).content)).active
+        assert adjusted_sheet.cell(12, 13).value == 3
+        assert adjusted_sheet.cell(12, 14).value == 4
+
+        appendix3 = client.get("/api/reports/appendix3?from=2045-01-01&to=2045-07-31", headers=customer_headers)
+        assert appendix3.status_code == 200
+        sheet3 = load_workbook(io.BytesIO(appendix3.content)).active
+        matching = [row for row in range(10, sheet3.max_row + 1) if sheet3.cell(row, 3).value == registration]
+        assert len(matching) == 1
+        row = matching[0]
+        assert sheet3.cell(row, 29).value == "Hàng tháng 1\nHàng tháng 7"
+        assert sheet3.cell(row, 35).value == "Đại lý A\nĐại lý B"
+        assert sheet3["J7"].value == "TEUs"
+        assert sheet3["K7"].value == "TEUs Rỗng"
+        assert sheet3.column_dimensions["D"].width >= 18
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(ReportAdjustment).filter(ReportAdjustment.report_month == "2045-07").delete(synchronize_session=False)
+            db.query(Declaration).filter(Declaration.id.in_(created_ids)).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_report_unknown_kind(client, auth_headers):
@@ -1124,6 +1217,7 @@ def test_all_frontend_routes_registered():
         "/api/import/declaration",
         "/api/reports/analytics",
         "/api/reports/analytics/export",
+        "/api/reports/appendix2/adjustments",
         "/api/reports/{kind}",
         "/api/integrations/maritime-authority",
         "/api/integrations/prepare-sync",
@@ -1212,7 +1306,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert preview.status_code == 200
     assert preview.json()["preview"] is True
-    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.4"
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.5"
     db = SessionLocal()
     assert db.query(ImportJob).count() == before
     db.close()

@@ -964,3 +964,19 @@ declarations must not remove the 47 known Salan rows from PL.01/PL.03.
   expectation, regression test and renewed Spreadsheet render when applicable.
 - Raw customer workbooks, DB snapshots and personal data must remain outside
   Git; commit only sanitized acceptance evidence.
+
+---
+
+## Historical appendix import workstream intake — 2026-07-17
+
+- **Status**: INTAKE; BUILD NOT AUTHORIZED.
+- Owner requires old PL.01/PL.02/PL.03 workbooks to populate a separate
+  historical reporting store and dashboard, not to fabricate declarations.
+- Roadmap:
+  `docs/HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md`.
+- Historical facts remain separate from live `APPROVED` declarations and
+  canonical masters. PL.02 month and YTD values must be stored separately;
+  combined live/historical totals require explicit overlap resolution.
+- Next move: provide at least one representative real workbook per appendix,
+  then run full Spreadsheets skill inspection and close HDEC-01–HDEC-09 before
+  schema or code work.

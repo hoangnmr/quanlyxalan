@@ -307,3 +307,13 @@ small approved operational sample against its declaration source using
 is separate from the already closed implementation tranche. T5 remains deferred
 and must be performed in a separate CVF-core session; no upstream change is
 authorized here.
+
+## 7. Separate historical-import workstream
+
+The owner's new requirement to import old PL.01, PL.02 and PL.03 workbooks into
+a historical reporting store is tracked separately in
+`HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md`. It does not
+reopen the closed canonical appendix implementation tranche and must not create
+synthetic declarations. The new H-series roadmap remains at INTAKE until real
+sample workbooks are audited and its data/revision/overlap decisions are
+approved.

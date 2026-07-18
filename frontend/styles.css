@@ -78,6 +78,14 @@ nav a:hover, nav a.active { background: var(--cvf-accent-soft); color: var(--cvf
 nav a.active { box-shadow: inset 3px 0 var(--cvf-accent); }
 nav a span { width: 17px; color: var(--cvf-text-muted); text-align: center; }
 .sidebar-footer { margin-top: auto; display: grid; gap: 10px; padding-top: 14px; color: var(--cvf-text-muted); text-align: center; font-size: 10px; }
+.sidebar-unit-context { position: relative; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--cvf-border); }
+.reporting-unit-trigger { display: grid; grid-template-columns: 28px minmax(0, 1fr) 14px; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 9px; border: 1px solid var(--cvf-border); border-radius: 9px; background: var(--cvf-surface-elevated); color: var(--cvf-text-primary); text-align: left; cursor: pointer; }
+.reporting-unit-trigger:hover, .reporting-unit-trigger[aria-expanded="true"] { border-color: var(--cvf-accent-border); background: var(--cvf-accent-soft); }.reporting-unit-trigger:disabled { cursor: not-allowed; opacity: .55; }
+.reporting-unit-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--cvf-accent-soft); color: var(--cvf-accent-hover); }.reporting-unit-icon svg { width: 15px; height: 15px; }
+.reporting-unit-copy { min-width: 0; }.reporting-unit-copy small, .reporting-unit-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.reporting-unit-copy small { color: var(--cvf-text-muted); font-size: 8px; font-weight: 700; }.reporting-unit-copy strong { margin-top: 3px; font-size: 10px; }
+.reporting-unit-chevron { color: var(--cvf-text-muted); font-size: 14px; transition: transform 140ms ease; }.reporting-unit-trigger[aria-expanded="true"] .reporting-unit-chevron { transform: rotate(180deg); }
+.reporting-unit-menu { display: grid; gap: 4px; margin-top: 6px; padding: 5px; border: 1px solid var(--cvf-border-strong); border-radius: 9px; background: var(--cvf-surface); box-shadow: var(--cvf-shadow-lg); }.reporting-unit-menu > p { margin: 0; padding: 9px; color: var(--cvf-text-muted); font-size: 9px; text-align: left; }
+.reporting-unit-menu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 40px; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--cvf-text-secondary); text-align: left; cursor: pointer; }.reporting-unit-menu button:hover, .reporting-unit-menu button:focus-visible, .reporting-unit-menu button.selected { background: var(--cvf-accent-soft); color: var(--cvf-text-primary); }.reporting-unit-menu button span { min-width: 0; }.reporting-unit-menu strong, .reporting-unit-menu small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.reporting-unit-menu strong { font-size: 10px; }.reporting-unit-menu small { margin-top: 2px; color: var(--cvf-text-muted); font-size: 8px; }.reporting-unit-menu b { color: var(--cvf-accent-hover); font-size: 11px; }
 .sidebar-user-name { display: grid; justify-items: center; gap: 3px; overflow-wrap: anywhere; }
 .sidebar-user-name strong { color: var(--cvf-text-primary); font-size: 10px; }
 .sidebar-user-name small { color: var(--cvf-text-muted); font-size: 9px; }
@@ -85,9 +93,6 @@ nav a span { width: 17px; color: var(--cvf-text-muted); text-align: center; }
 .main-column { grid-column: 2; min-width: 0; }
 .topbar { position: sticky; top: 0; z-index: 20; height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 26px; border-bottom: 1px solid var(--cvf-border); background: color-mix(in srgb, var(--cvf-bg-page) 88%, transparent); backdrop-filter: blur(16px); }
 .topbar .eyebrow { display: block; margin: 0 0 2px; }.topbar strong { display: block; font-size: 12px; }.topbar-actions { display: flex; align-items: center; gap: 10px; }
-.reporting-unit-context { display: flex; align-items: center; gap: 8px; }
-.reporting-unit-context > span { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reporting-unit-context select { width: min(260px, 28vw); min-height: 34px; padding: 6px 30px 6px 10px; }
 .tenant-context-notice { max-width: 680px; margin: 40px auto; text-align: center; }
 .tenant-context-blocked main .page { display: none !important; }
 main { padding: 26px clamp(18px, 3vw, 34px) 50px; }

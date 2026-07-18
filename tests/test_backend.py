@@ -262,13 +262,16 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.4.0' in res.text
-    assert '/app.js?v=1.4.0' in res.text
+    assert '/styles.css?v=1.4.1' in res.text
+    assert '/app.js?v=1.4.1' in res.text
     assert 'id="analytics-source-controls"' in res.text
     assert 'data-source="historical"' in res.text
     assert 'id="analytics-coverage"' in res.text
     assert 'id="analytics-combined-blocked"' in res.text
-    assert 'id="reporting-unit-select"' in res.text
+    assert 'id="sidebar-unit-context"' in res.text
+    assert 'id="reporting-unit-trigger"' in res.text
+    assert 'id="reporting-unit-menu"' in res.text
+    assert 'id="reporting-unit-select"' not in res.text
     assert 'id="reporting-unit-required"' in res.text
     assert 'data-page="port-register"' in res.text
     assert 'id="export-port-register"' in res.text

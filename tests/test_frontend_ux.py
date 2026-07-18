@@ -68,6 +68,26 @@ def test_role_dashboard_layout():
     assert "api('/api/admin/operations-summary')" not in app_js
 
 
+def test_reporting_unit_picker_is_compact_and_kept_out_of_topbar():
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    sidebar_start = index_html.index('<aside class="sidebar"')
+    sidebar_end = index_html.index('</aside>', sidebar_start)
+    topbar_start = index_html.index('<header class="topbar"')
+    topbar_end = index_html.index('</header>', topbar_start)
+    assert 'id="reporting-unit-trigger"' in index_html[sidebar_start:sidebar_end]
+    assert 'Chọn đơn vị báo cáo' in index_html[sidebar_start:sidebar_end]
+    assert 'id="reporting-unit-trigger"' not in index_html[topbar_start:topbar_end]
+    assert 'id="reporting-unit-select"' not in index_html
+    assert 'role="menuitemradio"' in app_js
+    assert "event.key === 'Escape'" in app_js
+    assert "['ArrowUp', 'ArrowDown']" in app_js
+    assert '.reporting-unit-trigger' in styles_css
+    assert '.reporting-unit-menu button.selected' in styles_css
+
+
 def test_crew_form_keeps_readable_controls_with_compact_two_column_layout():
     app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")

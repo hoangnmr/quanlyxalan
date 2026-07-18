@@ -158,11 +158,12 @@ function reportingUnitStorageKey() {
 }
 
 async function loadReportingUnitContext() {
-  const selector = $('#reporting-unit-select');
+  const context = $('#sidebar-unit-context');
+  const trigger = $('#reporting-unit-trigger');
+  const menu = $('#reporting-unit-menu');
   const notice = $('#reporting-unit-required');
   const needsUnit = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role);
-  selector.closest('.reporting-unit-context').hidden = !needsUnit;
-  selector.hidden = !needsUnit;
+  context.hidden = !needsUnit;
   notice.hidden = true;
   document.body.classList.remove('tenant-context-blocked');
   if (!needsUnit) return true;
@@ -180,24 +181,65 @@ async function loadReportingUnitContext() {
     localStorage.removeItem(reportingUnitStorageKey());
   }
 
-  selector.innerHTML = `<option value="">Chọn cảng / đơn vị báo cáo</option>${state.reportingUnits.map(unit =>
-    `<option value="${unit.id}" ${unit.id === state.activeReportingUnitId ? 'selected' : ''}>${esc(unit.name)}${unit.code ? ` (${esc(unit.code)})` : ''}</option>`
-  ).join('')}`;
-  selector.onchange = () => {
-    const next = Number(selector.value || 0);
+  const chooseReportingUnit = next => {
     state.portRegisterSelected.clear();
     state.editingVessel = state.editingDeclaration = state.editingCrew = null;
     if (next) localStorage.setItem(reportingUnitStorageKey(), String(next));
     else localStorage.removeItem(reportingUnitStorageKey());
     location.reload();
   };
+  menu.innerHTML = state.reportingUnits.length
+    ? state.reportingUnits.map(unit => `<button type="button" role="menuitemradio" aria-checked="${unit.id === state.activeReportingUnitId}" data-reporting-unit-id="${unit.id}" class="${unit.id === state.activeReportingUnitId ? 'selected' : ''}"><span><strong>${esc(unit.name)}</strong>${unit.code ? `<small>${esc(unit.code)}</small>` : ''}</span><b aria-hidden="true">${unit.id === state.activeReportingUnitId ? '✓' : ''}</b></button>`).join('')
+    : '<p>Chưa có đơn vị được cấp.</p>';
+  $$('[data-reporting-unit-id]', menu).forEach(button => {
+    button.onclick = () => chooseReportingUnit(Number(button.dataset.reportingUnitId));
+  });
+  trigger.onclick = event => {
+    event.stopPropagation();
+    const open = trigger.getAttribute('aria-expanded') !== 'true';
+    trigger.setAttribute('aria-expanded', String(open));
+    menu.hidden = !open;
+    if (open) $('[role="menuitemradio"]', menu)?.focus();
+  };
+  trigger.onkeydown = event => {
+    if (event.key !== 'Escape') return;
+    trigger.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+  };
+  menu.onkeydown = event => {
+    const items = $$('[role="menuitemradio"]', menu);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      trigger.setAttribute('aria-expanded', 'false');
+      menu.hidden = true;
+      trigger.focus();
+      return;
+    }
+    if (!['ArrowUp', 'ArrowDown'].includes(event.key) || !items.length) return;
+    event.preventDefault();
+    const index = Math.max(0, items.indexOf(document.activeElement));
+    const offset = event.key === 'ArrowDown' ? 1 : -1;
+    items[(index + offset + items.length) % items.length].focus();
+  };
+  if (context.dataset.outsideBound !== 'true') {
+    context.dataset.outsideBound = 'true';
+    document.addEventListener('click', event => {
+      if (context.contains(event.target)) return;
+      trigger.setAttribute('aria-expanded', 'false');
+      menu.hidden = true;
+    });
+  }
 
   const active = state.reportingUnits.find(unit => unit.id === state.activeReportingUnitId);
-  $('#active-reporting-unit').textContent = active ? active.name : 'Chưa chọn cảng';
+  $('#active-reporting-unit').textContent = active ? active.name : 'Chưa chọn';
+  trigger.title = active
+    ? `Đơn vị đang chọn: ${active.name}${active.code ? ` (${active.code})` : ''}`
+    : 'Chọn đơn vị báo cáo';
+  trigger.disabled = state.reportingUnits.length === 0;
   if (!active) {
     notice.hidden = false;
     notice.querySelector('p:last-child').textContent = state.reportingUnits.length
-      ? 'Chọn một cảng ở thanh trên để mở dữ liệu vận hành. Hệ thống không có chế độ xem gộp nhiều cảng.'
+      ? 'Bấm “Chọn đơn vị báo cáo” trong menu bên trái để mở dữ liệu. Hệ thống không có chế độ xem gộp nhiều cảng.'
       : 'Tài khoản chưa có đơn vị báo cáo hoạt động. Liên hệ Platform Admin để cấp membership.';
     document.body.classList.add('tenant-context-blocked');
     $('#api-state').className = 'state-badge pending';

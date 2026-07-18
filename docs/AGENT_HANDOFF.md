@@ -1744,10 +1744,14 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
 - Combined totals fail closed when a month has both live-approved declarations
   and active historical coverage. The UI hides totals and export; the server
   independently rejects combined XLSX with `409`.
+- Follow-up UI polish moved the reporting-unit picker out of the top bar into a
+  compact sidebar button. The active unit name stays visible; clicking opens a
+  tenant-safe list with menu-radio semantics, arrow/Escape keyboard handling
+  and no change to the server-owned `X-Reporting-Unit-ID` boundary.
 
 ### Verification and boundary
 
-- `python -m pytest -q`: **166 passed**, one retained openpyxl warning. Targeted
+- `python -m pytest -q`: **167 passed**, one retained openpyxl warning. Targeted
   regression covers historical aggregation, empty-container weight,
   source authorization, partial coverage, combined no-overlap, overlap blocking
   and export rejection.

@@ -535,7 +535,8 @@ Implemented in H4B (2026-07-18):
   warning and combined XLSX export returns `409`; no client-side override exists.
 - Asset cache version advanced to 1.4.0. API/UI regression covers the three
   sources, CUSTOMER denial, partial coverage, overlap blocking and export;
-  full-suite verification is `166 passed` with one retained openpyxl warning.
+  a follow-up compact sidebar reporting-unit picker advanced assets to 1.4.1.
+  Full-suite verification is `167 passed` with one retained openpyxl warning.
 
 H4B local verification is recorded in the handoff. The H4 exit gate remains
 open only for owner role/tenant/accessibility UAT; no browser/deployment claim

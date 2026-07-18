@@ -26,4 +26,16 @@ jobs:
       - name: Secret pattern guard
         shell: pwsh
         run: |
-          if (git grep -n -E '(AKIA[0-9A-Z]{16}|BEGIN (RSA |EC )?PRIVATE KEY)' -- ':!templates/*') { exit 1 }
+          $findings = @(git grep -n -E '(AKIA[0-9A-Z]{16}|BEGIN (RSA |EC )?PRIVATE KEY)' -- ':!templates/*')
+          $grepExit = $LASTEXITCODE
+          if ($grepExit -notin @(0, 1)) {
+            Write-Error "Secret scan failed to run (git grep exit $grepExit)."
+            exit $grepExit
+          }
+          if ($findings.Count -gt 0) {
+            $findings | Write-Output
+            Write-Error 'Potential secret material found.'
+            exit 1
+          }
+          Write-Output 'Secret pattern guard passed.'
+          exit 0

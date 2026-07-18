@@ -136,6 +136,11 @@ def test_historical_import_is_visually_and_semantically_separate_from_live_impor
     assert "function renderHistoricalBatch(" in app_js
     assert "function historicalWarnings(" in app_js
     assert "if (row.validationStatus === 'VALID') return [];" in app_js
+    assert "function ensureHistoricalExportPanel(" in app_js
+    assert "function exportHistoricalPl03(" in app_js
+    assert "/api/historical-imports/reconcile" in app_js
+    assert "Xác nhận Berth & ghép Detail" in app_js
+    assert "Xuất PL.03 tổng hợp" in app_js
     assert "Lý do / xử lý" in app_js
     assert "status=${status}" in app_js
     assert "function loadHistoricalImportHistory(" in app_js

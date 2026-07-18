@@ -150,6 +150,8 @@ unit. `CUSTOMER` is denied.
 | Method | Path | Request | Response |
 |--------|------|---------|----------|
 | POST | `/api/historical-imports/preview` | XLSX body; optional `X-Source-Filename` provenance | detected source, checksum, mapping receipt, counts, conflicts |
+| POST | `/api/historical-imports/reconcile` | — | idempotently rechecks active Berth-to-Detail links in the selected reporting unit and returns changed import ids |
+| GET | `/api/historical-imports/exports/pl03` | `reporting_period=YYYY-MM` | synthesized official PL.03 XLSX plus compact provenance receipt header |
 | GET | `/api/historical-imports` | `page`, `page_size` | tenant-scoped import history |
 | GET | `/api/historical-imports/{id}` | — | import detail, conflicts and mapping receipt |
 | GET | `/api/historical-imports/{id}/rows` | `page`, `page_size`, optional `status=VALID|REVIEW|REJECTED` | cell-provenance preview rows with warning codes |
@@ -160,10 +162,13 @@ unit. `CUSTOMER` is denied.
 
 The browser may select several historical workbooks in one upload action. Each
 workbook still creates or reuses its own checksum-backed import receipt; this is
-not a merged opaque upload. After a Berth import is confirmed, the server
-reconciles both active and still-PREVIEWED cargo-detail imports in the same
-reporting unit, updates their row match/validation states and refreshes their
-counts. The UI can then reopen the cargo receipt without uploading it again.
+not a merged opaque upload and there is no required upload order. After a Berth
+import is confirmed, the server reconciles both active and still-PREVIEWED
+cargo-detail imports in the same reporting unit, updates their row
+match/validation states and refreshes their counts. Opening historical history
+also invokes the idempotent reconcile route, so a browser restart repairs stale
+derived match states without silently confirming a PREVIEWED source. The UI can
+then reopen the cargo receipt without uploading it again.
 
 Detection is based on approved sheet/header/structure signatures, not the file
 name. A repeated checksum is idempotent. Overlap never overwrites silently:
@@ -185,6 +190,15 @@ resolved Detail rows/counts update in place. When the same source checksum is
 reprocessed under a newer mapping, an active older mapping is an explicit
 revision conflict even if the legacy workbook has no trustworthy report period.
 Activating the corrected receipt marks the older one `SUPERSEDED`.
+
+The synthesized PL.03 export uses active Berth ATB/ATD and matched Detail
+weight, movement, trade, size and full/empty facts as authoritative. Container
+shell weight remains report tonnes; TEU is split into full and empty columns.
+The historical PL.03 source supplies only legacy vessel/static dimensions when
+the canonical port register has no value; its manual cargo totals and ETA-era
+time cells never override matched TOS facts. The canonical port register wins
+for vessel dimensions. The export remains scoped to the explicitly selected
+reporting unit and records contributing import ids in its receipt.
 
 ### REPORTING UNIT ADMINISTRATION
 

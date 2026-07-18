@@ -688,3 +688,27 @@ Status: IMPLEMENTED / VERIFIED locally.
   without a reliable report period.
 - Current local source comparison proves all 1,067 Detail rows have a unique
   Berth key. Full regression: 172 passed with one retained openpyxl warning.
+
+### H4F — order-independent reconciliation and reconstructed PL.03 — 2026-07-18
+
+Status: IMPLEMENTED / VERIFIED locally; owner workbook UAT remains open.
+
+- No upload wizard or mandatory file order is introduced. Each workbook keeps
+  its independent audited receipt. Confirming an active Berth source rechecks
+  earlier Detail receipts, and opening historical history invokes the same
+  idempotent reconciliation so restart does not preserve stale derived links.
+- The system deliberately does not auto-confirm a PREVIEWED source. Database
+  audit found Berth import `#1` had `IMPORT_PREVIEWED` but no
+  `IMPORT_CONFIRMED`; this is why the 1,067 Detail rows remained unmatched after
+  restart. The Berth confirmation action is now sticky and names its downstream
+  Detail-link effect explicitly.
+- Added a reporting-period PL.03 export generated from normalized database
+  facts. TOS Berth ATB/ATD and matched Detail tonnes, size, F/E, trade and
+  movement are authoritative. Legacy PL.03 manual cargo/time values are never
+  copied over matched TOS facts; it is only a fallback for missing vessel/static
+  dimensions, behind the canonical port register.
+- Export mapping sends unload/load and domestic/foreign facts to the official
+  PL.03 cargo column groups, splits full and empty TEU, counts empty-container
+  shell weight as tonnes, and writes ATB/ATD to AG/AH.
+- Source comparison remains 1,067/1,067 Detail rows uniquely matchable to 38
+  Berth calls. Full regression: 173 passed with one retained openpyxl warning.

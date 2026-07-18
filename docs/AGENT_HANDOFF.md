@@ -1812,3 +1812,25 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
   supersede the active stale mapping even when reporting period is unavailable.
 - Regression: 172 passed with one retained openpyxl warning. No runtime database
   mutation, deployment or push was performed.
+
+## Historical TOS H4F — reconcile on reopen and synthesized PL.03 — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally; owner workbook UAT remains open.
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+- Runtime database audit explains the persistent 1,067 Detail warnings: Berth
+  import `#1` was only PREVIEWED and has no `IMPORT_CONFIRMED` audit event.
+  Restart correctly does not convert an unconfirmed source into active facts.
+- Upload order is no longer a workflow dependency. Berth confirmation rechecks
+  existing Detail receipts, and the history view calls an idempotent tenant-
+  scoped reconcile endpoint to repair stale derived link/count/status state.
+  The final Berth confirmation control is sticky and explicitly says it will
+  link Detail.
+- Added `GET /api/historical-imports/exports/pl03?reporting_period=YYYY-MM`.
+  It generates the official PL.03 template from database facts: TOS ATB/ATD and
+  matched Detail cargo are authoritative; canonical vessel register fields win;
+  legacy manual PL.03 is only a static-dimension fallback. Empty shell weight
+  remains tonnes while TEU is split into full/empty columns.
+- Source audit evidence remains 1,067/1,067 Detail rows uniquely matchable to 38
+  Berth calls. Compilation and `git diff --check` pass; full regression is 173
+  passed with one retained openpyxl warning. Raw workbooks, runtime databases
+  and backups remain outside Git; nothing is pushed.

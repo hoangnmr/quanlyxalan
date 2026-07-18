@@ -787,9 +787,18 @@ def _make_appendix2_xlsx(
     return output.getvalue()
 
 
-def _make_appendix3_xlsx(rows: list[list[Any]], template_path: Path) -> bytes:
+def _make_appendix3_xlsx(
+    rows: list[list[Any]], template_path: Path,
+    report_from=None, report_to=None, reporting_unit: str = "",
+) -> bytes:
     wb = load_workbook(template_path)
     ws = wb.active
+    if report_to:
+        ws["A2"] = (
+            "(Kèm theo Văn bản số        /CVHHTPHCM-TTTT, ngày        "
+            f"tháng {report_to.month} năm {report_to.year} của Cảng vụ Hàng hải Thành phố Hồ Chí Minh)"
+        )
+    ws["A4"] = f"Đơn vị báo cáo: {reporting_unit or '………………………………'}"
     for cell_range in ("A15:E15", "O15:T15", "A16:E16", "O16:T16"):
         if cell_range in {str(item) for item in ws.merged_cells.ranges}:
             ws.unmerge_cells(cell_range)
@@ -871,7 +880,9 @@ def make_report_xlsx(
     if kind == "appendix2":
         return _make_appendix2_xlsx(rows, report_from, report_to, reporting_unit)
     if kind == "appendix3" and appendix3_template:
-        return _make_appendix3_xlsx(rows, appendix3_template)
+        return _make_appendix3_xlsx(
+            rows, appendix3_template, report_from, report_to, reporting_unit,
+        )
     raise ValueError(f"Không có cấu trúc bảng cho báo cáo {kind}.")
 
 

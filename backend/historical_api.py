@@ -5,11 +5,13 @@ import hashlib
 import json
 import os
 import re
+from collections import OrderedDict
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -21,14 +23,15 @@ from .historical import (
 )
 from .historical_tos_parser import (
     HistoricalWorkbookError, ParsedWorkbook, TRANSFORM_VERSION, json_dumps,
-    normalize_vessel_name, parse_workbook,
+    normalize_token, normalize_vessel_name, parse_workbook,
 )
 from .models import (
     HistoricalCargoRow, HistoricalPortCall, HistoricalReportImport,
     HistoricalReportMetric, HistoricalReportRow, HistoricalVesselLink,
-    ReportingUnitVessel, Vessel,
+    ReportingUnit, ReportingUnitVessel, Vessel,
 )
 from .tenant import Scope, require_port_scope
+from .xlsx_io import make_report_xlsx
 
 
 router = APIRouter(prefix="/api/historical-imports", tags=["historical-imports"])
@@ -276,7 +279,7 @@ def _refresh_counts(db: Session, item: HistoricalReportImport) -> None:
     item.updated_at = now_iso()
 
 
-def _reconcile_active_cargo_links(db: Session, unit_id: int, actor_user_id: int) -> None:
+def _reconcile_active_cargo_links(db: Session, unit_id: int, actor_user_id: int) -> list[int]:
     """Re-link active cargo after a Berth revision becomes authoritative.
 
     A corrected Berth file supersedes its former calls.  Cargo facts remain tied
@@ -290,11 +293,17 @@ def _reconcile_active_cargo_links(db: Session, unit_id: int, actor_user_id: int)
             HistoricalReportImport.status.in_(("PREVIEWED", "COMMITTED", "REVIEW")),
         ).all()
     )
+    updated_import_ids: list[int] = []
     for cargo_import in cargo_imports:
         periods: set[str] = set()
         rows = db.query(HistoricalCargoRow).filter_by(
             reporting_unit_id=unit_id, import_id=cargo_import.id,
         ).all()
+        before = (
+            cargo_import.status, cargo_import.reporting_period,
+            cargo_import.accepted_count, cargo_import.review_count,
+            tuple((row.id, row.port_call_id, row.match_status, row.validation_status) for row in rows),
+        )
         calls_by_key = _active_calls_by_key(
             db, unit_id, {row.call_key_normalized for row in rows if row.call_key_normalized},
         )
@@ -318,11 +327,19 @@ def _reconcile_active_cargo_links(db: Session, unit_id: int, actor_user_id: int)
         _refresh_counts(db, cargo_import)
         if cargo_import.status == "REVIEW" and cargo_import.review_count == 0:
             cargo_import.status = "COMMITTED"
-        audit(
-            db, "historical_report_import", cargo_import.id, "CARGO_CALLS_RECONCILED",
-            f"{cargo_import.accepted_count} valid, {cargo_import.review_count} review",
-            actor_user_id=actor_user_id, reporting_unit_id=unit_id,
+        after = (
+            cargo_import.status, cargo_import.reporting_period,
+            cargo_import.accepted_count, cargo_import.review_count,
+            tuple((row.id, row.port_call_id, row.match_status, row.validation_status) for row in rows),
         )
+        if before != after:
+            updated_import_ids.append(cargo_import.id)
+            audit(
+                db, "historical_report_import", cargo_import.id, "CARGO_CALLS_RECONCILED",
+                f"{cargo_import.accepted_count} valid, {cargo_import.review_count} review",
+                actor_user_id=actor_user_id, reporting_unit_id=unit_id,
+            )
+    return updated_import_ids
 
 
 def _conflicts(db: Session, item: HistoricalReportImport) -> list[HistoricalReportImport]:
@@ -425,6 +442,204 @@ def list_historical_imports(
     total = query.count()
     items = query.order_by(HistoricalReportImport.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return {"items": [_import_json(item) for item in items], "page": page, "pageSize": page_size, "total": total}
+
+
+@router.post("/reconcile")
+def reconcile_historical_imports(
+    db: Session = Depends(get_db), scope: Scope = Depends(require_port_scope),
+):
+    """Idempotently repair dependent Detail rows from active Berth receipts.
+
+    This endpoint makes recovery independent of browser session and upload order:
+    the UI invokes it when the historical workspace opens, while Berth confirm
+    still invokes the same reconciliation transaction immediately.
+    """
+    _authorize(db, scope)
+    updated = _reconcile_active_cargo_links(db, scope.reporting_unit_id, scope.user.id)
+    db.commit()
+    return {"updated": len(updated), "updatedImportIds": updated}
+
+
+def _historical_pl03_rows(
+    db: Session, unit_id: int, reporting_period: str,
+) -> tuple[list[list[Any]], dict[str, Any]]:
+    active_imports = db.query(HistoricalReportImport).filter(
+        HistoricalReportImport.reporting_unit_id == unit_id,
+        HistoricalReportImport.status.in_(ACTIVE_IMPORT_STATUSES),
+    ).all()
+    berth_imports = [
+        item for item in active_imports
+        if item.source_kind == "tos_berth_call" and item.reporting_period == reporting_period
+    ]
+    if not berth_imports:
+        raise HTTPException(
+            status_code=409,
+            detail="Chưa có file Berth đã xác nhận cho kỳ này. Mở lượt Berth và xác nhận trước khi xuất PL.03.",
+        )
+    calls = db.query(HistoricalPortCall).filter(
+        HistoricalPortCall.reporting_unit_id == unit_id,
+        HistoricalPortCall.import_id.in_([item.id for item in berth_imports]),
+        HistoricalPortCall.validation_status != "REJECTED",
+    ).order_by(HistoricalPortCall.actual_berthing_at, HistoricalPortCall.id).all()
+    if not calls:
+        raise HTTPException(status_code=409, detail="File Berth đã xác nhận không có lượt hợp lệ để xuất.")
+
+    cargo_import_ids = [item.id for item in active_imports if item.source_kind == "tos_cargo_detail"]
+    cargo_rows = db.query(HistoricalCargoRow).filter(
+        HistoricalCargoRow.reporting_unit_id == unit_id,
+        HistoricalCargoRow.import_id.in_(cargo_import_ids or [-1]),
+        HistoricalCargoRow.port_call_id.in_([call.id for call in calls]),
+        HistoricalCargoRow.match_status == "MATCHED",
+        HistoricalCargoRow.validation_status == "VALID",
+    ).all()
+    if not cargo_rows:
+        raise HTTPException(
+            status_code=409,
+            detail="Chưa có chi tiết container đã ghép với Berth cho kỳ này. Hãy đối soát lại các lượt import.",
+        )
+
+    # Legacy PL.03 is a dimension scaffold only. Its manual cargo metrics and
+    # ETA-era time cells are deliberately ignored in the reconstructed report.
+    legacy_import = next((
+        item for item in sorted(active_imports, key=lambda entry: entry.id, reverse=True)
+        if item.source_kind == "reported_pl03"
+    ), None)
+    legacy_rows = db.query(HistoricalReportRow).filter_by(
+        reporting_unit_id=unit_id, import_id=legacy_import.id,
+    ).order_by(HistoricalReportRow.appendix_row_no, HistoricalReportRow.id).all() if legacy_import else []
+
+    register_ids = [row[0] for row in db.query(ReportingUnitVessel.vessel_id).filter_by(
+        reporting_unit_id=unit_id,
+    ).all()]
+    vessels = db.query(Vessel).filter(Vessel.id.in_(register_ids or [-1])).all()
+    vessel_by_id = {vessel.id: vessel for vessel in vessels}
+    vessel_by_name = {normalize_vessel_name(vessel.name): vessel for vessel in vessels}
+    vessel_by_registration = {
+        normalize_vessel_name(vessel.registration_no): vessel for vessel in vessels
+        if vessel.registration_no
+    }
+
+    def legacy_payload(row: HistoricalReportRow) -> dict[str, Any]:
+        return json.loads(row.raw_payload_json or "{}")
+
+    def group_key(name: str, registration: str = "", vessel_id: int | None = None) -> str:
+        if vessel_id:
+            return f"v:{vessel_id}"
+        vessel = vessel_by_registration.get(normalize_vessel_name(registration))
+        vessel = vessel or vessel_by_name.get(normalize_vessel_name(name))
+        return f"v:{vessel.id}" if vessel else f"n:{normalize_vessel_name(name)}"
+
+    groups: OrderedDict[str, dict[str, Any]] = OrderedDict()
+    legacy_identity_keys: dict[str, str | None] = {}
+    for legacy in legacy_rows:
+        raw = legacy_payload(legacy)
+        name = str(raw.get("B") or "").strip()
+        registration = str(raw.get("C") or "").strip()
+        key = group_key(name, registration)
+        groups.setdefault(key, {"legacy": legacy, "calls": [], "cargo": []})
+        for identity in (normalize_vessel_name(name), normalize_vessel_name(registration)):
+            if not identity:
+                continue
+            if identity not in legacy_identity_keys:
+                legacy_identity_keys[identity] = key
+            elif legacy_identity_keys[identity] != key:
+                legacy_identity_keys[identity] = None
+
+    def call_group_key(call: HistoricalPortCall) -> str:
+        if call.vessel_id:
+            return f"v:{call.vessel_id}"
+        legacy_key = legacy_identity_keys.get(normalize_vessel_name(call.vessel_name_raw))
+        return legacy_key or group_key(call.vessel_name_raw)
+
+    for call in calls:
+        key = call_group_key(call)
+        groups.setdefault(key, {"legacy": None, "calls": [], "cargo": []})["calls"].append(call)
+    call_group = {call.id: call_group_key(call) for call in calls}
+    for cargo in cargo_rows:
+        key = call_group.get(cargo.port_call_id)
+        if key:
+            groups.setdefault(key, {"legacy": None, "calls": [], "cargo": []})["cargo"].append(cargo)
+
+    def distinct(values: list[Any]) -> str:
+        result: list[str] = []
+        for value in values:
+            text = str(value or "").strip()
+            if text and text not in result:
+                result.append(text)
+        return "\n".join(result)
+
+    rows: list[list[Any]] = []
+    for key, group in groups.items():
+        calls_for_vessel: list[HistoricalPortCall] = group["calls"]
+        legacy = group["legacy"]
+        raw = legacy_payload(legacy) if legacy else {}
+        linked_id = next((call.vessel_id for call in calls_for_vessel if call.vessel_id), None)
+        if linked_id is None and key.startswith("v:"):
+            linked_id = int(key.split(":", 1)[1])
+        vessel = vessel_by_id.get(linked_id)
+        fallback_name = calls_for_vessel[0].vessel_name_raw if calls_for_vessel else raw.get("B", "")
+        row: list[Any] = [None] * 35
+        row[0] = len(rows) + 1
+        row[1] = (vessel.name if vessel else None) or raw.get("B") or fallback_name
+        row[2] = (vessel.registration_no if vessel else None) or raw.get("C") or ""
+        row[3] = (vessel.vessel_type if vessel else None) or raw.get("D") or ""
+        row[4] = (vessel.vessel_class if vessel else None) or raw.get("E") or ""
+        row[5] = (vessel.length_m if vessel else None) or raw.get("F")
+        row[6] = (vessel.deadweight_tons if vessel else None) or raw.get("G")
+        row[7] = (vessel.gross_tonnage if vessel else None) or raw.get("H")
+        for cargo in group["cargo"]:
+            if normalize_token(cargo.trade_scope_raw) == "HANG NOI":
+                start = 14 if cargo.derived_direction == "unload" else 17
+            else:
+                start = 11 if cargo.derived_direction == "unload" else 8
+            row[start] = float(row[start] or 0) + float(cargo.weight_tonnes or 0)
+            teu_column = start + 2 if cargo.full_empty_code_raw == "E" else start + 1
+            row[teu_column] = float(row[teu_column] or 0) + float(cargo.teu_factor or 0)
+        for index in range(8, 28):
+            if isinstance(row[index], float):
+                row[index] = round(row[index], 6)
+        row[28] = "Container" if group["cargo"] else ""
+        row[29] = raw.get("AD") or ""
+        row[30] = raw.get("AE") or ""
+        row[31] = raw.get("AF") or ""
+        row[32] = distinct([call.actual_berthing_at_raw for call in calls_for_vessel])
+        row[33] = distinct([call.actual_departure_at_raw for call in calls_for_vessel])
+        row[34] = raw.get("AI") or ""
+        rows.append(row)
+    return rows, {
+        "berthImportIds": [item.id for item in berth_imports],
+        "cargoImportIds": sorted({row.import_id for row in cargo_rows}),
+        "legacyPl03ImportId": legacy_import.id if legacy_import else None,
+        "callCount": len(calls), "cargoRowCount": len(cargo_rows), "reportRowCount": len(rows),
+    }
+
+
+@router.get("/exports/pl03")
+def export_historical_pl03(
+    reporting_period: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    db: Session = Depends(get_db), scope: Scope = Depends(require_port_scope),
+):
+    _authorize(db, scope)
+    _reconcile_active_cargo_links(db, scope.reporting_unit_id, scope.user.id)
+    db.commit()
+    rows, receipt = _historical_pl03_rows(db, scope.reporting_unit_id, reporting_period)
+    unit = db.get(ReportingUnit, scope.reporting_unit_id)
+    year, month = map(int, reporting_period.split("-"))
+    content = make_report_xlsx(
+        "appendix3", rows,
+        appendix3_template=ROOT / "templates" / "Phụ lục 3.xlsx",
+        report_from=date(year, month, 1), report_to=date(year, month, 1),
+        reporting_unit=unit.name if unit else "",
+    )
+    receipt_header = json.dumps(receipt, separators=(",", ":"))
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="PL03_TOS_{reporting_period}.xlsx"',
+            "X-Historical-Receipt": receipt_header,
+        },
+    )
 
 
 @router.get("/{import_id}")

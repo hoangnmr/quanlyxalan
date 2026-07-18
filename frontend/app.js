@@ -1488,7 +1488,44 @@ function setImportMode(mode) {
   $('#historical-import-tab').classList.toggle('active', historical);
   $('#operational-import-tab').setAttribute('aria-selected', String(!historical));
   $('#historical-import-tab').setAttribute('aria-selected', String(historical));
-  if (historical) loadHistoricalImportHistory();
+  if (historical) {
+    ensureHistoricalExportPanel();
+    loadHistoricalImportHistory();
+  }
+}
+
+function ensureHistoricalExportPanel() {
+  if ($('#historical-pl03-export')) return;
+  const historyPanel = $('.historical-history-panel');
+  if (!historyPanel) return;
+  const panel = document.createElement('section');
+  panel.id = 'historical-pl03-export';
+  panel.className = 'panel historical-export-panel';
+  panel.innerHTML = `<div><p class="eyebrow">KẾT QUẢ ĐỐI SOÁT</p><h2>PL.03 tổng hợp từ TOS</h2><p>ATB/ATD, TEU và tấn lấy từ Berth/Detail. PL.03 cũ chỉ bổ sung thông tin phương tiện còn thiếu.</p></div><div class="historical-export-actions"><label>Tháng báo cáo<input id="historical-pl03-period" type="month"></label><button id="export-historical-pl03" type="button" class="primary-button">Xuất PL.03 tổng hợp</button></div>`;
+  historyPanel.before(panel);
+  $('#export-historical-pl03').onclick = exportHistoricalPl03;
+}
+
+async function exportHistoricalPl03() {
+  const input = $('#historical-pl03-period');
+  const reportingPeriod = input?.value;
+  if (!reportingPeriod) {
+    toast('Chọn tháng báo cáo trước khi xuất PL.03 tổng hợp.', true);
+    input?.focus();
+    return;
+  }
+  const button = $('#export-historical-pl03');
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Đang tổng hợp…';
+  try {
+    await downloadFile(
+      `/api/historical-imports/exports/pl03?reporting_period=${encodeURIComponent(reportingPeriod)}`,
+      `PL03_TOS_${reportingPeriod}.xlsx`,
+    );
+    toast('Đã xuất PL.03 tổng hợp từ dữ liệu TOS đã xác nhận.');
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; button.textContent = original; }
 }
 
 function historicalStatusTone(status) {
@@ -1621,18 +1658,29 @@ async function renderHistoricalImportWorkspace() {
   const reviewGuide = $('#historical-review-guide');
   reviewGuide.hidden = !item.review && !item.rejected;
   if (!reviewGuide.hidden) {
+    const pendingBerth = [
+      ...state.historicalBatch.map(entry => entry.result), ...state.historicalHistory,
+    ].find(entry => entry?.sourceKind === 'tos_berth_call' && entry.status === 'PREVIEWED');
     const location = item.sourceKind === 'tos_berth_call'
       ? 'Lỗi liên kết phương tiện xử lý tại mục “Liên kết phương tiện” ngay dưới bảng.'
       : item.sourceKind === 'tos_cargo_detail'
-        ? 'Nếu chưa ghép lượt, hãy xác nhận file Berth trong đợt upload; hệ thống sẽ tự kiểm tra lại file này.'
+        ? 'Nếu chưa ghép lượt, mở file Berth đang chờ và xác nhận; hệ thống sẽ tự kiểm tra lại Detail, kể cả sau khi khởi động lại.'
         : 'Lỗi giá trị phải sửa đúng ô trong file PL.03 nguồn rồi upload lại.';
-    reviewGuide.innerHTML = `<strong>Kiểm tra ở đâu?</strong><span>Màn hình đang ưu tiên các dòng cần xử lý. Cột “Lý do / xử lý” ghi rõ lỗi và cách xử lý. ${esc(location)}</span>`;
+    reviewGuide.innerHTML = `<strong>Kiểm tra ở đâu?</strong><span>Màn hình đang ưu tiên các dòng cần xử lý. Cột “Lý do / xử lý” ghi rõ lỗi và cách xử lý. ${esc(location)}</span>${pendingBerth && item.sourceKind === 'tos_cargo_detail' ? `<button type="button" class="outline-button" data-open-required-berth="${pendingBerth.id}">Mở Berth #${pendingBerth.id}</button>` : ''}`;
+    const requiredBerth = $('[data-open-required-berth]', reviewGuide);
+    if (requiredBerth) requiredBerth.onclick = () => openHistoricalImport(Number(requiredBerth.dataset.openRequiredBerth));
   }
   const isPreview = item.status === 'PREVIEWED';
   $('.historical-confirm-area').hidden = !isPreview;
   $('#keep-historical-existing').hidden = !conflicts.length;
   $('#historical-revision-reason').hidden = !conflicts.length;
-  $('#confirm-historical-import').textContent = conflicts.length ? 'Dùng file mới · tạo revision' : 'Xác nhận import';
+  $('#confirm-historical-import').textContent = conflicts.length
+    ? 'Dùng file mới · tạo revision'
+    : item.sourceKind === 'tos_berth_call'
+      ? 'Xác nhận Berth & ghép Detail'
+      : item.sourceKind === 'tos_cargo_detail'
+        ? 'Ghi nhận Detail · chờ Berth'
+        : 'Xác nhận import';
   const filters = {all: `Tất cả (${number(item.accepted) + number(item.review) + number(item.rejected)})`, review: `Cần xử lý (${number(item.review)})`, rejected: `Bị loại (${number(item.rejected)})`};
   $$('[data-historical-row-filter]').forEach(button => {
     button.textContent = filters[button.dataset.historicalRowFilter];
@@ -1765,12 +1813,18 @@ async function cancelHistoricalImport() {
 
 async function loadHistoricalImportHistory(page = state.historicalHistoryPage) {
   if (state.importMode !== 'historical' || !state.activeReportingUnitId) return;
+  ensureHistoricalExportPanel();
   const container = $('#historical-import-history');
   container.innerHTML = '<div class="empty-state">Đang tải lịch sử import…</div>';
   try {
+    await api('/api/historical-imports/reconcile', {method: 'POST'});
     const result = await api(`/api/historical-imports?page=${page}&page_size=20`);
     state.historicalHistoryPage = result.page;
     state.historicalHistory = result.items || [];
+    const periodInput = $('#historical-pl03-period');
+    if (periodInput && !periodInput.value) {
+      periodInput.value = state.historicalHistory.find(item => item.sourceKind === 'tos_berth_call' && item.reportingPeriod)?.reportingPeriod || '';
+    }
     container.innerHTML = state.historicalHistory.length
       ? `<table class="data-table responsive-table"><thead><tr><th>Mã</th><th>Nguồn</th><th>Kỳ</th><th>Kết quả</th><th>Revision</th><th>Trạng thái</th><th></th></tr></thead><tbody>${state.historicalHistory.map(item => `<tr><td data-label="Mã">#${item.id}<br><small>${fmtDate(item.createdAt)}</small></td><td data-label="Nguồn"><strong>${esc(HISTORICAL_SOURCE_LABELS[item.sourceKind] || item.sourceKind)}</strong><br><small title="${esc(item.sourceFilename)}">${esc(item.sourceFilename)}</small></td><td data-label="Kỳ">${esc(item.reportingPeriod || 'Chưa xác định')}</td><td data-label="Kết quả"><span class="up">${number(item.accepted).toLocaleString('vi-VN')} hợp lệ</span> · <span class="${item.review ? 'draft' : ''}">${number(item.review).toLocaleString('vi-VN')} kiểm tra</span> · ${number(item.rejected).toLocaleString('vi-VN')} từ chối</td><td data-label="Revision">${item.revisionNo}${item.supersededByImportId ? `<br><small>→ #${item.supersededByImportId}</small>` : ''}</td><td data-label="Trạng thái" class="historical-status"><span class="table-badge ${historicalStatusTone(item.status)}">${esc(HISTORICAL_STATUS_LABELS[item.status] || item.status)}</span></td><td data-label="Thao tác" class="historical-history-action"><button type="button" class="outline-button" data-open-historical-import="${item.id}">${item.status === 'PREVIEWED' ? 'Tiếp tục' : 'Xem'}</button></td></tr>`).join('')}</tbody></table>`
       : empty('Chưa có dữ liệu lịch sử', 'Chọn một file TOS hoặc PL.03 cũ để tạo preview đầu tiên.');

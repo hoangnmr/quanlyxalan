@@ -76,7 +76,10 @@ class DeclarationBase(BaseModel):
     passenger_count: int = 0
     last_port: str
     working_port: str
+    departure_berth: str = ""
     destination_port: str = ""
+    agent_ptnd_name: str = ""
+    is_passenger_call: bool = False
     eta: str
     etd: str
     master_name: str

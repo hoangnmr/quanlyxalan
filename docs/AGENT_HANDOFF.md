@@ -824,7 +824,8 @@ Owner confirmations:
   separate analytical reporting dashboard.
 - PL.03 produces one row per canonical Salan/vessel, aggregating eligible
   customer declarations instead of expanding one row per cargo item.
-- PL.02 calls are counted by operating arrival. PORT_STAFF/ADMIN may apply a
+- PL.02 calls are counted by operating arrival. PORT_STAFF or PLATFORM_ADMIN in
+  explicit port context may apply a
   controlled, reasoned and audited manual adjustment.
 - PL.03 AE is working/cargo-working port; AF is next destination.
 - PL.03/AI keeps `Đại lý PTND` and reports the customer-declared approved
@@ -855,3 +856,1000 @@ Boundary:
 - No commit or push was made.
 - Do not start BUILD until the T1 data contract and acceptance-test plan receive
   human approval.
+
+---
+
+## Canonical report BUILD in progress — 2026-07-17
+
+- **Status**: T1 CLOSED; T2/T3 BUILD IN PROGRESS; visual Spreadsheet gate pending.
+- **Risk**: R2.
+- **Authorization**: owner instruction `Tiến hành sửa`.
+
+Implemented in the working tree:
+
+- T1 canonical README, index, field catalog, inheritance rules and machine-readable manifest.
+- Declaration snapshots `departure_berth`, `agent_ptnd_name`, `is_passenger_call`.
+- Append-only PL.02 call-adjustment model/API with PORT_STAFF or explicit-context
+  PLATFORM_ADMIN control, reason and audit event.
+- Official operating-date filter (ATA→ETA / ATD→ETD); `declaration_date` removed from report-period fallback.
+- PL.02 calendar-month + January-to-month aggregation and blank-when-absent behavior.
+- PL.03 one row per canonical vessel, additive numeric aggregation and distinct chronological text aggregation.
+- Full title/metadata/form blocks for PL.01 and PL.02; corrected `tháng báo cáo`, `TEUs`, `TEUs Rỗng`, `Quá cảnh`; PL.03 column-D clipping repair.
+- Web month selector, controlled PL.02 adjustment panel and declaration inputs for the new snapshots.
+
+Evidence:
+
+- `python -m pytest -q`: 94 passed.
+- Python compile, `node --check frontend/app.js` and `git diff --check`: passed.
+- Local DB backed up to `data/backups/cang_vu-20260717-145400.db` with manifest, then migrated to `l11f0f000011`.
+- Operational DB remains 47 vessels, 0 declarations, 0 approved declarations and 0 adjustments.
+- Synthetic positive workbooks were generated at `outputs/appendix-positive-fixture-20260717/` without reading or mutating the operational DB.
+
+Open gate:
+
+- Browser interaction QA is blocked because the managed browser policy rejects localhost; only static frontend and API regression checks are complete.
+- Run `docs/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_20260717.md` in Codex Desktop. Do not close APPX/MAP implementation items until its artifact-tool renders pass.
+- BUILD foundation was committed locally as `5db6022`; it has not been pushed.
+
+### Owner clarification — canonical Salan row skeleton
+
+After commit `5db6022`, the owner clarified that having zero approved
+declarations must not remove the 47 known Salan rows from PL.01/PL.03.
+
+- PL.01 and PL.03: start from canonical Salan master rows; populate every known
+  static field; overlay activity only from `APPROVED` declarations; otherwise
+  leave activity cells blank.
+- PL.02: activity aggregate only; with zero approved activity, C:P remain blank.
+- This supersedes the earlier interpretation that approval controlled the
+  existence of the entire PL.01/PL.03 row. Approval controls activity only.
+- Automated static-only coverage was added, and read-only operational review
+  files contain 47 PL.01 rows, blank PL.02 metrics and 47 PL.03 rows.
+- The updated Desktop work order now checks both the operational 47-Salan set
+  and the isolated positive fixture before recommending tranche closure.
+
+---
+
+## PL.03 focused visual-regression follow-up — 2026-07-17
+
+- Full Desktop Spreadsheet regression passed all zero-path and positive mapping
+  checks but found one visual defect: `B/PL.03!AG10:AH10` clipped the second
+  arrival/departure timestamp at the fixed 66-pt data-row height.
+- The exporter now derives PL.03 data-row height from wrapped cell content;
+  the positive fixture row is 108 pt while the FORM column widths and values
+  remain unchanged.
+- Automated evidence: targeted test PASS and complete suite `95 passed`.
+- Regenerated workbooks are in `outputs/appendix-positive-fixture-20260717/`
+  and `outputs/appendix-operational-review-20260717/`.
+- Run
+  `docs/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_20260717.md`.
+  Keep the Spreadsheet release gate OPEN until the focused artifact-tool render
+  confirms `AG10:AH10` is fully legible and no PL.03 layout regression exists.
+- Live business data evidence remains NOT PROVABLE because the operational DB
+  still has no approved declarations; synthetic fixture PASS proves only the
+  exporter implementation path.
+
+---
+
+## Canonical appendix implementation tranche closure — 2026-07-17
+
+- **Status**: CLOSED / PASS for the approved local implementation scope.
+- **Phase**: REVIEW; production/live-business readiness is not claimed.
+- Codex Desktop used the required Spreadsheets runtime and artifact-tool to
+  inspect both PL.03 workbooks and review seven renders.
+- REG-01 is CLOSED. Positive PL.03 visual gate, operational 47-Salan guardrail
+  and overall Spreadsheet implementation gate are PASS.
+- APPX-01–04 and MAP-01–05 are CLOSED at implementation level. APPX-04 remains
+  an approved no-signature exception.
+- Application verification rerun: `python -m pytest -q` → `95 passed`.
+- The local operational database still has zero approved declarations. Static
+  Salan rows are valid; blank activity is expected. Live business data remains
+  NOT PROVABLE until a real approved sample is reconciled.
+- Evidence:
+  `docs/CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_RESULT_20260717.md` and
+  `outputs/codex-desktop-spreadsheet-regression-recheck-20260717/`.
+- No CVF-core change is authorized. T5 stays deferred to a separate session in
+  the CVF repository.
+
+---
+
+## End-user live-data follow-up — 2026-07-17
+
+- The implementation tranche remains CLOSED/PASS; a separate live-data
+  acceptance gate is OPEN because the current DB has no approved declarations.
+- Use `docs/LIVE_DATA_VALIDATION_AND_POST_PILOT_RUNBOOK_20260717.md` after end
+  users have entered a small representative approved sample.
+- Remaining evidence covers operating dates across months, real cargo
+  classification, missing-versus-zero, berth/port/agent snapshots, PL.02 audit
+  adjustments, multi-declaration PL.03 aggregation and tenant/role behavior.
+- Diagnose source → workflow → canonical snapshot → projection → workbook
+  before changing code. A fix requires a reproducible case, owner-confirmed
+  expectation, regression test and renewed Spreadsheet render when applicable.
+- Raw customer workbooks, DB snapshots and personal data must remain outside
+  Git; commit only sanitized acceptance evidence.
+
+---
+
+## Historical appendix import workstream intake — 2026-07-17
+
+- **Status**: INTAKE; BUILD NOT AUTHORIZED.
+- Owner requires old PL.01/PL.02/PL.03 workbooks to populate a separate
+  historical reporting store and dashboard, not to fabricate declarations.
+- Roadmap:
+  `docs/HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md`.
+- Historical facts remain separate from live `APPROVED` declarations and
+  canonical masters. PL.02 month and YTD values must be stored separately;
+  combined live/historical totals require explicit overlap resolution.
+- Next move: provide at least one representative real workbook per appendix,
+  then run full Spreadsheets skill inspection and close HDEC-01–HDEC-09 before
+  schema or code work.
+
+---
+
+## Historical TOS workbook audit and owner time disposition — 2026-07-18
+
+- **Status**: H0 AUDIT COMPLETE; H0 remains OPEN on owner decisions and missing
+  historical PL.01/PL.02 samples. BUILD is not authorized.
+- **Phase**: INTAKE; bounded H1 parser/data-contract DESIGN is eligible, but
+  final H1 approval is not yet granted.
+- Codex Desktop inspected five workbooks/six sheets read-only with the
+  Spreadsheets skill and `@oai/artifact-tool`, covering 100% of used ranges
+  across thirteen local renders. No workbook was modified and no raw render is
+  committed.
+- Evidence:
+  `docs/HISTORICAL_TOS_WORKBOOK_AUDIT_20260717.md` and
+  `docs/historical_tos_mapping_draft.json`.
+- Verified sample facts: 40 Berth calls; 1,067 cargo rows across 38 detail call
+  keys; all detail rows exact-match a Berth key; two Berth calls have no cargo.
+  Salan linking produced 10 exact, 26 controlled-normalized, four unmatched
+  and zero ambiguous candidates.
+- Verified PL.03 mapping: B=`Tên PTTND`, AG=`Ngày đến cảng`, AH=`Ngày rời
+  cảng`, AI=`Đại lý PTND`; historical and blank PL.03 variants share 35
+  physical columns but differ in hidden state, data rows and footer position.
+- Owner closed `TOS-PL03-TIME-01`: the supplied legacy PL.03 used inaccurate
+  ETA-derived time. Matched TOS ATB/ATD are authoritative for reconstructed
+  historical PL.01/PL.03; legacy AG/AH remain reported provenance only.
+- Owner closed the remaining core TOS baseline: Detail/R is tonnes per
+  container and both full/empty container weight contributes to report tonnes;
+  F/E independently selects full/empty TEU columns. The four movement methods
+  are approved as load/unload mappings.
+- The legacy PL.03 is a non-authoritative manual summary and no longer blocks
+  TOS parser design on 73-versus-40 row reproduction. Reporting month uses ATB;
+  matched TOS wins actual time/berth/cargo while live retains declaration-only
+  facts and the call counts once.
+- Overlapping updated TOS imports require an explicit PORT_STAFF or
+  explicit-context PLATFORM_ADMIN revision
+  choice. Historical data/provenance/source receipt retention is at least five
+  years, with user export as an additional copy channel.
+- Owner closed HDEC-02 with a multi-port product decision. Cảng Tân Thuận is
+  the first tenant, not a hardcoded boundary. Shared/versioned government PL
+  report contracts use tenant-scoped data and identity; every import/report
+  belongs to one authenticated reporting unit, and port/vendor TOS differences
+  use versioned source adapters. Mixed-unit batches cannot commit silently and
+  ordinary port roles cannot cross tenant boundaries.
+- Historical PL.01/PL.02 variant audit is deferred until files are supplied.
+  Historical label/coverage fixtures remain DESIGN items.
+- Next governed move: draft the bounded H1 schema/parser/API/UI acceptance
+  contract. Do not implement migration, parser, database import or dashboard
+  before explicit BUILD authorization.
+
+---
+
+## Historical TOS H1 approval and BUILD transition — 2026-07-18
+
+- **Status**: H1 APPROVED; H2 BUILD IN PROGRESS.
+- **Risk Level**: R2; owner explicitly authorized the transition on 2026-07-18.
+- Approved boundary: multi-port, tenant-isolated historical/TOS schema,
+  migration, provenance, idempotency and acceptance-test foundation first;
+  parser/API and UI follow the ordered roadmap gates.
+- Cảng Tân Thuận remains the first tenant, not a hardcoded product boundary.
+- Historical PL.01/PL.02 variants remain deferred. Unsupported layouts,
+  labels, cargo classes and invalid-value paths must fail closed until covered
+  by audited evidence or sanitized golden fixtures.
+- Raw operational workbooks and renders remain outside Git.
+- This transition does not authorize production deployment, external data
+  transmission, or skipping REVIEW and FREEZE.
+- Next governed move: commit the approved design checkpoint, then implement H2
+  with migration upgrade/rollback, tenant-isolation, idempotency and audit
+  tests before starting H3.
+
+---
+
+## Historical TOS H2 schema/migration/provenance BUILD — 2026-07-18
+
+- **Status**: H2 IMPLEMENTED IN WORKING TREE — PENDING INDEPENDENT CODEX REVIEW.
+  Not committed; not closed. No production readiness or governance-behaviour
+  claim is made.
+- **Phase**: BUILD (owner-authorized 2026-07-18). REVIEW and FREEZE gates remain
+  ahead. H3/H4 not started.
+- **Risk Level**: R2.
+
+Implemented (schema/migration/provenance only — no parser, API or UI):
+
+- Added six historical/TOS tables in `backend/models.py`:
+  `historical_report_imports`, `historical_report_rows`,
+  `historical_report_metrics`, `historical_port_calls`,
+  `historical_cargo_rows`, `historical_vessel_links`.
+- Multi-port tenancy reuses the existing Organization tenant table. Every
+  historical table carries a non-null `reporting_unit_id` -> `organizations.id`;
+  no second tenant system was introduced. Cảng Tân Thuận is a normal
+  Organization row, not hardcoded in the schema.
+- Idempotency is tenant-scoped: `uq_historical_import_idempotency` on
+  `(reporting_unit_id, source_kind, source_checksum, mapping_version)`; port
+  call / cargo source-row uniqueness is `(reporting_unit_id, import_id,
+  source_sheet, source_row)`. Identical checksums/identities in different
+  reporting units never collide.
+- Revision lineage via self-referential `superseded_by_import_id` +
+  `revision_no` + `supersede_reason`.
+- Provenance preserved per fact: source sheet/row/cell, raw payloads, detected
+  `mapping_version`, blank-vs-measured-zero `value_state`/`weight_state`, ATB
+  kept as ATB (never renamed ATA), and observed misspelled headers retained.
+- `historical_vessel_links` records reviewed candidate links only and has no
+  authority to mutate canonical Vessel fields.
+- Alembic revision `m12f0f000012` (revises `l11f0f000011`) creates the tables
+  additively with guarded, idempotent upgrade and a reversible downgrade that
+  drops only the new tables. It never alters existing declarations, vessels,
+  crew or canonical masters.
+
+Evidence:
+
+- `python -m pytest -q`: 107 passed (96 baseline + 11 new in
+  `tests/test_historical_import.py`).
+- `python -m compileall backend`: PASS. `git diff --check`: PASS.
+- Fresh-DB upgrade to `m12` head, upgrade→rollback→re-upgrade rehearsal and
+  guarded-idempotent re-run: PASS (temp copies).
+- Operational DB backed up to
+  `data/backups/cang_vu-20260718-021834-pre-m12-historical.db`, rehearsed on a
+  disposable copy (up→down→up), then upgraded to `m12` head:
+  `PRAGMA integrity_check = ok`; 59 vessels and 0 declarations unchanged; the 6
+  historical tables are empty (no historical data imported yet).
+- New tests cover fresh head, upgrade/rollback preservation of the live domain,
+  guarded upgrade idempotency, tenant-scoped checksum idempotency, cross-tenant
+  isolation, per-import source-row uniqueness, revision lineage, blank-vs-zero,
+  cascade delete of child facts, no-overwrite of the canonical vessel, and an
+  audit event recorded for a historical import.
+
+Boundary / not done:
+
+- No parser, import API, dashboard or UI (H3/H4).
+- No raw workbook, render or operational DB committed; `templates/*.xlsx` and
+  `data/` remain untracked/gitignored.
+- No CVF-core change. Upstream transfer stays in a separate session.
+
+Next governed move:
+
+- Independent Codex review of the diff, migration and tests. On acceptance,
+  proceed to H3 (type/version detection and explicit PL.01/PL.02/PL.03 + TOS
+  parsers with preview, provenance evidence and safe partial acceptance) behind
+  its gate. Do not start H3 before H2 review passes.
+
+---
+
+## Historical TOS H2 correction round 1 — 2026-07-18
+
+- **Status**: H2 CORRECTED IN WORKING TREE — PENDING CODEX REVIEW ROUND 2.
+  Not committed; not closed; H3/H4 not started.
+- **Phase**: BUILD. REVIEW and FREEZE gates remain ahead.
+- **Risk Level**: R2.
+- **Order**: executed `docs/CLAUDE_H2_CORRECTION_ORDER_20260718.md` (H2 REJECTED).
+
+### Withdrawn claim
+
+The earlier H2 checkpoint (section "Historical TOS H2 schema/migration/provenance
+BUILD — 2026-07-18") asserted tenant isolation on the strength of passing tests.
+**That tenant-isolation claim is withdrawn.** Codex reproduced that the original
+design used `Organization` as the tenant (PORT_STAFF often has no
+`organization_id`), relied on unrelated single-column foreign keys, and ran with
+SQLite `PRAGMA foreign_keys = 0`, so declared foreign keys and cascades were not
+enforced. Passing tests did not establish isolation.
+
+### Corrections implemented (schema/migration/provenance only)
+
+- **Distinct tenant entity.** Added `ReportingUnit` (`reporting_units`), a Port
+  that operates the product, separate from customer `Organization`. Added a
+  nullable `reporting_unit_id` to `organizations` and `users` (plain columns,
+  no backfill; pre-H2 rows and platform admins stay NULL). Cảng Tân Thuận is not
+  hardcoded, seeded or defaulted anywhere.
+- **Composite-foreign-key tenant consistency.** Every historical child carries a
+  composite FK onto `historical_report_imports(id, reporting_unit_id)` (and
+  metric→row, cargo→call, link→call composites), so a child in unit B cannot
+  reference a parent in unit A. Revision lineage uses a composite self FK, so a
+  cross-unit supersession is rejected. Import identity/idempotency keys are
+  tenant-scoped.
+- **Real SQLite foreign keys.** `backend/database.py` enables
+  `PRAGMA foreign_keys=ON` on every SQLite connection via a global connect hook
+  (application, Alembic and test engines). Verified `PRAGMA foreign_keys = 1`
+  and `PRAGMA foreign_key_check` clean on test databases.
+- **Fail-closed cross-unit vessel link.** The multi-hop rule (link → vessel →
+  organization → reporting_unit) is not portably a single DB constraint. The DB
+  boundary is the plain `candidate_vessel_id` FK; `backend/historical.py`
+  `validate_vessel_link_tenant` fails closed on a missing vessel, an unbound
+  organization or a different unit. Documented limitation, with negative tests.
+- **Migration m12 corrected.** The artificial stamp-back "idempotency" test was
+  removed. The migration creates the exact approved schema and then runs a
+  fail-closed `_verify_tenant_schema` that raises on any drifted/partial
+  pre-existing schema (rebutting the silent-guard concern). One Alembic head.
+  Upgrade/downgrade/re-upgrade rehearsed on disposable databases only; downgrade
+  removes only the H2 tables and the two `reporting_unit_id` columns.
+- **Provenance/CHECK constraints.** Added portable CHECKs: `revision_no >= 1`,
+  non-negative counts and source size, `teu_factor IN (1,2)` or NULL, approved
+  status/state value sets, and blank-vs-zero value/weight consistency. ATB and
+  ATD remain separate facts; no ATA field is introduced; blank, zero and invalid
+  remain distinct states.
+
+### Migration-guard note (design decision for review)
+
+The `b01` baseline migration builds current model metadata with
+`Base.metadata.create_all`, so a fresh database already contains the H2 tables
+before m12 runs (the same pattern `d03`/`e04`/`l11` rely on). Removing the
+`_has_table` guards outright makes a fresh-DB upgrade fail with
+"table already exists" (reproduced). m12 therefore keeps per-object guards for
+baseline compatibility **and** adds a fail-closed post-verification of the
+tenant-critical composite keys so a drifted schema aborts loudly rather than
+being silently accepted. The legacy create path (no pre-existing H2 tables) is
+covered by `test_pre_h2_database_preserved_through_migration`.
+
+### Evidence actually exercised by tests
+
+- `python -m pytest -q tests/test_historical_import.py`: 24 passed.
+- `python -m pytest -q`: 120 passed (96 prior + 24 new).
+- `python -m compileall backend` and the migration/test modules: PASS.
+- `git diff --check`: PASS. One Alembic head: `m12f0f000012`.
+- Fresh-DB upgrade to head, hand-built pre-H2 seed preserved through
+  upgrade→downgrade→re-upgrade, `PRAGMA foreign_keys = 1`, and
+  `PRAGMA foreign_key_check` clean: all asserted by tests on disposable DBs.
+- Negative tests that perform a forbidden operation and assert
+  `IntegrityError`/fail-closed validation: `test_duplicate_checksum_in_one_unit_rejected`,
+  `test_tenant_isolation_row_cannot_reference_foreign_import`,
+  `test_tenant_isolation_metric_cannot_reference_foreign_import`,
+  `test_tenant_isolation_metric_cannot_reference_foreign_row`,
+  `test_tenant_isolation_port_call_cannot_reference_foreign_import`,
+  `test_tenant_isolation_cargo_cannot_reference_foreign_call`,
+  `test_tenant_isolation_vessel_link_cannot_reference_foreign_import`,
+  `test_tenant_isolation_revision_cannot_cross_units`,
+  `test_vessel_link_requires_import`,
+  `test_cross_unit_candidate_vessel_fails_closed`,
+  `test_candidate_vessel_with_unbound_org_fails_closed`,
+  `test_blank_metric_with_a_number_is_rejected` (12 total).
+- Database-level cascade via direct SQL `DELETE` (not ORM cascade):
+  `test_database_cascade_delete_via_direct_sql`.
+
+### Operational database blocker (unchanged this turn)
+
+```text
+Operational DB is stamped with rejected m12 and requires a separate,
+Codex-reviewed reconciliation step after the corrected migration is accepted.
+```
+
+`data/cang_vu.db` still carries the earlier rejected m12 schema (organization-based,
+no `reporting_units`, single-column keys, `foreign_keys = 0`). It was **not
+modified, downgraded, restored, stamped or migrated during this correction**
+(read-only check only: version `m12f0f000012`, `foreign_key_check` clean, 59
+vessels, 0 declarations). No backup database was modified.
+
+### Boundary / residual limitations
+
+- No parser, import API, dashboard or UI (H3/H4). Not started.
+- `organizations`/`users.reporting_unit_id` are plain columns without an inline
+  DB foreign key (SQLite cannot DROP a foreign-key column or rebuild these
+  parent tables under enforced FKs with child rows), so their binding integrity
+  is service-layer/fail-closed rather than DB-enforced. The historical store
+  itself retains full composite-FK enforcement.
+- Cross-reporting-unit candidate vessel linking is enforced by fail-closed
+  service validation, not a single DB constraint (documented above).
+- No raw workbook, render, database or backup committed; `templates/*.xlsx` and
+  `data/` remain untracked/gitignored. No CVF-core change.
+
+### Next governed move
+
+- Codex review round 2 of the diff, corrected migration and tests. Do not commit,
+  do not touch the operational DB, and do not start H3 before this review passes.
+
+---
+
+## Historical TOS H2 correction round 2 — 2026-07-18
+
+- **Status**: H2 CORRECTED AGAIN IN WORKING TREE — PENDING CODEX REVIEW ROUND 3.
+  Not committed; not closed; H3/H4 not started.
+- **Phase**: BUILD. REVIEW and FREEZE gates remain ahead.
+- **Risk Level**: R2.
+- **Order**: executed `docs/CLAUDE_H2_CORRECTION_ORDER_R2_20260718.md`
+  (H2 REJECTED AFTER REVIEW ROUND 2). The round-1 passing baseline
+  (distinct `ReportingUnit`, historical composite FKs, SQLite FK enforcement,
+  DB cascade, migration up/down/re-up) was preserved and not regressed.
+
+### R2 blockers fixed
+
+- **Soft tenant columns replaced with FK-backed memberships.** Removed
+  `User.reporting_unit_id` and `Organization.reporting_unit_id` (they accepted
+  nonexistent ids). Added `reporting_unit_users` and
+  `reporting_unit_organizations` — composite-PK, many-to-many, both sides real
+  FKs with `ON DELETE CASCADE`. A nonexistent user/organization/reporting-unit
+  id now fails by foreign key. A user/org may belong to several ports; existing
+  users/orgs get no memberships and none is backfilled to Cảng Tân Thuận.
+- **Fail-closed actor/reviewer authorization** in `backend/historical.py`:
+  `validate_import_actor` and `validate_reviewer`. PORT_STAFF and tenant-local
+  ADMIN require membership in the target unit; CUSTOMER and inactive users are
+  rejected; missing user/unit is rejected; a platform ADMIN with no membership
+  is authorized ONLY with an explicit `platform_context=True`. Absence of
+  membership never, by itself, grants access. These cover creation, revision
+  selection and supersession actor decisions and manual-review reviewer checks.
+- **Candidate-vessel membership validation.** `validate_vessel_link_tenant` now
+  uses `reporting_unit_organizations` membership (not a soft column): a vessel is
+  valid for any port in which its owning Organization holds a real FK-backed
+  membership; missing vessel/organization or membership only in another port
+  fail closed; an unresolved candidate stays allowed as pending.
+- **Tenant-scoped audit.** Added a nullable `reporting_unit_id` FK to
+  `audit_events`; `backend.database.audit` accepts an optional
+  `reporting_unit_id` (backward compatible — existing callers unaffected).
+  `organization_id` still means customer Organization and is never overloaded
+  with a Port id. Nonexistent reporting unit is rejected by FK.
+- **Complete schema-drift verification.** `_verify_tenant_schema` now checks the
+  reporting-unit and both membership tables (composite PK + both FKs), import
+  identity/idempotency keys, the import self-revision composite FK, every
+  child→import composite FK, the metric→row / cargo→call / link→call composites,
+  `historical_vessel_links.import_id` NOT NULL, the row/call identity keys, the
+  critical status and blank/zero CHECK constraints, and the audit tenant FK. It
+  fails with a precise, named message. A test builds a drifted schema missing the
+  cargo→port-call composite and proves verification rejects it.
+
+### Migration note
+
+`m12` still keeps per-object `if not _has_table` guards because the `b01`
+baseline runs `Base.metadata.create_all` (so a fresh DB already has these objects
+before m12 runs); the guards are paired with the full fail-closed
+`_verify_tenant_schema`, so a drifted/partial pre-existing schema aborts loudly.
+`organizations`/`users` have no soft tenant column in either the model or the
+migration. On downgrade the `audit_events.reporting_unit_id` FK column is removed
+by rebuilding that (unreferenced) table via `batch_alter_table`; membership and
+historical tables and `reporting_units` are dropped; live rows are preserved.
+
+### Evidence actually exercised by tests (disposable DBs only)
+
+- `python -m pytest -q tests/test_historical_import.py`: 47 passed.
+- `python -m pytest -q`: 143 passed (96 prior + 47).
+- `python -m compileall backend` and the migration/test modules: PASS.
+- `git diff --check`: PASS. One Alembic head: `m12f0f000012`.
+- Fresh-DB upgrade to head, hand-built pre-H2 seed preserved through
+  upgrade→downgrade→re-upgrade (now including an `audit_events` row and the audit
+  column add/remove), `PRAGMA foreign_keys = 1`, and `PRAGMA foreign_key_check`
+  clean.
+- **New negative tests (12)** that attempt a forbidden operation and assert
+  `IntegrityError`/fail-closed: membership with nonexistent reporting unit
+  (`test_membership_requires_existing_reporting_unit`), nonexistent user
+  (`test_membership_requires_existing_user`), nonexistent organization
+  (`test_org_membership_requires_existing_organization`); PORT_STAFF on foreign
+  import (`test_import_actor_portstaff_on_foreign_unit_rejected`); tenant ADMIN
+  on foreign import (`test_import_actor_tenant_admin_on_foreign_unit_rejected`);
+  CUSTOMER actor (`test_import_actor_customer_rejected`); inactive actor
+  (`test_import_actor_inactive_user_rejected`); platform ADMIN without context
+  (`test_import_actor_platform_admin_without_context_rejected`); cross-port
+  reviewer (`test_reviewer_cross_port_rejected`); candidate vessel with only
+  another-port membership (`test_vessel_link_other_port_only_membership_rejected`);
+  historical audit with nonexistent reporting unit
+  (`test_audit_with_nonexistent_reporting_unit_rejected`); schema drift missing a
+  secondary composite (`test_schema_drift_missing_secondary_composite_is_rejected`).
+- **New positive tests**: valid PORT_STAFF membership, valid tenant ADMIN
+  membership, platform ADMIN with explicit context, Organization in multiple
+  ports (`test_vessel_link_multi_port_membership_allowed_in_each`), and correct
+  reporting-unit historical audit
+  (`test_audit_stores_reporting_unit_without_org_conflation`).
+- Retained: composite cross-tenant rejections, DB cascade via direct SQL,
+  ATB/ATD distinctness, blank/zero/invalid distinctness, fresh + pre-H2 migration
+  preservation.
+
+### Operational database blocker (unchanged this turn)
+
+```text
+Operational DB is stamped with rejected m12 and requires a separate,
+Codex-reviewed reconciliation step after the corrected migration is accepted.
+```
+
+`data/cang_vu.db` still carries the earlier rejected m12 schema and was **not
+touched, restored, downgraded, stamped or migrated** during this correction
+(read-only check only: version `m12f0f000012`, no `reporting_units`,
+`foreign_key_check` clean, 59 vessels, 0 declarations). No backup database was
+modified. The reviewer's disposable copy `data/review_h2_corrected_migration.db`
+is gitignored, was not staged, and is not operational evidence.
+
+### Boundary / residual limitations
+
+- No parser, import API, dashboard or UI (H3/H4). Not started.
+- The DB retains ordinary user FKs for `created_by_user_id`/`reviewed_by_user_id`
+  because platform ADMIN is an exception not encodable in one composite FK; the
+  actor/reviewer authorization is therefore enforced fail-closed in the service
+  layer and fully tested. H3 endpoints must call these validators.
+- No raw workbook, render, database or backup committed; `templates/*.xlsx` and
+  `data/` remain untracked/gitignored. No CVF-core change.
+
+### Next governed move
+
+- Codex review round 3 of the diff, corrected migration and tests. Do not commit,
+  do not touch the operational DB, and do not start H3/H4 before this review
+  passes.
+
+---
+
+## Historical TOS H2 correction round 3 — 2026-07-18
+
+- **Status**: H2 CORRECTED AGAIN IN WORKING TREE — PENDING CODEX REVIEW ROUND 4.
+  Not committed; not closed; H3/H4 not started.
+- **Phase**: BUILD. REVIEW and FREEZE gates remain ahead.
+- **Risk Level**: R2.
+- **Order**: executed `docs/CLAUDE_H2_CORRECTION_ORDER_R3_20260718.md`
+  (H2 REJECTED AFTER REVIEW ROUND 3). Two service-layer authorization defects
+  only. The R2 schema, membership tables, composite foreign keys, tenant-scoped
+  audit, migration and schema-drift verification are unchanged and not regressed.
+  **No new migration** was needed; changes are limited to `backend/historical.py`
+  and `tests/test_historical_import.py`.
+
+### Exact authorization condition implemented
+
+`backend/historical._authorize_unit_role` (shared by `validate_import_actor` and
+`validate_reviewer`) now fails closed in this order:
+
+1. an acting user must be supplied;
+2. the reporting unit is loaded and must **exist and be active** (`is_active == 1`);
+   this gate runs before any membership or platform-override decision, with
+   distinct "does not exist" vs "is not active" messages, so no actor — not even
+   a platform ADMIN with explicit context — may act on a missing or deactivated
+   unit;
+3. the user must be active and hold a permitted role (PORT_STAFF or ADMIN;
+   CUSTOMER rejected);
+4. membership in the **target** unit authorizes the permitted role;
+5. otherwise a platform override is allowed only when `user.role == "ADMIN"`
+   **and** `platform_context is True` **and** the user has **zero** rows in
+   `reporting_unit_users` across the whole system. An ADMIN who belongs to any
+   unit is tenant-local and can never use `platform_context=True` to reach a
+   different unit; the caller-provided boolean alone is never sufficient.
+
+- Defect 1 fixed: tenant ADMIN (member of Port A) + `platform_context=True` acting
+  on / reviewing Port B is now rejected (added
+  `user_has_any_unit_membership`).
+- Defect 2 fixed: an inactive `ReportingUnit` is rejected for actor and reviewer,
+  including for a genuine platform ADMIN with explicit context (added
+  `_load_active_reporting_unit`).
+
+### Five new negative tests (all pass)
+
+- `test_tenant_admin_with_context_cannot_act_on_foreign_unit` — tenant ADMIN in
+  Port A + context acting on import Port B → `HistoricalAuthorizationError`.
+- `test_tenant_admin_with_context_cannot_review_foreign_unit` — same for reviewer.
+- `test_import_actor_on_inactive_unit_rejected` — PORT_STAFF with valid membership
+  on an inactive unit → rejected ("not active").
+- `test_reviewer_on_inactive_unit_rejected` — reviewer on an inactive unit →
+  rejected ("not active").
+- `test_platform_admin_cannot_override_inactive_unit` — platform ADMIN (zero
+  memberships) + explicit context on an inactive unit → rejected ("not active").
+
+Retained positives: PORT_STAFF/tenant-ADMIN acting within a unit where they have
+membership; a true platform ADMIN with zero memberships + explicit context acting
+on an active unit; platform ADMIN without explicit context rejected.
+
+### Evidence (disposable DBs only)
+
+- `python -m pytest -q tests/test_historical_import.py`: 52 passed (47 prior + 5).
+- `python -m pytest -q`: 148 passed (96 prior + 52).
+- `python -m compileall backend` and the test module: PASS.
+- `git diff --check`: PASS. One Alembic head: `m12f0f000012`.
+
+### Operational database blocker (unchanged this turn)
+
+```text
+Operational DB is stamped with rejected m12 and requires a separate,
+Codex-reviewed reconciliation step after the corrected migration is accepted.
+```
+
+`data/cang_vu.db` was **not touched** this turn (read-only check only: version
+`m12f0f000012`, 59 vessels, 0 declarations). No backup database was modified. No
+Alembic upgrade/downgrade was run against the operational database.
+
+### Boundary
+
+- No parser, import API, dashboard or UI (H3/H4). Not started.
+- No raw workbook, render, database or backup committed; `templates/*.xlsx` and
+  `data/` remain untracked/gitignored. No CVF-core change.
+
+### Next governed move
+
+- Codex review round 4 of the diff, migration and tests. Do not commit, do not
+  touch the operational DB, and do not start H3/H4 before this review passes.
+
+---
+
+## Historical TOS H2 finalization — role model and DB reconciliation — 2026-07-18
+
+- **Status**: H2 CLOSED / ACCEPTED for local/pilot scope. Codex review round 4
+  accepted the implementation; this owner-authorized finalization applied the
+  final role model and reconciled the operational database. Committed locally on
+  one commit; not pushed. H3/H4 not started. Production readiness / FREEZE not
+  claimed.
+- **Phase**: BUILD → REVIEW complete for local scope.
+- **Risk Level**: R2. Owner authorization: EXPLICIT.
+- **Order**: `docs/CLAUDE_H2_FINALIZATION_PLATFORM_ADMIN_AND_DB_RECONCILIATION_20260718.md`.
+
+### Superseding statement
+
+The earlier handoff sections state the operational DB was stamped with the
+rejected old m12 and needed a separate reconciliation. **That is now done.** The
+operational database has been reconciled from the clean pre-m12 backup to the
+accepted `m12f0f000012`. The earlier "rejected m12" statements are retained above
+only as historical context.
+
+### Final role model
+
+`PLATFORM_ADMIN`, `PORT_STAFF`, `CUSTOMER` (no tenant-local ADMIN):
+
+- `PLATFORM_ADMIN`: product-wide administration (reporting units, memberships,
+  cross-tenant audit, migrations, backup/integration config, tenant identity);
+  performs a tenant/historical operation only with an explicit platform context.
+- `PORT_STAFF`: operates a reporting unit only with FK-backed membership; port
+  declaration review/approval, port register, and (in H3/H4) historical import.
+- `CUSTOMER`: customer-scoped; no internal TOS/historical authority.
+
+Historical actor/reviewer authorization is now explicit: `PORT_STAFF` needs
+membership in the active unit; `PLATFORM_ADMIN` needs `platform_context=True`
+(membership neither required nor sufficient); a missing/inactive unit, CUSTOMER,
+legacy `ADMIN` and inactive users are rejected. The prior "ADMIN with zero
+memberships" inference was removed. The existing operational `admin` account was
+converted to `PLATFORM_ADMIN` by a role-only data migration in `m12` (no password
+hash read or changed; reversible on downgrade).
+
+### RBAC surface updated
+
+`backend/rbac.py` role enum; every `require_roles(...)` in `backend/app.py`
+(system/maintenance endpoints → PLATFORM_ADMIN-only; operational endpoints keep
+PLATFORM_ADMIN as allowed platform support); dashboard attention-queue map;
+`backend/historical.py` validators; `frontend/app.js` role label
+(`PLATFORM_ADMIN:'Platform admin'`) and visibility checks; `scripts/bootstrap_admin.py`
+and `scripts/generate_appendix_operational_review.py`; and the test fixtures/mirrors.
+
+### Controlled DB reconciliation evidence (no secrets / no personal data)
+
+Files (absolute paths inside this repo's `data/`):
+
+- Operational DB: `data/cang_vu.db`.
+- Clean source backup (pre-m12): `data/backups/cang_vu-20260718-021834-pre-m12-historical.db`,
+  SHA-256 `136389375c15d461e994094c9eb279b8e8f59e2ada78237c988f7038a96dce02`, alembic `l11f0f000011`.
+- Immutable safety backup of the current DB before replacement:
+  `data/backups/cang_vu-20260718-105213-pre-h2-final-reconcile.db`,
+  SHA-256 `6087768510af18586d38a792f8e148d426687c5812f95e72822031e2b5b45414`
+  (hash-matched the pre-replacement operational DB).
+
+Inventory + logical live-data equality gate (read-only): both DBs
+`integrity_check = ok`, `foreign_key_check` clean. All 14 non-H2 live tables
+compared by column set, row count and deterministic ordered row hashes are
+logically identical between the current operational DB and the clean backup; the
+only operational-only tables were the six rejected old-m12 historical tables.
+Before reconciliation: 59 vessels, 0 declarations, 8 audit events, `admin`
+active legacy `ADMIN`.
+
+Staging (disposable copies of the clean backup, Alembic pointed at staging only):
+confirmed `l11f0f000011` before upgrade; applied corrected `m12`. Acceptance gate
+passed — alembic current `m12f0f000012`, exactly one head, `integrity_check = ok`,
+`foreign_keys = 1`, `foreign_key_check` clean; reporting_units + both membership
+tables + composite tenant FKs + audit tenant FK present; all historical/membership/
+reporting_units tables empty (no seed, no Tân Thuận row); 59 vessels retained;
+every live table matches the clean source; `admin` now active `PLATFORM_ADMIN`
+with zero legacy `ADMIN` and unchanged password hashes. A second disposable copy
+passed upgrade → downgrade (restored `l11`, legacy `ADMIN`, 59 vessels, no H2
+tables) → re-upgrade.
+
+Replacement: pre-replacement operational SHA-256 re-confirmed equal to the safety
+backup; `data/cang_vu.db` replaced by an exact-file copy of the accepted staging;
+post-replacement operational SHA-256 `555928567b833eb300c598af6d370918761de50d9c5a09d88dc57d5d8f2a609b`.
+Post-replacement read-only validation passed: alembic `m12f0f000012`, integrity
+`ok`, FK check clean, 59 vessels, 0 declarations, 8 audit events, all H2/membership/
+reporting_units tables present and empty, `admin` active `PLATFORM_ADMIN`, no legacy
+`ADMIN`.
+
+Before → after operational counts: vessels 59 → 59; declarations 0 → 0;
+audit_events 8 → 8. Alembic before/after (schema identity): rejected old `m12`
+(organization-based) → accepted `m12f0f000012` (ReportingUnit/membership-based).
+
+### Evidence (tests)
+
+- `python -m pytest -q tests/test_historical_import.py`: 53 passed.
+- `python -m pytest -q`: 149 passed. `git diff --check`: PASS. One Alembic head.
+
+### Boundary
+
+- No parser, import API, dashboard or UI (H3/H4). Not started. No TOS/workbook
+  data imported.
+- Only `data/cang_vu.db` was replaced. No backup, workbook, staging/review DB,
+  render, CVF-core or out-of-repo file was modified. Databases and workbooks
+  remain untracked/gitignored. Nothing pushed.
+
+---
+
+## Historical TOS H2 correction R4 — live tenant context — 2026-07-18
+
+- **Status**: CLOSED / ACCEPTED for local/pilot scope after independent Codex
+  completion and verification. This section supersedes the earlier statement
+  that live operational endpoints merely allowed PLATFORM_ADMIN by role.
+- **Phase**: BUILD → REVIEW complete. Production readiness / FREEZE not claimed.
+- **Risk**: R2; database reconciliation was explicitly authorized by the owner.
+- **Order**: `docs/CLAUDE_H2_CORRECTION_ORDER_R4_TENANT_CONTEXT_20260718.md`.
+
+### Implemented boundary
+
+- `backend/tenant.py` is the shared fail-closed live-operation guard.
+  `PORT_STAFF` needs an FK-backed membership in the explicit active unit;
+  `PLATFORM_ADMIN` must provide explicit `X-Reporting-Unit-ID`; CUSTOMER remains
+  Organization-scoped. Missing, malformed, unknown and inactive contexts fail.
+- Live vessel, crew, declaration, workflow, import/export, dashboard, reports,
+  report adjustments and prepared integration payloads are scoped server-side.
+  Platform backup/tenant-management operations remain platform-wide.
+- Forward migration `n13f0f000013` adds `reporting_unit_vessels` and tenant
+  provenance to report adjustments, import jobs and sync jobs. The legacy
+  `vessels.is_port_tracked` field is compatibility-only, not a tenant boundary.
+- `frontend/app.js` sends the selected unit on tenant calls. PORT_STAFF may use
+  only membership units; PLATFORM_ADMIN deliberately selects one. The UI has no
+  implicit all-ports tenant view and reloads/clears stale state on context change.
+- `scripts/bootstrap_reporting_unit.py` is argument-driven, idempotent and
+  dry-run by default. It aborts on ambiguous identity/membership and never
+  hard-codes usernames or a commercial port into the reusable migration.
+
+### Staging and operational reconciliation evidence
+
+Staging was made through SQLite backup API from the m12 operational database.
+Upgrade to n13 plus dry-run/apply bootstrap passed: `integrity_check=ok`, runtime
+`foreign_keys=1`, `foreign_key_check` empty, 59 vessels retained, one unit, one
+PORT_STAFF membership, two Organization links, 59 register links and four scoped
+existing import jobs. The disposable staging DB and manifest were removed after
+evidence capture.
+
+Fresh pre-R4 operational backup (gitignored):
+
+- `data/backups/cang_vu-20260718-123933-pre-r4-tenant-context.db`
+- SHA-256 `f01e0e2aa4ea865fc09b1ca1ac670b836f5987510bfe35d745bb11dc3ff46d33`
+- revision `m12f0f000012`; 59 vessels; 0 declarations; 8 audit events;
+  integrity `ok`; FK check clean.
+
+Operational database after accepted staging gates and bootstrap:
+
+- SHA-256 `f2baa3f283706d0680a797b5b192ffdfb83cf62c15d11004d9fb11d13342c822`
+- revision `n13f0f000013`; runtime `foreign_keys=1`; integrity `ok`; FK check clean;
+- 59 vessels, 0 declarations and 9 audit events (one explicit bootstrap audit);
+- Cảng Tân Thuận unit `TAN-THUAN`: one `nhanviencang` PORT_STAFF membership,
+  two Organization links and 59 register links;
+- all four existing import jobs mapped to the unit;
+- `admin` remains active PLATFORM_ADMIN; password hashes were not read or changed.
+
+Before → after business counts: vessels 59 → 59; declarations 0 → 0. The only
+new audit row records the controlled legacy-unit bootstrap.
+
+### Verification
+
+- `python -m pytest -q`: **158 passed**, one retained openpyxl warning.
+- Two-unit HTTP tests prove membership rejection, explicit platform context,
+  inactive/malformed context rejection, list/export/dashboard isolation,
+  cross-unit mutation/workflow denial, independent port registers, correct
+  tenant audit and CUSTOMER denial from internal port operations.
+- Bootstrap dry-run/apply/idempotency has an automated regression test.
+- Python compile checks and `git diff --check`: pass; Alembic has one head.
+
+### Boundary and next move
+
+- No raw TOS workbook was modified, imported or committed. Databases/backups are
+  gitignored. The four raw `templates/*.xlsx` files remain intentionally
+  untracked.
+- H3 parser/import API and H4 historical dashboard UI remain not started.
+
+---
+
+## Historical TOS H3A — parser and import API — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED for audited TOS Berth, TOS container-detail
+  and legacy 35-column PL.03. H3 remains open only for owner-deferred PL.01/PL.02
+  samples and their monthly/YTD semantics.
+- **Phase**: BUILD; R2. No production-readiness/FREEZE claim.
+
+### Implemented
+
+- `backend/historical_tos_parser.py`: memory-bounded, filename-independent
+  structural detection; strict ATB/ATD, call key, TEU, F/E, trade, movement and
+  tonne transforms; safe errors; raw/cell provenance. Hidden data is included.
+- `backend/historical_api.py`: tenant-scoped preview, paginated rows/history,
+  confirm, idempotency, explicit revision conflict decision and audited vessel
+  link resolution. Source copies are checksum-addressed outside Git.
+- Migration `o14f0f000014` permits Detail-to-Berth links across immutable source
+  imports while preserving the composite reporting-unit FK. Active cargo links
+  follow a confirmed corrected Berth revision instead of a superseded call.
+- Legacy PL.03 is preserved as reported facts; its ETA-derived AG/AH values do
+  not override TOS ATB/ATD. No declaration/master/live record is synthesized.
+
+### Workbook evidence reused, not re-audited
+
+The committed Desktop Codex audit/mapping remained the contract. A minimal
+read-only parser verification reproduced 40 Berth rows, 1,067 Detail rows, 38
+matched cargo-call keys, two calls without Detail and 73 PL.03 rows. Aggregates
+match the audit exactly: load E 79/149 TEU/351.40 t; load F 225/443/2,984.37 t;
+unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
+
+### Database and regression evidence
+
+- Pre-H3 backup: `data/backups/cang_vu-20260718-131730-pre-h3.db`, SHA-256
+  `f01b5c1eebf3ddd282cd8510963e74afa1c265372ad65f247bef9d656efad1ea`.
+- Staging upgrade, downgrade to n13 and re-upgrade passed: integrity `ok`, zero
+  FK errors, one head `o14f0f000014`, 59 vessels and 9 audit events retained.
+- The downgrade fails closed once real cross-import TOS links exist because n13
+  cannot represent them; it never silently nulls or rewrites imported evidence.
+- Operational DB upgraded only after staging passed. Post-upgrade SHA-256
+  `e34390aa9c99dccd948974b7732ddf709a171031496dabbf1bf43e2ebe2b1ddf`;
+  integrity `ok`, zero FK errors, 59 vessels, 0 declarations, 9 audit events,
+  one unit, one staff membership, two Organization links and 59 register links.
+- `python -m pytest -q`: **163 passed**, one retained openpyxl warning.
+
+### Boundary / next move
+
+- No source workbook was changed or committed; no workbook/database/backup is
+  in Git and nothing was pushed.
+- H4 can now implement the separate historical import workspace and review
+  queues. PL.01/PL.02 parser completion remains deferred until representative
+  source files are supplied, as approved by the owner.
+
+---
+
+## Historical TOS H4A — import workspace UI — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally. H4 remains open for historical,
+  live and combined dashboard/report-source selection (H4B).
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+
+### Delivered
+
+- Import now has separate `Dữ liệu vận hành` and `Lịch sử / TOS` tab panels.
+  The historical boundary explicitly says it does not alter declarations,
+  vessel master, crew or current operational data.
+- H3A APIs are exposed as a four-step workflow: structural detection, preview,
+  explicit overlap decision and confirmation. Source kind, ATB month, mapping,
+  checksum, counts and paginated row evidence are visible before activation.
+- Import history shows revision/supersession state and lets staff reopen a
+  pending preview. Cancel is a server-side audited transition, not a client-only
+  dismissal. Conflict actions say “keep active” versus “activate new revision”
+  and require a reason for the latter.
+- TOS vessel-link review displays the raw TOS name, suggested/selected register
+  vessel and explicit accept/reject actions. Backend detail, queue and cancel
+  endpoints remain tenant-scoped and reject cancelled/superseded mutations.
+- Layout is responsive and keyboard-accessible without replacing the existing
+  static HTML/CSS/JS architecture or adding browser storage as business truth.
+
+### Verification and boundary
+
+- `python -m pytest -q`: **164 passed**, one retained openpyxl warning.
+- Static HTML parser: 138 ids, zero duplicates. Python compile and diff checks
+  pass. Browser visual QA was not requested and was not claimed.
+- No workbook/database/backup is included in Git; no deployment and no push.
+- Next move: H4B source-aware historical/live/combined dashboard and overlap
+  coverage indicators. PL.01/PL.02 remain owner-deferred pending real samples.
+
+---
+
+## Historical TOS H4B — source-aware reporting dashboard — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally. H4 owner UAT remains open.
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+
+### Delivered
+
+- Extended the existing analytics API and UI with explicit `LIVE`, `LỊCH SỬ`
+  and `KẾT HỢP` modes. Live-approved remains the default and the only mode
+  available to CUSTOMER; internal modes require a tenant-resolved port scope.
+- Historical call counts use active validated Berth rows by TOS ATB. Tonnes and
+  TEU use active, validated, matched Detail rows. PL.03 ETA-era times are not
+  used to reconstruct the trend.
+- API and UI expose monthly coverage, source badges, warning text and
+  completeness. Review-pending or absent facts return `null` and render as a
+  dash rather than a misleading zero.
+- Combined totals fail closed when a month has both live-approved declarations
+  and active historical coverage. The UI hides totals and export; the server
+  independently rejects combined XLSX with `409`.
+- Follow-up UI polish moved the reporting-unit picker out of the top bar into a
+  compact sidebar button. The active unit name stays visible; clicking opens a
+  tenant-safe list with menu-radio semantics, arrow/Escape keyboard handling
+  and no change to the server-owned `X-Reporting-Unit-ID` boundary.
+- Platform Admin can now choose `+ Tạo đơn vị mới` in that menu. The audited
+  server endpoint validates and normalizes a unique name/code, creates an empty
+  active ReportingUnit and selects it after reload. PORT_STAFF/CUSTOMER are
+  denied and no memberships, organizations or tenant data are copied.
+- The picker was then reduced to task labels only: active unit name, selectable
+  unit names and `+ Tạo đơn vị mới`. Unit code and explanatory role captions
+  are hidden from this menu; control/row sizing now matches the main sidebar.
+
+### Verification and boundary
+
+- `python -m pytest -q`: **168 passed**, one retained openpyxl warning. Targeted
+  regression covers historical aggregation, empty-container weight,
+  source authorization, partial coverage, combined no-overlap, overlap blocking
+  and export rejection.
+- Python compilation and `git diff --check` pass. Browser visual QA, deployment
+  and owner UAT are not claimed.
+- Raw workbooks remain untracked and untouched; no database/backup is committed
+  and nothing is pushed.
+
+---
+
+## Historical TOS H4C — actionable batch import — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally; owner visual UAT remains open.
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+- The historical picker accepts multiple workbooks in one user action. Each
+  workbook retains a separate checksum-backed import receipt and revision chain.
+- Review/rejected row filters, warning reasons and explicit correction locations
+  replace the former unexplained orange counts. Vessel matches are resolved in
+  the link queue below the table; workbook value errors require source repair
+  and re-upload.
+- Berth confirmation reconciles pending PREVIEWED Detail receipts and refreshes
+  their counts, preventing upload-order-only unmatched warnings.
+- New API behavior: row preview supports `status=VALID|REVIEW|REJECTED` and Berth
+  and Detail rows expose warning codes alongside provenance.
+- Regression: 169 passed with one retained openpyxl warning. Raw workbooks
+  remain untracked; do not include them, databases or backups in Git. Next move
+  is owner visual UAT; commit remains local only.
+
+### Decimal-comma correction
+
+- The v1 parser incorrectly classified PL.03 text values such as `331,47` as
+  invalid. v2 accepts Vietnamese/English decimal and grouping representations,
+  retains the original text in provenance and stores `331.47` numerically.
+- Mapping identifiers are now `tos_cargo_detail_v2` and
+  `reported_pl03_35col_historical_v2`; transform receipt is
+  `KBCV-HIST-TOS-1.1`. This deliberately bypasses stale checksum idempotency
+  from a prior v1 preview when the same source workbook is uploaded again.
+- Direct read-only source check: PL.03 now yields 73 valid and zero review rows;
+  full regression is 171 passed with one retained openpyxl warning. No workbook
+  was modified or staged for Git.
+
+### Warning lifecycle correction
+
+- A warning remains active only while its row is REVIEW/REJECTED. The original
+  code remains in provenance after resolution but is no longer displayed as a
+  current error on a VALID row.
+- Berth confirmation reconciles cargo receipts already confirmed into REVIEW as
+  well as PREVIEWED receipts. The current audited source pair has 38 unique
+  Detail call keys and all 1,067 rows match exactly one Berth call.
+- Same-checksum/new-mapping receipts now enter the explicit revision flow and
+  supersede the active stale mapping even when reporting period is unavailable.
+- Regression: 172 passed with one retained openpyxl warning. No runtime database
+  mutation, deployment or push was performed.
+
+## Historical TOS H4F — reconcile on reopen and synthesized PL.03 — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally; owner workbook UAT remains open.
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+- Runtime database audit explains the persistent 1,067 Detail warnings: Berth
+  import `#1` was only PREVIEWED and has no `IMPORT_CONFIRMED` audit event.
+  Restart correctly does not convert an unconfirmed source into active facts.
+- Upload order is no longer a workflow dependency. Berth confirmation rechecks
+  existing Detail receipts, and the history view calls an idempotent tenant-
+  scoped reconcile endpoint to repair stale derived link/count/status state.
+  The final Berth confirmation control is sticky and explicitly says it will
+  link Detail.
+- Added `GET /api/historical-imports/exports/pl03?reporting_period=YYYY-MM`.
+  It generates the official PL.03 template from database facts: TOS ATB/ATD and
+  matched Detail cargo are authoritative; canonical vessel register fields win;
+  legacy manual PL.03 is only a static-dimension fallback. Empty shell weight
+  remains tonnes while TEU is split into full/empty columns.
+- Source audit evidence remains 1,067/1,067 Detail rows uniquely matchable to 38
+  Berth calls. Compilation and `git diff --check` pass; full regression is 173
+  passed with one retained openpyxl warning. Raw workbooks, runtime databases
+  and backups remain outside Git; nothing is pushed.
+
+### H4F UI consolidation
+
+- Historical import controls now share one typography/alignment scale. Legacy
+  PL.03 displays the single active Berth period as its effective reporting
+  period without changing source provenance; history totals come from all
+  active receipts rather than the current page only.
+- Reporting UI was reduced to operational labels, selectors, compact coverage,
+  KPI and charts. Persistent instructional copy moved out of the working view;
+  only action-blocking states remain visible.
+- Frontend cache version is `1.6.3`. Full regression: 173 passed with one
+  retained openpyxl warning. Raw TOS workbooks remain ignored and outside Git.
+- CI follow-up: `test_fail_fast_outside_test_mode` now removes and restores both
+  `TEST_DATABASE_URL` and the workflow-provided `SECRET_KEY`, so it exercises
+  the intended unsafe-default branch under the same environment as GitHub
+  Actions. Exact CI environment regression: 173 passed.
+- The PowerShell secret guard now treats `git grep` exit `1` as the documented
+  no-match success case, fails on actual findings or scanner errors, and exits
+  zero explicitly after a clean scan.

@@ -1,14 +1,32 @@
 import json
 import os
+import sqlite3
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from .models import Base, AuditEvent
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
+
+
+@event.listens_for(Engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    """Enforce foreign keys on every SQLite connection.
+
+    SQLite disables foreign-key enforcement by default, so declared foreign keys
+    and ON DELETE CASCADE are silently ignored. This global connect hook turns
+    enforcement on for the application engine, the Alembic migration engine and
+    any test engine created in this process. It is scoped to SQLite connections
+    only, so a non-SQLite backend is unaffected.
+    """
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "data" / "cang_vu.db"
@@ -41,7 +59,10 @@ def now_iso() -> str:
 def audit(
     db, entity_type: str, entity_id: int, action: str, summary: str,
     *, actor_user_id: int | None = None, organization_id: int | None = None,
+    reporting_unit_id: int | None = None,
 ) -> None:
+    # ``organization_id`` is always a customer Organization; a Port is recorded
+    # separately via ``reporting_unit_id`` so the two are never conflated.
     event = AuditEvent(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -49,6 +70,7 @@ def audit(
         summary=summary[:500],
         actor_user_id=actor_user_id,
         organization_id=organization_id,
+        reporting_unit_id=reporting_unit_id,
         correlation_id=correlation_id.get(),
         created_at=now_iso()
     )

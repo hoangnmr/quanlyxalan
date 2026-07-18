@@ -39,7 +39,7 @@
       <nav class="data-nav" aria-label="Dữ liệu và báo cáo">
         <p class="nav-label">Dữ liệu</p>
         <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import Excel</a>
-        <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động Cảng</a>
+        <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động</a>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-user">
@@ -308,7 +308,7 @@
       const route = a.dataset.route;
       document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === route));
       document.querySelectorAll('nav a').forEach(l => l.classList.toggle('active', l === a));
-      const names = {dashboard:'Tổng quan khai báo',declarations:'Phiếu khai báo',vessels:'Hồ sơ phương tiện',crew:'Danh sách thuyền viên',import:'Import dữ liệu Excel',reports:'Báo cáo hoạt động Cảng'};
+      const names = {dashboard:'Tổng quan khai báo',declarations:'Phiếu khai báo',vessels:'Hồ sơ phương tiện',crew:'Danh sách thuyền viên',import:'Import dữ liệu Excel',reports:'Báo cáo hoạt động'};
       document.getElementById('page-context').textContent = names[route];
       document.querySelector('.sidebar').classList.remove('open');
     }));

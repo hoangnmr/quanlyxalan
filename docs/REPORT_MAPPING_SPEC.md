@@ -1,7 +1,7 @@
 # Maritime Report Mapping Specification
 
 - Spec id: `KBCV-REPORT-MAP-1.1`
-- Status: BUSINESS RULES APPROVED; DESIGN DETAILS PENDING
+- Status: IMPLEMENTED; SPREADSHEET IMPLEMENTATION GATE PASS
 - Initial approval date: 2026-07-11
 - Owner reconfirmation: 2026-07-17
 - Reporting unit: **Cảng Tân Thuận**
@@ -28,7 +28,10 @@
 
 ## Eligible declarations
 
-- Include only declarations in `APPROVED` workflow state.
+- PL.01 and PL.03 row population is the canonical Salan master set plus any
+  unmatched eligible call; only declarations in `APPROVED` workflow state may
+  populate activity columns. Static-only rows keep activity blank.
+- PL.02 remains activity-only and includes only `APPROVED` declarations.
 - Exclude `DRAFT`, pending review states, `CHANGES_REQUESTED`, cancelled and
   `REVOKED` declarations.
 - Report queries remain tenant-scoped for CUSTOMER users.
@@ -100,10 +103,10 @@
 - All eligible approved customer declarations and cargo items contributing to
   that vessel are preserved as source facts and aggregated into the applicable
   cargo-category columns.
-- T1 DESIGN must define deterministic representation for non-additive PL.03
-  fields such as multiple cargo names, dates, ports and agents, plus drill-down
-  reconciliation. No exporter implementation is authorized before that rule is
-  approved.
+- Non-additive PL.03 fields such as cargo names, dates, ports and agents retain
+  distinct nonblank values in chronological order and join them with a line
+  break in the same cell. Source declarations remain the drill-down and
+  reconciliation records.
 - Appendix 2 totals both eligible load and unload/import and export activity,
   grouped by the approved cargo categories, without double counting.
 - Appendix 2 provides selected-month totals and January-through-selected-month

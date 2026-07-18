@@ -11,6 +11,7 @@ IMPORTANT: os.environ["TEST_DATABASE_URL"] is set BEFORE any backend imports so 
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
 import time
@@ -26,10 +27,15 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 # ── Now import backend (picks up TEST_DATABASE_URL) ───────────────────────────
 import pytest
 from fastapi.testclient import TestClient
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 import backend.app as app_module
 
-from backend.models import AuditEvent, Base, Declaration, ImportJob, User, Organization, Vessel, VesselOperatingProfile
+from backend.models import (
+    AuditEvent, Base, Declaration, ImportJob, ReportAdjustment, User, Organization, Vessel,
+    VesselOperatingProfile, ReportingUnit, ReportingUnitOrganization, ReportingUnitUser,
+    ReportingUnitVessel,
+    HistoricalCargoRow, HistoricalPortCall, HistoricalReportImport,
+)
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
 from backend.app import app, get_db, DEMO_ORGANIZATION_TAX_CODE, remove_demo_data_for_real_input
@@ -65,7 +71,7 @@ def _seed_user() -> None:
 
         # Seed users
         user_data = [
-            ("testuser", "ADMIN", None),
+            ("testuser", "PLATFORM_ADMIN", None),
             ("customeruser", "CUSTOMER", org.id),
             ("portstaff", "PORT_STAFF", None),
         ]
@@ -81,10 +87,39 @@ def _seed_user() -> None:
                     created_at=now_iso(),
                 ))
         db.commit()
+
+        # R4: seed the single ReportingUnit this legacy test suite operates against,
+        # link Test Org to it and give portstaff membership so the tenant-context
+        # guard does not lock out pre-existing role-only test fixtures.
+        unit = db.query(ReportingUnit).filter(ReportingUnit.code == "TEST-UNIT").first()
+        if not unit:
+            unit = ReportingUnit(
+                name="Test Reporting Unit", code="TEST-UNIT", is_active=1,
+                created_at=now_iso(), updated_at=now_iso(),
+            )
+            db.add(unit)
+            db.commit()
+            db.refresh(unit)
+        if not db.query(ReportingUnitOrganization).filter_by(reporting_unit_id=unit.id, organization_id=org.id).first():
+            db.add(ReportingUnitOrganization(
+                reporting_unit_id=unit.id, organization_id=org.id, created_at=now_iso(),
+            ))
+        port_user = db.query(User).filter(User.username == "portstaff").first()
+        if port_user and not db.query(ReportingUnitUser).filter_by(reporting_unit_id=unit.id, user_id=port_user.id).first():
+            db.add(ReportingUnitUser(
+                reporting_unit_id=unit.id, user_id=port_user.id, created_at=now_iso(),
+            ))
+        db.commit()
+        global TEST_REPORTING_UNIT_ID
+        TEST_REPORTING_UNIT_ID = unit.id
+        global TEST_ORGANIZATION_ID
+        TEST_ORGANIZATION_ID = org.id
     finally:
         db.close()
 
 
+TEST_REPORTING_UNIT_ID: int | None = None
+TEST_ORGANIZATION_ID: int | None = None
 _seed_user()
 
 
@@ -100,7 +135,10 @@ def auth_headers(client):
     res = client.post("/api/auth/login", json={"username": "testuser", "password": "testpass"})
     assert res.status_code == 200, f"Login failed: {res.text}"
     token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    # R4: PLATFORM_ADMIN must supply an explicit ReportingUnit context for
+    # tenant-bound operations; pre-existing tests operate against the single
+    # seeded Test Reporting Unit.
+    return {"Authorization": f"Bearer {token}", "X-Reporting-Unit-ID": str(TEST_REPORTING_UNIT_ID)}
 
 
 @pytest.fixture(scope="module")
@@ -116,7 +154,7 @@ def port_staff_headers(client):
     res = client.post("/api/auth/login", json={"username": "portstaff", "password": "testpass"})
     assert res.status_code == 200, f"Login failed: {res.text}"
     token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": f"Bearer {token}", "X-Reporting-Unit-ID": str(TEST_REPORTING_UNIT_ID)}
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -145,6 +183,54 @@ def _minimal_declaration(**overrides) -> dict:
     base.update(overrides)
     return base
 
+
+def _historical_fixture(headers: dict[int, str], rows: list[dict[int, object]]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "User renamed sheet"
+    for column, value in headers.items():
+        sheet.cell(1, column, value)
+    for row_number, row in enumerate(rows, 2):
+        for column, value in row.items():
+            sheet.cell(row_number, column, value)
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def _historical_pl03_fixture(rows: list[dict[int, object]]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "PL03 user renamed"
+    sheet.cell(5, 1, "STT")
+    sheet.cell(5, 2, "Tên PTTND")
+    sheet.cell(5, 3, "Số đăng ký")
+    for row_number, row in enumerate(rows, 10):
+        for column, value in row.items():
+            sheet.cell(row_number, column, value)
+    sheet.cell(9, 35, "")
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def _seed_historical_registered_vessel(name: str) -> None:
+    db = SessionLocal()
+    try:
+        vessel = Vessel(
+            organization_id=TEST_ORGANIZATION_ID, name=name,
+            registration_no=_reg(), vessel_type="Chở hàng khô", vessel_class="VR-SI",
+            created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add(vessel)
+        db.flush()
+        db.add(ReportingUnitVessel(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, vessel_id=vessel.id,
+            created_at=now_iso(),
+        ))
+        db.commit()
+    finally:
+        db.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. HEALTH + STATIC FRONTEND
@@ -192,8 +278,19 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.1.9' in res.text
-    assert '/app.js?v=1.2.0' in res.text
+    assert '/styles.css?v=1.6.3' in res.text
+    assert '/app.js?v=1.6.3' in res.text
+    assert 'id="analytics-source-controls"' in res.text
+    assert 'data-source="historical"' in res.text
+    assert 'id="analytics-coverage"' in res.text
+    assert 'id="analytics-combined-blocked"' in res.text
+    assert 'id="sidebar-unit-context"' in res.text
+    assert 'id="reporting-unit-trigger"' in res.text
+    assert 'id="reporting-unit-menu"' in res.text
+    assert 'id="reporting-unit-dialog"' in res.text
+    assert 'id="reporting-unit-form"' in res.text
+    assert 'id="reporting-unit-select"' not in res.text
+    assert 'id="reporting-unit-required"' in res.text
     assert 'data-page="port-register"' in res.text
     assert 'id="export-port-register"' in res.text
     assert 'id="import-port-register"' in res.text
@@ -202,7 +299,7 @@ def test_static_frontend(client):
     assert 'id="external-integration-panel" class="panel integration-panel"' in res.text
     assert 'id="integration-admin-actions" class="integration-state" hidden' in res.text
     assert 'class="primary-nav"' in res.text and 'class="data-nav"' in res.text
-    assert "Báo cáo hoạt động Cảng" in res.text
+    assert "Báo cáo hoạt động" in res.text
     assert "Báo cáo Cảng vụ" not in res.text
     assert 'class="panel action-panel"' not in res.text
     app_js = client.get("/app.js").text
@@ -218,11 +315,14 @@ def test_static_frontend(client):
     assert "step-error-summary" in app_js
     assert "port_approval" in app_js
     assert "cv_approval" not in app_js
-    assert "loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month')" in app_js
+    assert "loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month', state.analyticsSource)" in app_js
     assert "CUSTOMER:'User'" in app_js
     assert "PORT_STAFF:'Port staff'" in app_js
-    assert "ADMIN:'Admin'" in app_js
-    assert "if (state.currentUser?.role === 'ADMIN') loadIntegration();" in app_js
+    assert "PLATFORM_ADMIN:'Platform admin'" in app_js
+    assert "'X-Reporting-Unit-ID': String(state.activeReportingUnitId)" in app_js
+    assert "async function loadReportingUnitContext()" in app_js
+    assert "Hệ thống không có chế độ xem gộp nhiều cảng" in app_js
+    assert "if (state.currentUser?.role === 'PLATFORM_ADMIN') loadIntegration();" in app_js
     assert "btn.hidden = !canCreateDeclaration" in app_js
     assert "!['declarations', 'crew'].includes(link.dataset.route)" in app_js
     assert "$('#user-display').innerHTML = `<span class=\"role-pill\"" in app_js
@@ -255,6 +355,67 @@ def test_static_frontend(client):
     assert ".integration-readiness" in styles_css
     assert "#crew-dialog { width: min(720px" in styles_css
     assert "#crew-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }" in styles_css
+
+
+def test_platform_admin_can_create_empty_reporting_unit(
+    client, auth_headers, port_staff_headers, customer_headers,
+):
+    suffix = uuid.uuid4().hex[:8].upper()
+    name = f"Test Port {suffix}"
+    code = f"PORT-{suffix}"
+    unit_id = None
+    try:
+        assert client.post(
+            "/api/reporting-units", headers=port_staff_headers,
+            json={"name": name, "code": code},
+        ).status_code == 403
+        assert client.post(
+            "/api/reporting-units", headers=customer_headers,
+            json={"name": name, "code": code},
+        ).status_code == 403
+        invalid = client.post(
+            "/api/reporting-units", headers=auth_headers,
+            json={"name": "X", "code": "mã có dấu"},
+        )
+        assert invalid.status_code == 422
+
+        created = client.post(
+            "/api/reporting-units", headers=auth_headers,
+            json={"name": f"  {name}  ", "code": code.lower()},
+        )
+        assert created.status_code == 201, created.text
+        body = created.json()
+        unit_id = body["id"]
+        assert body == {"id": unit_id, "name": name, "code": code, "is_active": True}
+
+        duplicate_code = client.post(
+            "/api/reporting-units", headers=auth_headers,
+            json={"name": f"Other {suffix}", "code": code},
+        )
+        assert duplicate_code.status_code == 409
+        listed = client.get("/api/reporting-units", headers=auth_headers)
+        assert any(item["id"] == unit_id for item in listed.json()["items"])
+
+        db = SessionLocal()
+        try:
+            event = db.query(AuditEvent).filter_by(
+                entity_type="REPORTING_UNIT", entity_id=unit_id, action="CREATE",
+            ).one()
+            assert event.reporting_unit_id == unit_id
+            assert event.actor_user_id is not None
+            assert db.query(ReportingUnitOrganization).filter_by(reporting_unit_id=unit_id).count() == 0
+            assert db.query(ReportingUnitUser).filter_by(reporting_unit_id=unit_id).count() == 0
+        finally:
+            db.close()
+    finally:
+        if unit_id:
+            db = SessionLocal()
+            try:
+                db.query(AuditEvent).filter_by(reporting_unit_id=unit_id).delete()
+                db.query(ReportingUnit).filter_by(id=unit_id).delete()
+                db.commit()
+            finally:
+                db.close()
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():
@@ -384,6 +545,20 @@ def test_vessel_list(client, auth_headers):
     assert isinstance(res.json(), list)
 
 
+def test_vessel_lists_use_the_same_order(client, port_staff_headers):
+    vessels = client.get("/api/vessels", headers=port_staff_headers)
+    port_register = client.get("/api/port-vessel-register", headers=port_staff_headers)
+    assert vessels.status_code == 200
+    assert port_register.status_code == 200
+
+    tracked_ids = [item["id"] for item in port_register.json()["items"]]
+    tracked_id_set = set(tracked_ids)
+    vessel_order_for_tracked_items = [
+        item["id"] for item in vessels.json() if item["id"] in tracked_id_set
+    ]
+    assert vessel_order_for_tracked_items == tracked_ids
+
+
 def test_vessel_update(client, auth_headers):
     reg_no = _reg()
     res = client.post("/api/vessels", json={
@@ -391,6 +566,7 @@ def test_vessel_update(client, auth_headers):
         "registration_no": reg_no,
         "vessel_type": "Tàu hàng khô",
         "vessel_class": "VR-SI",
+        "organization_name": "Test Org",
     }, headers=auth_headers)
     assert res.status_code == 200
     vid = res.json()["id"]
@@ -413,6 +589,7 @@ def test_vessel_stale_version_rejected(client, auth_headers):
         "registration_no": reg_no,
         "vessel_type": "Tàu hàng khô",
         "vessel_class": "VR-SI",
+        "organization_name": "Test Org",
     }, headers=auth_headers)
     assert created.status_code == 200
     vessel = created.json()
@@ -468,6 +645,7 @@ def test_vessel_verify_registry(client, auth_headers):
         "registration_no": _reg(),
         "vessel_type": "Tàu hàng khô",
         "vessel_class": "VR-SI",
+        "organization_name": "Test Org",
     }, headers=auth_headers)
     assert res.status_code == 200
     vid = res.json()["id"]
@@ -485,7 +663,7 @@ def test_vessel_verify_registry(client, auth_headers):
 
 def test_crew_create(client, auth_headers):
     payload = {
-        "vessel_id": 999999,
+        "organization_id": TEST_ORGANIZATION_ID,
         "full_name": "Nguyễn Văn Thuyền",
         "crew_role": "Thuyền trưởng",
         "birth_date": "1985-04-12",
@@ -502,14 +680,14 @@ def test_crew_create(client, auth_headers):
     assert data["vessel_id"] is None
 
 
-def test_port_staff_cannot_manually_assign_or_edit_crew(client, port_staff_headers):
+def test_port_staff_crew_create_requires_target_organization(client, port_staff_headers):
     response = client.post("/api/crew", json={
         "full_name": "Không được tạo thủ công",
         "crew_role": "Thuyền viên",
         "professional_certificate_type": "Chứng chỉ",
         "professional_certificate_no": "PORT-MANUAL-DENIED",
     }, headers=port_staff_headers)
-    assert response.status_code == 403
+    assert response.status_code == 422
 
 
 def test_crew_role_catalog_rejects_unapproved_role(client, customer_headers):
@@ -530,6 +708,7 @@ def test_crew_list(client, auth_headers):
 
 def test_crew_update(client, auth_headers):
     res = client.post("/api/crew", json={
+        "organization_id": TEST_ORGANIZATION_ID,
         "full_name": "Trần Máy Trưởng",
         "crew_role": "Máy trưởng",
         "professional_certificate_type": "Bằng máy trưởng",
@@ -625,17 +804,10 @@ def test_port_employee_can_approve_directly_or_request_changes(
     )
     declaration_id = approved_source.json()["id"]
 
-    denied = client.post(
-        f"/api/declarations/{declaration_id}/workflow",
-        json={"action": "PORT_APPROVE"},
-        headers=auth_headers,
-    )
-    assert denied.status_code == 403
-
     approved = client.post(
         f"/api/declarations/{declaration_id}/workflow",
-        json={"action": "PORT_APPROVE", "note": "Thông tin phù hợp"},
-        headers=port_staff_headers,
+        json={"action": "PORT_APPROVE", "note": "Hỗ trợ trong ngữ cảnh Cảng"},
+        headers=auth_headers,
     )
     assert approved.status_code == 200
     assert approved.json()["workflow_status"] == "APPROVED"
@@ -828,8 +1000,9 @@ def test_attachment_invalid_pdf_signature(client, auth_headers):
 
 
 def test_attachment_unknown_extension_rejected(client, auth_headers):
+    decl_id = _make_draft(client, auth_headers)
     res = client.post(
-        "/api/declarations/1/attachments?filename=payload.exe",
+        f"/api/declarations/{decl_id}/attachments?filename=payload.exe",
         headers=auth_headers,
         content=b"MZ",
     )
@@ -905,11 +1078,12 @@ def test_xlsx_report_appendix1(client, auth_headers):
         assert "xl/worksheets/sheet1.xml" in archive.namelist()
     sheet = load_workbook(io.BytesIO(res.content)).active
     assert sheet.max_column == 16
-    assert {"A1:A4", "B1:H1", "I1:O1", "P1:P4"}.issubset(
+    assert {"A1:P1", "A3:P3", "A7:A10", "B7:H7", "I7:O7", "P7:P10"}.issubset(
         {str(cell_range) for cell_range in sheet.merged_cells.ranges}
     )
-    assert sheet["B1"].value == "PHƯƠNG TIỆN"
-    assert sheet["I1"].value == "HOẠT ĐỘNG"
+    assert sheet["A3"].value == "KẾ HOẠCH HOẠT ĐỘNG CỦA PHƯƠNG TIỆN THỦY NỘI ĐỊA"
+    assert sheet["B7"].value == "PHƯƠNG TIỆN"
+    assert sheet["I7"].value == "HOẠT ĐỘNG"
 
 
 def test_xlsx_report_appendix2(client, auth_headers):
@@ -917,11 +1091,13 @@ def test_xlsx_report_appendix2(client, auth_headers):
     assert res.status_code == 200
     sheet = load_workbook(io.BytesIO(res.content)).active
     assert sheet.max_column == 16
-    assert {"C1:F1", "G1:H1", "I1:J1", "K1:L1", "M1:N1", "O1:P1"}.issubset(
+    assert {"A1:P1", "A3:P3", "C7:F7", "G7:H7", "I7:J7", "K7:L7", "M7:N7", "O7:P7"}.issubset(
         {str(cell_range) for cell_range in sheet.merged_cells.ranges}
     )
-    assert sheet["C1"].value == "Container"
-    assert [sheet.cell(4, column).value for column in range(3, 17)] == list(range(1, 15))
+    assert sheet["C7"].value == "Container"
+    assert sheet["C8"].value == "Thực hiện tháng báo cáo"
+    assert sheet["E8"].value == "Lũy kế đến tháng báo cáo"
+    assert [sheet.cell(10, column).value for column in range(3, 17)] == list(range(1, 15))
 
 
 def test_xlsx_report_appendix3(client, auth_headers):
@@ -932,6 +1108,64 @@ def test_xlsx_report_appendix3(client, auth_headers):
     assert sheet["B5"].value == "Tên PTTND"
     assert sheet["I5"].value == "Hàng hóa"
     assert sheet["AI5"].value == "Đại lý PTND"
+
+
+def test_static_only_port_salan_remains_in_pl01_and_pl03_with_blank_activity(
+    client, port_staff_headers,
+):
+    registration = _reg()
+    db = SessionLocal()
+    vessel = Vessel(
+        name="SALAN KHUNG TĨNH",
+        registration_no=registration,
+        vessel_type="Sà lan",
+        vessel_class="VR-SI",
+        length_m=45.5,
+        deadweight_tons=700,
+        gross_tonnage=320,
+        cargo_capacity_tons=680,
+        passenger_capacity=25,
+        tracking_master_name="THUYỀN TRƯỞNG TĨNH",
+        tracking_master_phone="0900000000",
+        is_port_tracked=1,
+    )
+    db.add(vessel)
+    db.flush()
+    db.add(ReportingUnitVessel(
+        reporting_unit_id=TEST_REPORTING_UNIT_ID,
+        vessel_id=vessel.id,
+        created_at=now_iso(),
+    ))
+    db.commit()
+    vessel_id = vessel.id
+    db.close()
+
+    try:
+        pl01 = load_workbook(io.BytesIO(client.get(
+            "/api/reports/appendix1?from=2099-01-01&to=2099-01-31", headers=port_staff_headers,
+        ).content)).active
+        row1 = next(row for row in range(11, pl01.max_row + 1) if pl01.cell(row, 3).value == registration)
+        assert pl01.cell(row1, 2).value == "SALAN KHUNG TĨNH"
+        assert pl01.cell(row1, 8).value == 25
+        assert all(pl01.cell(row1, column).value is None for column in range(9, 16))
+        assert pl01.cell(row1, 16).value == "THUYỀN TRƯỞNG TĨNH - 0900000000"
+
+        pl03 = load_workbook(io.BytesIO(client.get(
+            "/api/reports/appendix3?from=2099-01-01&to=2099-01-31", headers=port_staff_headers,
+        ).content)).active
+        row3 = next(row for row in range(10, pl03.max_row + 1) if pl03.cell(row, 3).value == registration)
+        assert pl03.cell(row3, 2).value == "SALAN KHUNG TĨNH"
+        assert all(pl03.cell(row3, column).value is None for column in range(9, 36))
+
+        pl02 = load_workbook(io.BytesIO(client.get(
+            "/api/reports/appendix2?to=2099-01-15", headers=port_staff_headers,
+        ).content)).active
+        assert all(pl02.cell(12, column).value is None for column in range(3, 17))
+    finally:
+        db = SessionLocal()
+        db.query(Vessel).filter(Vessel.id == vessel_id).delete()
+        db.commit()
+        db.close()
 
 
 def test_report_analytics_supports_week_month_quarter_year_and_export(client, customer_headers):
@@ -992,6 +1226,146 @@ def test_report_analytics_supports_week_month_quarter_year_and_export(client, cu
             db.commit()
         finally:
             db.close()
+
+
+def test_historical_analytics_exposes_coverage_and_blocks_unresolved_combined_overlap(
+    client, customer_headers, port_staff_headers,
+):
+    db = SessionLocal()
+    import_ids = []
+    declaration_id = None
+    try:
+        actor = db.query(User).filter(User.username == "portstaff").one()
+        berth_import = HistoricalReportImport(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, source_kind="tos_berth_call",
+            appendix_kind="", mapping_version="test-berth-v1", reporting_period="2050-07",
+            source_filename="audit-berth.xlsx", source_checksum=uuid.uuid4().hex,
+            source_size_bytes=100, status="COMMITTED", accepted_count=1,
+            created_by_user_id=actor.id, created_at=now_iso(), updated_at=now_iso(),
+        )
+        cargo_import = HistoricalReportImport(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, source_kind="tos_cargo_detail",
+            appendix_kind="", mapping_version="test-cargo-v1", reporting_period="2050-07",
+            source_filename="audit-cargo.xlsx", source_checksum=uuid.uuid4().hex,
+            source_size_bytes=100, status="COMMITTED", accepted_count=1,
+            created_by_user_id=actor.id, created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add_all([berth_import, cargo_import])
+        db.flush()
+        import_ids = [berth_import.id, cargo_import.id]
+        call = HistoricalPortCall(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, import_id=berth_import.id,
+            source_sheet="Berth", source_row=2, mapping_version="test-berth-v1",
+            vessel_name_raw="H4B TEST", vessel_name_normalized="H4B TEST",
+            call_year_raw="2050", voyage_number_raw="0001",
+            call_key_normalized="H4B TEST|2050|0001", source_berth_raw="K12",
+            arrival_berth="K12", departure_berth="K12",
+            actual_berthing_at_raw="15/07/2050 08:00", actual_berthing_at="2050-07-15T08:00:00",
+            actual_departure_at_raw="15/07/2050 16:00", actual_departure_at="2050-07-15T16:00:00",
+            reporting_month="2050-07", validation_status="VALID", created_at=now_iso(),
+        )
+        db.add(call)
+        db.flush()
+        db.add(HistoricalCargoRow(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, import_id=cargo_import.id,
+            source_sheet="Detail", source_row=2, port_call_id=call.id,
+            source_call_key_raw="H4B TEST | 2050 | 0001",
+            call_key_normalized="H4B TEST|2050|0001", container_size_code_raw="40HC",
+            teu_factor=2, full_empty_code_raw="E", trade_scope_raw="Hàng nội",
+            movement_method_raw="Hạ bãi", derived_direction="unload",
+            weight_raw="4.00", weight_tonnes=4.0, weight_state="PRESENT",
+            transform_version="test-v1", match_status="MATCHED",
+            validation_status="VALID", created_at=now_iso(),
+        ))
+        db.commit()
+
+        historical = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=historical",
+            headers=port_staff_headers,
+        )
+        assert historical.status_code == 200, historical.text
+        body = historical.json()
+        assert body["source"] == "historical"
+        assert body["coverage"]["status"] == "COMPLETE"
+        assert body["kpis"]["trips"]["cur"] == 1.0
+        assert body["kpis"]["tons"]["cur"] == 4.0
+        assert body["kpis"]["teu"]["cur"] == 2.0
+        assert body["kpis"]["pax"]["cur"] is None
+        assert body["coverage"]["periods"][-1]["historicalCargoRows"] == 1
+
+        cargo_import.status = "REVIEW"
+        cargo_import.review_count = 1
+        db.commit()
+        partial = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=historical",
+            headers=port_staff_headers,
+        ).json()
+        assert partial["coverage"]["status"] == "PARTIAL"
+        assert partial["kpis"]["tons"]["cur"] is None
+        assert any("cần kiểm tra" in warning for warning in partial["coverage"]["warnings"])
+        cargo_import.status = "COMMITTED"
+        cargo_import.review_count = 0
+        db.commit()
+
+        customer_forbidden = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=historical",
+            headers=customer_headers,
+        )
+        assert customer_forbidden.status_code == 403
+
+        combined = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=combined",
+            headers=port_staff_headers,
+        )
+        assert combined.status_code == 200
+        assert combined.json()["combinedAllowed"] is True
+        assert combined.json()["kpis"]["tons"]["cur"] == 4.0
+
+        created = client.post(
+            "/api/declarations",
+            json=_minimal_declaration(
+                declaration_date="2050-07-15", eta="2050-07-15T09:00",
+                etd="2050-07-15T18:00", unload={"tons": 10, "teu": 1},
+            ),
+            headers=customer_headers,
+        )
+        assert created.status_code == 200
+        declaration_id = created.json()["id"]
+        declaration = db.get(Declaration, declaration_id)
+        db.refresh(declaration)
+        declaration.workflow_status = "APPROVED"
+        declaration.status = "SUBMITTED"
+        db.commit()
+
+        blocked = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=combined",
+            headers=port_staff_headers,
+        )
+        assert blocked.status_code == 200
+        assert blocked.json()["combinedAllowed"] is False
+        assert blocked.json()["coverage"]["status"] == "BLOCKED"
+        assert blocked.json()["coverage"]["overlapPeriods"] == ["2050-07"]
+        assert blocked.json()["kpis"]["trips"]["cur"] is None
+        export = client.get(
+            "/api/reports/analytics/export?period=month&as_of=2050-07-15&source=combined",
+            headers=port_staff_headers,
+        )
+        assert export.status_code == 409
+    finally:
+        if declaration_id:
+            db.query(Declaration).filter(Declaration.id == declaration_id).delete()
+        if import_ids:
+            db.query(HistoricalCargoRow).filter(HistoricalCargoRow.import_id.in_(import_ids)).delete(
+                synchronize_session=False,
+            )
+            db.query(HistoricalPortCall).filter(HistoricalPortCall.import_id.in_(import_ids)).delete(
+                synchronize_session=False,
+            )
+            db.query(HistoricalReportImport).filter(HistoricalReportImport.id.in_(import_ids)).delete(
+                synchronize_session=False,
+            )
+        db.commit()
+        db.close()
 
 
 def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client, customer_headers):
@@ -1065,17 +1439,14 @@ def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client,
         row_number for row_number in range(10, sheet3.max_row + 1)
         if sheet3.cell(row_number, 3).value == tracked_registration
     ]
-    assert len(matching_rows) == 2
+    assert len(matching_rows) == 1
     assert sheet3.cell(matching_rows[0], 2).value == "SỔ THEO DÕI 01"
     assert sheet3.cell(matching_rows[0], 5).value == "VR-SII"
     assert sheet3.cell(matching_rows[0], 7).value == "987 / 1020"
-    exported_rows = [
-        [sheet3.cell(row_number, column_number).value for column_number in range(1, 36)]
-        for row_number in matching_rows
-    ]
-    assert {row[28] for row in exported_rows} == {"Hàng A", "Hàng B"}
-    assert any(row[11] == 12 and row[12] == 2 for row in exported_rows)
-    assert any(row[8] == 20 and row[9] == 2 for row in exported_rows)
+    exported_row = [sheet3.cell(matching_rows[0], column_number).value for column_number in range(1, 36)]
+    assert exported_row[28] == "Hàng A\nHàng B"
+    assert exported_row[11] == 12 and exported_row[12] == 2
+    assert exported_row[8] == 20 and exported_row[9] == 2
 
     db = SessionLocal()
     try:
@@ -1088,6 +1459,102 @@ def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client,
         db.close()
 
 
+def test_appendix_month_ytd_operating_date_adjustment_and_vessel_grain(
+    client, customer_headers, port_staff_headers,
+):
+    registration = _reg()
+    created_ids = []
+    fixtures = (
+        {
+            "declaration_date": "2045-07-20", "eta": "2045-01-15T08:00", "etd": "2045-01-15T18:00",
+            "registration_no": registration, "agent_ptnd_name": "Đại lý A",
+            "unload": {"cargo_type": "Container", "movement_type": "Nhập khẩu", "cargo_name": "Hàng tháng 1", "cont20_full": 1, "tons": 10},
+        },
+        {
+            "declaration_date": "2045-01-02", "eta": "2045-07-12T08:00", "etd": "2045-07-12T18:00",
+            "registration_no": registration, "working_port": "Cầu A", "departure_berth": "Cầu B", "destination_port": "Cảng C",
+            "agent_ptnd_name": "Đại lý B", "is_passenger_call": True, "passenger_count": 0,
+            "load": {"cargo_type": "Container", "movement_type": "Xuất khẩu", "cargo_name": "Hàng tháng 7", "cont40_full": 1, "tons": 20},
+        },
+        {
+            "declaration_date": "2045-07-01", "eta": "2045-08-01T08:00", "etd": "2045-08-01T18:00",
+            "registration_no": _reg(), "unload": {"cargo_type": "Hàng khô", "movement_type": "Nội địa", "tons": 99},
+        },
+    )
+    for payload in fixtures:
+        response = client.post("/api/declarations", json=_minimal_declaration(**payload), headers=customer_headers)
+        assert response.status_code == 200
+        created_ids.append(response.json()["id"])
+    db = SessionLocal()
+    try:
+        for declaration in db.query(Declaration).filter(Declaration.id.in_(created_ids)).all():
+            declaration.workflow_status = "APPROVED"
+            declaration.status = "SUBMITTED"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        appendix2 = client.get("/api/reports/appendix2?from=2045-01-01&to=2045-07-20", headers=port_staff_headers)
+        assert appendix2.status_code == 200
+        sheet2 = load_workbook(io.BytesIO(appendix2.content)).active
+        assert sheet2["A4"].value == "Tháng 07 năm 2045"
+        assert sheet2.cell(12, 3).value == 20
+        assert sheet2.cell(12, 5).value == 30
+        assert sheet2.cell(12, 13).value == 1
+        assert sheet2.cell(12, 14).value == 2
+        assert sheet2.cell(12, 15).value == 1
+        assert sheet2.cell(12, 16).value is None
+
+        appendix1 = client.get("/api/reports/appendix1?from=2045-07-01&to=2045-07-31", headers=customer_headers)
+        sheet1 = load_workbook(io.BytesIO(appendix1.content)).active
+        appendix1_row = next(row for row in range(11, sheet1.max_row + 1) if sheet1.cell(row, 3).value == registration)
+        assert sheet1.cell(appendix1_row, 8).value is None
+        assert sheet1.cell(appendix1_row, 9).value == "Cầu A"
+        assert sheet1.cell(appendix1_row, 11).value == "Cầu B"
+
+        assert client.post(
+            "/api/reports/appendix2/adjustments",
+            json={"report_month": "2045-07", "metric": "calls", "delta": 2, "reason": "Điều chỉnh theo sổ trực ca"},
+            headers=customer_headers,
+        ).status_code == 403
+        adjusted = client.post(
+            "/api/reports/appendix2/adjustments",
+            json={"report_month": "2045-07", "metric": "calls", "delta": 2, "reason": "Điều chỉnh theo sổ trực ca"},
+            headers=port_staff_headers,
+        )
+        assert adjusted.status_code == 200
+        adjustment_id = adjusted.json()["id"]
+        adjusted_sheet = load_workbook(io.BytesIO(client.get(
+            "/api/reports/appendix2?to=2045-07-20", headers=port_staff_headers,
+        ).content)).active
+        assert adjusted_sheet.cell(12, 13).value == 3
+        assert adjusted_sheet.cell(12, 14).value == 4
+
+        appendix3 = client.get("/api/reports/appendix3?from=2045-01-01&to=2045-07-31", headers=customer_headers)
+        assert appendix3.status_code == 200
+        sheet3 = load_workbook(io.BytesIO(appendix3.content)).active
+        matching = [row for row in range(10, sheet3.max_row + 1) if sheet3.cell(row, 3).value == registration]
+        assert len(matching) == 1
+        row = matching[0]
+        assert sheet3.cell(row, 29).value == "Hàng tháng 1\nHàng tháng 7"
+        assert sheet3.cell(row, 35).value == "Đại lý A\nĐại lý B"
+        assert sheet3["J7"].value == "TEUs"
+        assert sheet3["K7"].value == "TEUs Rỗng"
+        assert sheet3.column_dimensions["D"].width >= 18
+        assert sheet3.cell(row, 33).value.count("\n") == 1
+        assert sheet3.cell(row, 34).value.count("\n") == 1
+        assert sheet3.row_dimensions[row].height >= 108
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(ReportAdjustment).filter(ReportAdjustment.report_month == "2045-07").delete(synchronize_session=False)
+            db.query(Declaration).filter(Declaration.id.in_(created_ids)).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
+
+
 def test_report_unknown_kind(client, auth_headers):
     res = client.get("/api/reports/unknown", headers=auth_headers)
     assert res.status_code == 404
@@ -1098,7 +1565,10 @@ def test_report_unknown_kind(client, auth_headers):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_all_frontend_routes_registered():
-    routes = [route.path for route in app.routes]
+    routes = [route.path for route in app.routes if getattr(route, "path", None)]
+    for included in (getattr(route, "original_router", None) for route in app.routes):
+        if included is not None:
+            routes.extend(route.path for route in included.routes if getattr(route, "path", None))
     required_paths = [
         "/api/auth/login",
         "/api/health",
@@ -1122,8 +1592,17 @@ def test_all_frontend_routes_registered():
         "/api/import/port-vessel-register",
         "/api/import/crew",
         "/api/import/declaration",
+        "/api/historical-imports/preview",
+        "/api/historical-imports/reconcile",
+        "/api/historical-imports/exports/pl03",
+        "/api/historical-imports/{import_id}/rows",
+        "/api/historical-imports/{import_id}",
+        "/api/historical-imports/{import_id}/vessel-links",
+        "/api/historical-imports/{import_id}/cancel",
+        "/api/historical-imports/{import_id}/confirm",
         "/api/reports/analytics",
         "/api/reports/analytics/export",
+        "/api/reports/appendix2/adjustments",
         "/api/reports/{kind}",
         "/api/integrations/maritime-authority",
         "/api/integrations/prepare-sync",
@@ -1212,7 +1691,7 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert preview.status_code == 200
     assert preview.json()["preview"] is True
-    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.4"
+    assert preview.json()["mappingVersion"] == "KBCV-IMPORT-1.5"
     db = SessionLocal()
     assert db.query(ImportJob).count() == before
     db.close()
@@ -1654,3 +2133,422 @@ def test_admin_backup_routes_are_registered_and_role_scoped(
     listed = client.get("/api/admin/backups", headers=auth_headers)
     assert listed.status_code == 200
     assert [item["filename"] for item in listed.json()] == [created.json()["filename"]]
+def test_historical_tos_preview_cross_import_join_and_revision(
+    client, auth_headers, customer_headers,
+):
+    """H3: detect without filename, stage, join separate files and revise explicitly."""
+    vessel_name = f"H3 BARGE {uuid.uuid4().hex[:8]}"
+    _seed_historical_registered_vessel(vessel_name)
+    berth_headers = {2: "Năm", 3: "Chuyến", 5: "Tên tàu", 8: "Mã bến", 20: "ATB", 23: "ATD"}
+    berth = _historical_fixture(berth_headers, [{
+        2: "2026", 3: "0007", 5: vessel_name, 8: "K12",
+        20: "18/07/2026 08:30:00", 23: "18/07/2026 13:00:00",
+    }])
+    preview_headers = {**auth_headers, "X-Source-Filename": "user-can-rename-anything.xlsx"}
+    preview = client.post("/api/historical-imports/preview", content=berth, headers=preview_headers)
+    assert preview.status_code == 200, preview.text
+    berth_import_id = preview.json()["id"]
+    assert preview.json()["sourceKind"] == "tos_berth_call"
+    assert preview.json()["reportingPeriod"] == "2026-07"
+    assert preview.json()["mappingReceipt"]["filenameUsedForDetection"] is False
+    assert preview.json()["accepted"] == 1
+    detail = client.get(f"/api/historical-imports/{berth_import_id}", headers=auth_headers)
+    assert detail.status_code == 200
+    assert detail.json()["sourceSheets"] == ["User renamed sheet"]
+    links = client.get(
+        f"/api/historical-imports/{berth_import_id}/vessel-links?status=PENDING",
+        headers=auth_headers,
+    )
+    assert links.status_code == 200
+    assert links.json()["total"] == 1
+    suggested_link = links.json()["items"][0]
+    assert suggested_link["candidateVesselId"] is not None
+    resolved = client.post(
+        f"/api/historical-imports/{berth_import_id}/vessel-links/{suggested_link['id']}/resolve",
+        json={"decision": "ACCEPT", "candidate_vessel_id": suggested_link["candidateVesselId"],
+              "reason": "Confirmed in H4 preview"},
+        headers=auth_headers,
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["status"] == "ACCEPTED"
+    confirmed = client.post(
+        f"/api/historical-imports/{berth_import_id}/confirm", json={}, headers=auth_headers,
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "COMMITTED"
+
+    cargo = _historical_fixture(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng",
+         20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [{3: "40HC", 5: "E", 17: f"{vessel_name} | 2026 | 0007", 18: "4.00",
+          20: "Hàng nội", 23: "Hạ bãi"}],
+    )
+    cargo_preview = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "different-name.xlsx"},
+    )
+    assert cargo_preview.status_code == 200, cargo_preview.text
+    cargo_import_id = cargo_preview.json()["id"]
+    rows = client.get(
+        f"/api/historical-imports/{cargo_import_id}/rows?page=1&page_size=10", headers=auth_headers,
+    )
+    assert rows.status_code == 200
+    assert rows.json()["items"][0]["validationStatus"] == "VALID", rows.json()["items"][0]
+    assert cargo_preview.json()["accepted"] == 1, rows.json()
+    assert cargo_preview.json()["reportingPeriod"] == "2026-07"
+    assert rows.json()["items"][0]["matchStatus"] == "MATCHED"
+    assert rows.json()["items"][0]["weightTonnes"] == 4.0
+    cargo_confirmed = client.post(
+        f"/api/historical-imports/{cargo_import_id}/confirm", json={}, headers=auth_headers,
+    )
+    assert cargo_confirmed.status_code == 200
+    assert cargo_confirmed.json()["status"] == "COMMITTED"
+
+    db = SessionLocal()
+    try:
+        cargo_row = db.query(HistoricalCargoRow).filter_by(import_id=cargo_import_id).one()
+        call = db.query(HistoricalPortCall).filter_by(id=cargo_row.port_call_id).one()
+        assert cargo_row.import_id != call.import_id
+        assert cargo_row.reporting_unit_id == call.reporting_unit_id
+    finally:
+        db.close()
+
+    duplicate = client.post("/api/historical-imports/preview", content=cargo, headers=preview_headers)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["idempotent"] is True
+    assert duplicate.json()["id"] == cargo_import_id
+
+    corrected = _historical_fixture(berth_headers, [{
+        2: "2026", 3: "0007", 5: vessel_name, 8: "K12B",
+        20: "18/07/2026 08:35:00", 23: "18/07/2026 13:05:00",
+    }])
+    corrected_preview = client.post("/api/historical-imports/preview", content=corrected, headers=preview_headers)
+    assert corrected_preview.status_code == 200
+    corrected_id = corrected_preview.json()["id"]
+    blocked = client.post(f"/api/historical-imports/{corrected_id}/confirm", json={}, headers=auth_headers)
+    assert blocked.status_code == 409
+    activated = client.post(
+        f"/api/historical-imports/{corrected_id}/confirm",
+        json={"conflict_action": "ACTIVATE_NEW_REVISION", "reason": "TOS corrected ATB/ATD"},
+        headers=auth_headers,
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["revisionNo"] == 2
+    db = SessionLocal()
+    try:
+        assert db.get(HistoricalReportImport, berth_import_id).status == "SUPERSEDED"
+        cargo_row = db.query(HistoricalCargoRow).filter_by(import_id=cargo_import_id).one()
+        replacement_call = db.query(HistoricalPortCall).filter_by(import_id=corrected_id).one()
+        assert cargo_row.port_call_id == replacement_call.id
+    finally:
+        db.close()
+
+    forbidden = client.post("/api/historical-imports/preview", content=berth, headers=customer_headers)
+    assert forbidden.status_code == 403
+
+    cancellable = _historical_fixture(berth_headers, [{
+        2: "2026", 3: "0008", 5: vessel_name, 8: "K12",
+        20: "18/08/2026 08:30:00", 23: "18/08/2026 13:00:00",
+    }])
+    cancellable_preview = client.post(
+        "/api/historical-imports/preview", content=cancellable, headers=preview_headers,
+    )
+    assert cancellable_preview.status_code == 200
+    cancelled = client.post(
+        f"/api/historical-imports/{cancellable_preview.json()['id']}/cancel",
+        json={"reason": "Operator cancelled after preview"}, headers=auth_headers,
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "REJECTED"
+
+    # The same platform identity sees no data unless it explicitly switches to
+    # the correct reporting-unit context; PORT_STAFF without membership fails.
+    db = SessionLocal()
+    try:
+        second_unit = ReportingUnit(
+            name=f"H3 Other Port {uuid.uuid4().hex[:8]}", code=f"H3-{uuid.uuid4().hex[:6]}",
+            is_active=1, created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add(second_unit)
+        db.commit()
+        db.refresh(second_unit)
+        second_unit_id = second_unit.id
+    finally:
+        db.close()
+    other_context = {**auth_headers, "X-Reporting-Unit-ID": str(second_unit_id)}
+    assert client.get(f"/api/historical-imports/{corrected_id}/rows", headers=other_context).status_code == 404
+    port_login = client.post("/api/auth/login", json={"username": "portstaff", "password": "testpass"})
+    no_membership = {
+        "Authorization": f"Bearer {port_login.json()['access_token']}",
+        "X-Reporting-Unit-ID": str(second_unit_id),
+    }
+    assert client.get("/api/historical-imports", headers=no_membership).status_code == 403
+
+
+def test_historical_batch_order_rechecks_pending_cargo_after_berth_confirmation(
+    client, auth_headers,
+):
+    """Files may be selected together: cargo preview is repaired after Berth activates."""
+    vessel_name = f"BATCH BARGE {uuid.uuid4().hex[:8]}"
+    _seed_historical_registered_vessel(vessel_name)
+    cargo = _historical_fixture(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng",
+         20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [{3: "40HC", 5: "E", 17: f"{vessel_name} | 2088 | 0001", 18: "4.00",
+          20: "Hàng nội", 23: "Hạ bãi"}],
+    )
+    cargo_preview = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "cargo-first.xlsx"},
+    )
+    assert cargo_preview.status_code == 200, cargo_preview.text
+    cargo_id = cargo_preview.json()["id"]
+    assert cargo_preview.json()["review"] == 1
+
+    berth = _historical_fixture(
+        {2: "Năm", 3: "Chuyến", 5: "Tên tàu", 8: "Mã bến", 20: "ATB", 23: "ATD"},
+        [{2: "2088", 3: "0001", 5: vessel_name, 8: "K12",
+          20: "18/07/2088 08:30:00", 23: "18/07/2088 13:00:00"}],
+    )
+    berth_preview = client.post(
+        "/api/historical-imports/preview", content=berth,
+        headers={**auth_headers, "X-Source-Filename": "berth-second.xlsx"},
+    )
+    assert berth_preview.status_code == 200, berth_preview.text
+    berth_id = berth_preview.json()["id"]
+    confirmed_berth = client.post(
+        f"/api/historical-imports/{berth_id}/confirm", json={}, headers=auth_headers,
+    )
+    assert confirmed_berth.status_code == 200
+    assert confirmed_berth.json()["status"] == "COMMITTED"
+
+    # Simulate a stale pre-fix database surviving an application restart. The
+    # explicit idempotent reconcile endpoint repairs it from active Berth facts.
+    db = SessionLocal()
+    try:
+        cargo_row = db.query(HistoricalCargoRow).filter_by(import_id=cargo_id).one()
+        cargo_row.port_call_id = None
+        cargo_row.match_status = "UNMATCHED"
+        cargo_row.validation_status = "REVIEW"
+        stale_import = db.get(HistoricalReportImport, cargo_id)
+        stale_import.status = "REVIEW"
+        stale_import.accepted_count = 0
+        stale_import.review_count = 1
+        stale_import.reporting_period = None
+        db.commit()
+    finally:
+        db.close()
+    repaired = client.post("/api/historical-imports/reconcile", headers=auth_headers)
+    assert repaired.status_code == 200
+    assert repaired.json() == {"updated": 1, "updatedImportIds": [cargo_id]}
+    unchanged = client.post("/api/historical-imports/reconcile", headers=auth_headers)
+    assert unchanged.status_code == 200
+    assert unchanged.json() == {"updated": 0, "updatedImportIds": []}
+
+    refreshed = client.get(f"/api/historical-imports/{cargo_id}", headers=auth_headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["status"] == "COMMITTED"
+    assert refreshed.json()["accepted"] == 1
+    assert refreshed.json()["review"] == 0
+    valid_rows = client.get(
+        f"/api/historical-imports/{cargo_id}/rows?status=VALID", headers=auth_headers,
+    )
+    assert valid_rows.status_code == 200
+    assert valid_rows.json()["status"] == "VALID"
+    assert valid_rows.json()["total"] == 1
+    assert valid_rows.json()["items"][0]["warnings"] == []
+    review_rows = client.get(
+        f"/api/historical-imports/{cargo_id}/rows?status=REVIEW", headers=auth_headers,
+    )
+    assert review_rows.status_code == 200
+    assert review_rows.json()["total"] == 0
+    confirmed_cargo = client.post(
+        f"/api/historical-imports/{cargo_id}/confirm", json={}, headers=auth_headers,
+    )
+    assert confirmed_cargo.status_code == 200
+    assert confirmed_cargo.json()["status"] == "COMMITTED"
+
+    history = client.get("/api/historical-imports?page=1&page_size=20", headers=auth_headers)
+    assert history.status_code == 200
+    assert history.json()["summary"]["accepted"] >= 2
+    assert set(history.json()["summary"]) == {"accepted", "review", "rejected"}
+    assert "2088-07" in history.json()["activeBerthPeriods"]
+
+    db = SessionLocal()
+    try:
+        db.query(HistoricalReportImport).filter(
+            HistoricalReportImport.id.in_([cargo_id, berth_id])
+        ).delete(synchronize_session=False)
+        vessel = db.query(Vessel).filter_by(name=vessel_name).one()
+        db.delete(vessel)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_historical_corrected_mapping_supersedes_same_source_without_period(
+    client, auth_headers,
+):
+    """A corrected parser receipt replaces the active stale mapping explicitly."""
+    cargo = _historical_fixture(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng",
+         20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [{3: "40HC", 5: "E", 17: "MAPPING REVISION | 2091 | 0001", 18: "331,47",
+          20: "Hàng nội", 23: "Hạ bãi"}],
+    )
+    first = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "same-source.xlsx"},
+    )
+    assert first.status_code == 200, first.text
+    old_id = first.json()["id"]
+    db = SessionLocal()
+    try:
+        old = db.get(HistoricalReportImport, old_id)
+        old.mapping_version = "tos_cargo_detail_v1"
+        old.status = "REVIEW"
+        db.commit()
+    finally:
+        db.close()
+
+    corrected = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "renamed-source.xlsx"},
+    )
+    assert corrected.status_code == 200, corrected.text
+    corrected_body = corrected.json()
+    new_id = corrected_body["id"]
+    assert corrected_body["idempotent"] is False
+    assert corrected_body["mappingVersion"] == "tos_cargo_detail_v2"
+    assert corrected_body["conflictingImportIds"] == [old_id]
+    assert client.post(
+        f"/api/historical-imports/{new_id}/confirm", json={}, headers=auth_headers,
+    ).status_code == 409
+    activated = client.post(
+        f"/api/historical-imports/{new_id}/confirm",
+        json={"conflict_action": "ACTIVATE_NEW_REVISION", "reason": "Correct decimal parser"},
+        headers=auth_headers,
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["revisionNo"] == 2
+
+    db = SessionLocal()
+    try:
+        assert db.get(HistoricalReportImport, old_id).status == "SUPERSEDED"
+        db.query(HistoricalReportImport).filter(
+            HistoricalReportImport.id.in_([old_id, new_id])
+        ).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_historical_pl03_export_uses_tos_facts_and_legacy_dimensions(
+    client, auth_headers,
+):
+    vessel_name = f"TOS PL03 {uuid.uuid4().hex[:8]}"
+    registration = _reg()
+    db = SessionLocal()
+    try:
+        vessel = Vessel(
+            organization_id=TEST_ORGANIZATION_ID, name=vessel_name,
+            registration_no=registration, vessel_type="Chở container", vessel_class="VR-SI",
+            length_m=52.5, deadweight_tons=998, gross_tonnage=511,
+            created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add(vessel)
+        db.flush()
+        vessel_id = vessel.id
+        db.add(ReportingUnitVessel(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, vessel_id=vessel.id,
+            created_at=now_iso(),
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    legacy = _historical_pl03_fixture([{
+        1: 1, 2: vessel_name, 3: registration,
+        4: "Manual type must not win", 5: "Manual class", 6: 99,
+        15: 999, 29: "Manual cargo must not win", 30: "Cảng A",
+        31: "Cảng Tân Thuận", 32: "Cảng B", 33: "ETA cũ", 34: "ETD cũ",
+        35: "Đại lý A",
+    }])
+    legacy_preview = client.post(
+        "/api/historical-imports/preview", content=legacy,
+        headers={**auth_headers, "X-Source-Filename": "legacy-pl03.xlsx"},
+    )
+    assert legacy_preview.status_code == 200, legacy_preview.text
+    legacy_id = legacy_preview.json()["id"]
+    assert client.post(
+        f"/api/historical-imports/{legacy_id}/confirm", json={}, headers=auth_headers,
+    ).status_code == 200
+
+    berth = _historical_fixture(
+        {2: "Năm", 3: "Chuyến", 5: "Tên tàu", 8: "Mã bến", 20: "ATB", 23: "ATD"},
+        [{2: "2089", 3: "0001", 5: vessel_name, 8: "K12",
+          20: "18/07/2089 08:30:00", 23: "18/07/2089 13:00:00"}],
+    )
+    berth_preview = client.post(
+        "/api/historical-imports/preview", content=berth,
+        headers={**auth_headers, "X-Source-Filename": "berth.xlsx"},
+    )
+    assert berth_preview.status_code == 200, berth_preview.text
+    berth_id = berth_preview.json()["id"]
+    assert client.post(
+        f"/api/historical-imports/{berth_id}/confirm", json={}, headers=auth_headers,
+    ).status_code == 200
+
+    cargo = _historical_fixture(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng",
+         20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [
+            {3: "40HC", 5: "E", 17: f"{vessel_name} | 2089 | 0001", 18: "4,00",
+             20: "Hàng nội", 23: "Hạ bãi"},
+            {3: "20GP", 5: "F", 17: f"{vessel_name} | 2089 | 0001", 18: "10.5",
+             20: "Hàng nội", 23: "Hạ bãi"},
+        ],
+    )
+    cargo_preview = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "detail.xlsx"},
+    )
+    assert cargo_preview.status_code == 200, cargo_preview.text
+    cargo_id = cargo_preview.json()["id"]
+    assert cargo_preview.json()["accepted"] == 2
+    assert client.post(
+        f"/api/historical-imports/{cargo_id}/confirm", json={}, headers=auth_headers,
+    ).status_code == 200
+
+    exported = client.get(
+        "/api/historical-imports/exports/pl03?reporting_period=2089-07",
+        headers=auth_headers,
+    )
+    assert exported.status_code == 200, exported.text
+    assert exported.headers["content-disposition"] == 'attachment; filename="PL03_TOS_2089-07.xlsx"'
+    receipt = json.loads(exported.headers["x-historical-receipt"])
+    assert receipt["callCount"] == 1 and receipt["cargoRowCount"] == 2
+    sheet = load_workbook(io.BytesIO(exported.content), data_only=True).active
+    assert sheet["A4"].value == "Đơn vị báo cáo: Test Reporting Unit"
+    assert sheet["A2"].value and "tháng 7 năm 2089" in sheet["A2"].value
+    row_number = next(
+        row for row in range(10, sheet.max_row + 1)
+        if sheet.cell(row, 3).value == registration
+    )
+    assert sheet.cell(row_number, 4).value == "Chở container"
+    assert sheet.cell(row_number, 15).value == 14.5  # O: domestic inbound tonnes from TOS
+    assert sheet.cell(row_number, 16).value == 1     # P: full TEU
+    assert sheet.cell(row_number, 17).value == 2     # Q: empty TEU
+    assert sheet.cell(row_number, 29).value == "Container"
+    assert sheet.cell(row_number, 33).value == "18/07/2089 08:30:00"
+    assert sheet.cell(row_number, 34).value == "18/07/2089 13:00:00"
+
+    db = SessionLocal()
+    try:
+        db.query(HistoricalReportImport).filter(
+            HistoricalReportImport.id.in_([legacy_id, berth_id, cargo_id])
+        ).delete(synchronize_session=False)
+        db.delete(db.get(Vessel, vessel_id))
+        db.commit()
+    finally:
+        db.close()

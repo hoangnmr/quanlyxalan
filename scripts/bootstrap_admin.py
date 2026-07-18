@@ -39,8 +39,8 @@ def main():
 
     db = SessionLocal()
     try:
-        # Check if an admin or any user already exists to prevent accidental overwrites
-        existing_admin = db.query(User).filter(User.role == "ADMIN").first()
+        # Check if a platform administrator already exists to prevent accidental overwrites
+        existing_admin = db.query(User).filter(User.role == "PLATFORM_ADMIN").first()
         if existing_admin:
             print(f"ERROR: An administrator user '{existing_admin.username}' already exists. Bootstrap aborted.", file=sys.stderr)
             sys.exit(1)
@@ -56,7 +56,7 @@ def main():
             username=username,
             password_hash=get_password_hash(password),
             full_name=full_name,
-            role="ADMIN",
+            role="PLATFORM_ADMIN",
             organization_id=None,
             is_active=1,
             created_at=now_iso()

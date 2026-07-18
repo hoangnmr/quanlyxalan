@@ -3,9 +3,14 @@ const state = {
   declarationFilter: {}, declarationPage: 1, declarationPaging: null, vesselPage: 1, vesselPageSize: 15, dashboardCertificateWarnings: 0, editingVessel: null, editingDeclaration: null, editingCrew: null, workflowDeclaration: null,
   wizardStep: 1, wizardMaxStep: 1, declarationVesselMode: 'existing', declarationNewCrew: [],
   pendingImport: null, importResultTarget: 'main',
+  importMode: 'operational', historicalImport: null, historicalPreviewPage: 1,
+  historicalRowFilter: 'all', historicalBatch: [],
+  historicalHistoryPage: 1, historicalHistory: [], historicalRegisterItems: [],
   portRegisterItems: [], portRegisterStats: {}, portRegisterPage: 1, portRegisterPageSize: 15,
   portRegisterSelected: new Set(), vesselSaveContext: 'customer-record',
   dashboardSearchSequence: 0,
+  analyticsSource: 'live',
+  reportingUnits: [], activeReportingUnitId: null, reportingUnitOrganizations: [],
 };
 const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó'];
 
@@ -20,6 +25,9 @@ async function api(path, options = {}) {
   if (token) {
     options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
   }
+  if (state.activeReportingUnitId && ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role)) {
+    options.headers = { ...options.headers, 'X-Reporting-Unit-ID': String(state.activeReportingUnitId) };
+  }
   const response = await fetch(path, options);
   if (response.status === 401 && path !== '/api/auth/login') {
     showLoginDialog('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
@@ -31,7 +39,7 @@ async function api(path, options = {}) {
     const details = body?.detail || body?.error;
     const message = Array.isArray(details)
       ? details.map(item => item?.msg || String(item)).join('; ')
-      : details || 'Yêu cầu không thành công.';
+      : (details && typeof details === 'object' ? details.message : details) || 'Yêu cầu không thành công.';
     const error = new Error(message);
     error.status = response.status;
     error.details = details;
@@ -92,6 +100,7 @@ function bindLoginForm() {
         body: JSON.stringify(values(form)),
       });
       localStorage.setItem('token', result.access_token);
+      state.activeReportingUnitId = null;
       $('#login-dialog').close();
       toast('Đăng nhập thành công.');
       init();
@@ -138,11 +147,146 @@ function values(form) {
 }
 
 function pageName(route) {
-  return ({dashboard:'Tổng quan khai báo', declarations:'Phiếu khai báo', vessels:'Hồ sơ phương tiện', 'port-register':'Sổ theo dõi Salan', crew:'Danh sách thuyền viên', import:'Import dữ liệu Excel', reports:'Báo cáo hoạt động Cảng'})[route] || 'Tổng quan khai báo';
+  return ({dashboard:'Tổng quan khai báo', declarations:'Phiếu khai báo', vessels:'Hồ sơ phương tiện', 'port-register':'Sổ theo dõi Salan', crew:'Danh sách thuyền viên', import:'Import dữ liệu', reports:'Báo cáo hoạt động'})[route] || 'Tổng quan khai báo';
 }
 
 function roleLabel(role) {
-  return ({CUSTOMER:'User', PORT_STAFF:'Port staff', ADMIN:'Admin'})[role] || role;
+  return ({CUSTOMER:'User', PORT_STAFF:'Port staff', PLATFORM_ADMIN:'Platform admin'})[role] || role;
+}
+
+function reportingUnitStorageKey() {
+  return `reporting-unit:${state.currentUser?.username || 'anonymous'}`;
+}
+
+async function saveReportingUnit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!form.reportValidity()) return;
+  setSubmitting(form, event.submitter, true, 'Đang tạo…');
+  try {
+    const item = await api('/api/reporting-units', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(values(form)),
+    });
+    localStorage.setItem(reportingUnitStorageKey(), String(item.id));
+    $('#reporting-unit-dialog').close();
+    toast(`Đã tạo đơn vị ${item.name}.`);
+    location.reload();
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
+async function loadReportingUnitContext() {
+  const context = $('#sidebar-unit-context');
+  const trigger = $('#reporting-unit-trigger');
+  const menu = $('#reporting-unit-menu');
+  const notice = $('#reporting-unit-required');
+  const needsUnit = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role);
+  context.hidden = !needsUnit;
+  notice.hidden = true;
+  document.body.classList.remove('tenant-context-blocked');
+  if (!needsUnit) return true;
+
+  const response = await api('/api/reporting-units');
+  state.reportingUnits = response.items || [];
+  const saved = Number(localStorage.getItem(reportingUnitStorageKey()) || 0);
+  const validSaved = state.reportingUnits.some(item => item.id === saved);
+  if (validSaved) state.activeReportingUnitId = saved;
+  else if (state.currentUser.role === 'PORT_STAFF' && state.reportingUnits.length === 1) {
+    state.activeReportingUnitId = state.reportingUnits[0].id;
+    localStorage.setItem(reportingUnitStorageKey(), String(state.activeReportingUnitId));
+  } else {
+    state.activeReportingUnitId = null;
+    localStorage.removeItem(reportingUnitStorageKey());
+  }
+
+  const chooseReportingUnit = next => {
+    state.portRegisterSelected.clear();
+    state.editingVessel = state.editingDeclaration = state.editingCrew = null;
+    if (next) localStorage.setItem(reportingUnitStorageKey(), String(next));
+    else localStorage.removeItem(reportingUnitStorageKey());
+    location.reload();
+  };
+  const unitItems = state.reportingUnits.length
+    ? state.reportingUnits.map(unit => `<button type="button" role="menuitemradio" aria-checked="${unit.id === state.activeReportingUnitId}" data-reporting-unit-id="${unit.id}" class="${unit.id === state.activeReportingUnitId ? 'selected' : ''}"><span><strong>${esc(unit.name)}</strong></span><b aria-hidden="true">${unit.id === state.activeReportingUnitId ? '✓' : ''}</b></button>`).join('')
+    : '<p>Chưa có đơn vị được cấp.</p>';
+  const createAction = state.currentUser.role === 'PLATFORM_ADMIN'
+    ? '<div class="reporting-unit-create-action"><button id="create-reporting-unit" type="button" role="menuitem"><span><strong>+ Tạo đơn vị mới</strong></span></button></div>'
+    : '';
+  menu.innerHTML = unitItems + createAction;
+  $$('[data-reporting-unit-id]', menu).forEach(button => {
+    button.onclick = () => chooseReportingUnit(Number(button.dataset.reportingUnitId));
+  });
+  const createButton = $('#create-reporting-unit');
+  if (createButton) createButton.onclick = () => {
+    trigger.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+    const form = $('#reporting-unit-form');
+    form.reset();
+    $('#reporting-unit-dialog').showModal();
+    requestAnimationFrame(() => form.elements.name.focus());
+  };
+  const createForm = $('#reporting-unit-form');
+  if (createForm.dataset.bound !== 'true') {
+    createForm.dataset.bound = 'true';
+    createForm.addEventListener('submit', saveReportingUnit);
+    $('#close-reporting-unit-dialog').onclick = () => $('#reporting-unit-dialog').close();
+    $('#cancel-reporting-unit-dialog').onclick = () => $('#reporting-unit-dialog').close();
+  }
+  trigger.onclick = event => {
+    event.stopPropagation();
+    const open = trigger.getAttribute('aria-expanded') !== 'true';
+    trigger.setAttribute('aria-expanded', String(open));
+    menu.hidden = !open;
+    if (open) $('[role="menuitemradio"], [role="menuitem"]', menu)?.focus();
+  };
+  trigger.onkeydown = event => {
+    if (event.key !== 'Escape') return;
+    trigger.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+  };
+  menu.onkeydown = event => {
+    const items = $$('[role="menuitemradio"], [role="menuitem"]', menu);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      trigger.setAttribute('aria-expanded', 'false');
+      menu.hidden = true;
+      trigger.focus();
+      return;
+    }
+    if (!['ArrowUp', 'ArrowDown'].includes(event.key) || !items.length) return;
+    event.preventDefault();
+    const index = Math.max(0, items.indexOf(document.activeElement));
+    const offset = event.key === 'ArrowDown' ? 1 : -1;
+    items[(index + offset + items.length) % items.length].focus();
+  };
+  if (context.dataset.outsideBound !== 'true') {
+    context.dataset.outsideBound = 'true';
+    document.addEventListener('click', event => {
+      if (context.contains(event.target)) return;
+      trigger.setAttribute('aria-expanded', 'false');
+      menu.hidden = true;
+    });
+  }
+
+  const active = state.reportingUnits.find(unit => unit.id === state.activeReportingUnitId);
+  $('#active-reporting-unit').textContent = active ? active.name : 'Chưa chọn';
+  trigger.title = active
+    ? `Đơn vị đang chọn: ${active.name}`
+    : 'Đơn vị báo cáo';
+  trigger.disabled = state.reportingUnits.length === 0 && state.currentUser.role !== 'PLATFORM_ADMIN';
+  if (!active) {
+    notice.hidden = false;
+    notice.querySelector('p:last-child').textContent = state.reportingUnits.length
+      ? 'Chưa có đơn vị đang thao tác. Hệ thống không có chế độ xem gộp nhiều cảng.'
+      : 'Tài khoản chưa có đơn vị báo cáo hoạt động. Liên hệ Platform Admin để cấp membership.';
+    document.body.classList.add('tenant-context-blocked');
+    $('#api-state').className = 'state-badge pending';
+    $('#api-state').textContent = 'Chọn cảng';
+    return false;
+  }
+  return true;
 }
 
 function route() {
@@ -161,9 +305,10 @@ function route() {
   if (name === 'port-register') loadPortRegister();
   if (name === 'declarations') loadDeclarations();
   if (name === 'crew') loadCrew();
+  if (name === 'import' && state.importMode === 'historical') loadHistoricalImportHistory();
   if (name === 'reports') {
-    loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month');
-    if (state.currentUser?.role === 'ADMIN') loadIntegration();
+    loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month', state.analyticsSource);
+    if (state.currentUser?.role === 'PLATFORM_ADMIN') loadIntegration();
   }
 }
 
@@ -184,7 +329,7 @@ async function loadDashboard(query = '') {
     renderNotificationPreferences(state.dashboardCertificateWarnings);
     renderAttentionQueue(data.attention);
     // Technical operations and database backup details remain available through
-    // protected APIs, but are not end-user dashboard content (including ADMIN).
+    // protected APIs, but are not end-user dashboard content (including PLATFORM_ADMIN).
     $('#admin-operations').hidden = true;
     $('#admin-backup').hidden = true;
     $('#recent-table').innerHTML = declarationTable(data.recent);
@@ -333,7 +478,7 @@ function renderCrew() {
   const strip = $('#crew-warning-strip');
   strip.classList.toggle('visible', messages.length > 0);
   strip.textContent = messages.join(' ');
-  const canEdit = ['CUSTOMER', 'ADMIN'].includes(state.currentUser?.role);
+  const canEdit = ['CUSTOMER', 'PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role);
   $('#crew-table').innerHTML = items.length ? `<table class="data-table responsive-table record-table crew-record-table"><thead><tr><th>Họ tên</th><th>Chức danh</th><th>Ngày sinh</th><th>Chứng chỉ</th><th>Thời hạn</th><th>Trạng thái</th>${canEdit ? '<th aria-label="Thao tác"></th>' : ''}</tr></thead><tbody>${items.map(item => `<tr><td data-label="Họ tên"><strong>${esc(item.full_name)}</strong><br><small>${esc(item.phone || '')}</small></td><td data-label="Chức danh">${esc(item.crew_role)}</td><td data-label="Ngày sinh" class="date-cell">${fmtDate(item.birth_date)}</td><td data-label="Chứng chỉ">${esc(item.professional_certificate_type)}<br><small>${esc(item.professional_certificate_no)}</small></td><td data-label="Thời hạn" class="date-cell">${fmtDate(item.certificate_expiry_date)}</td><td data-label="Trạng thái"><span class="table-badge ${item.certificate_status === 'VALID' ? 'submitted' : 'draft'}">${certificateLabel(item.certificate_status)}</span></td>${canEdit ? `<td data-label="Thao tác" class="action-cell"><button class="table-icon-button" data-edit-crew="${item.id}" title="Chỉnh sửa ${esc(item.full_name)}" aria-label="Chỉnh sửa ${esc(item.full_name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg></button></td>` : ''}</tr>`).join('')}</tbody></table>` : empty('Chưa có danh sách thuyền viên', 'Thêm thuyền trưởng hoặc thuyền viên cùng chứng chỉ chuyên môn.');
   $$('[data-edit-crew]').forEach(button => button.onclick = () => openCrew(Number(button.dataset.editCrew)));
 }
@@ -341,7 +486,10 @@ function renderCrew() {
 function openCrew(id = null) {
   const item = id ? state.crew.find(row => row.id === id) : {};
   state.editingCrew = item || {};
+  const needsOrganization = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role);
+  const organizationField = needsOrganization ? `<label>* Doanh nghiệp<select name="organization_id" required><option value="">Chọn doanh nghiệp</option>${state.reportingUnitOrganizations.map(org => `<option value="${org.id}" ${Number(item.organization_id) === org.id ? 'selected' : ''}>${esc(org.name)}</option>`).join('')}</select></label>` : '';
   $('#crew-fields').innerHTML = `
+    ${organizationField}
     ${field('full_name','Họ và tên',item.full_name,'text','required')}
     ${selectField('crew_role','Chức danh',CREW_ROLES,item.crew_role,'required')}
     ${field('birth_date','Ngày sinh (không bắt buộc)',item.birth_date,'date')}
@@ -746,7 +894,7 @@ function reviewSummaryHtml(d) {
     ? $$('input[name="crew_ids"]:checked', crewContainer).length
     : 0;
   const crewTotal = isNew ? state.declarationNewCrew.length : (checkedCrew || (d.crew_ids || []).length);
-  const isAdmin = state.currentUser?.role === 'ADMIN';
+  const isAdmin = state.currentUser?.role === 'PLATFORM_ADMIN';
   return `<section class="form-section"><h3>F. ${isAdmin ? 'Xem lại & Lưu' : 'Xem lại & Gửi'}</h3><div class="section-grid">
     <div class="attachment-field wide-field"><strong>Phương tiện</strong><p>${esc(d.vessel_name || '')} — ${esc(d.registration_no || '')}${isNew ? ' (hồ sơ mới)' : ''}</p></div>
     <div class="attachment-field wide-field"><strong>Thuyền trưởng</strong><p>${captainName ? `${esc(captainName)}${captainPhone ? ` · ${esc(captainPhone)}` : ''}` : 'Chưa có thông tin'}</p></div>
@@ -881,6 +1029,7 @@ function renderDeclarationWizard() {
         ${field('certificate_expiry_date','Hạn GCN ATKT & BVMT',d.certificate_expiry_date,'date',isNew ? '' : 'readonly class="locked-field"')}
         ${field('crew_count','Số thuyền viên tối thiểu',d.crew_count,'number',isNew ? 'min="0"' : 'min="0" readonly class="locked-field"')}
         ${field('passenger_count','Số hành khách',d.passenger_count,'number','min="0"')}
+        <label class="wide-field"><span>Phân loại lượt tàu khách</span><span class="checkbox-line"><input name="is_passenger_call" type="checkbox" ${d.is_passenger_call ? 'checked' : ''}> Phương tiện/lượt này được tính là lượt tàu khách, kể cả khi số hành khách bằng 0</span></label>
         <div class="record-lock-note wide-field" ${isNew ? 'hidden' : ''}><strong>Thông tin hồ sơ phương tiện chỉ đọc</strong><span>Chọn đúng phương tiện để hệ thống tự điền. Khi hồ sơ thay đổi, Quản trị viên cập nhật tại mục Hồ sơ phương tiện.</span></div>
         <p class="muted wide-field" ${isNew ? '' : 'hidden'}>Hồ sơ phương tiện mới sẽ được lưu khi phiếu được xác nhận gửi, để lần sau có thể chọn lại.</p>
       </div></section>
@@ -889,7 +1038,9 @@ function renderDeclarationWizard() {
       <section class="form-section"><h3>B. Hành trình</h3><div class="section-grid">
         ${field('last_port','Cảng rời cuối cùng',d.last_port,'text','required list="ports-list"')}
         ${field('working_port','Cảng / cầu bến đến làm hàng',d.working_port,'text','required list="ports-list"')}
+        ${field('departure_berth','Cảng / cầu bến rời',d.departure_berth,'text','list="ports-list"')}
         ${field('destination_port','Cảng đích',d.destination_port,'text','list="ports-list"')}
+        ${field('agent_ptnd_name','Đại lý PTND',d.agent_ptnd_name,'text','class="wide-field"')}
         ${field('eta','Thời gian dự kiến đến',d.eta,'datetime-local','required')}
         ${field('etd','Thời gian dự kiến rời',d.etd,'datetime-local','required')}
         ${field('actual_arrival_at','Thời gian đến thực tế',d.actual_arrival_at,'datetime-local')}
@@ -966,11 +1117,13 @@ function calculateCargo(prefix) {
 }
 
 function declarationData() {
-  const data = values($('#declaration-form'));
+  const form = $('#declaration-form');
+  const data = values(form);
   // Blank optional number/date inputs arrive as "" via FormData, which the backend's
   // numeric fields reject outright — drop them so the schema's own default applies.
   Object.keys(data).forEach(key => { if (data[key] === '') delete data[key]; });
   data.crew_ids = [...$('#declaration-form').querySelectorAll('[name="crew_ids"]:checked')].map(input => Number(input.value));
+  data.is_passenger_call = Boolean(form.elements.is_passenger_call?.checked);
   delete data.attachments;
   delete data.vessel_mode;
   ['unload','load'].forEach(prefix => {
@@ -1267,12 +1420,490 @@ async function confirmImport(overwriteExisting = false) {
     $('#import-crew').value = '';
     if ($('#import-port-register')) $('#import-port-register').value = '';
     const refreshes = [loadVessels(), loadDeclarations(), loadCrew(), loadDashboard()];
-    if (['PORT_STAFF', 'ADMIN'].includes(state.currentUser?.role)) refreshes.push(loadPortRegister());
+    if (['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role)) refreshes.push(loadPortRegister());
     await Promise.all(refreshes);
     if (state.importResultTarget === 'port-register' && $('#port-import-dialog').open) $('#port-import-dialog').close();
     state.importResultTarget = 'main';
   } catch (error) {
     setImportResult(`<div><strong>Không thể import</strong><p>${esc(error.message)}</p></div>`);
+    toast(error.message, true);
+  }
+}
+
+const HISTORICAL_SOURCE_LABELS = {
+  tos_berth_call: 'TOS Berth · lượt cập/rời bến',
+  tos_cargo_detail: 'TOS chi tiết container',
+  reported_pl03: 'PL.03 lịch sử đã báo cáo',
+};
+const HISTORICAL_STATUS_LABELS = {
+  PREVIEWED: 'Chờ xác nhận', COMMITTED: 'Đang dùng', REVIEW: 'Chờ kiểm tra',
+  REJECTED: 'Đã hủy / giữ bản cũ', SUPERSEDED: 'Đã được thay bằng revision mới',
+};
+const HISTORICAL_WARNING_LABELS = {
+  INVALID_CALL_IDENTITY: 'Thiếu hoặc sai tên phương tiện, năm hay số chuyến.',
+  ATB_BLANK: 'Thiếu ATB. Bổ sung trong file Berth rồi upload lại.',
+  ATB_INVALID: 'ATB không đúng định dạng ngày giờ. Sửa file Berth rồi upload lại.',
+  ATD_BLANK: 'Thiếu ATD. Bổ sung trong file Berth rồi upload lại.',
+  ATD_INVALID: 'ATD không đúng định dạng ngày giờ. Sửa file Berth rồi upload lại.',
+  DUPLICATE_CALL_KEY: 'Trùng tên phương tiện, năm và chuyến trong file Berth.',
+  UNSUPPORTED_CONTAINER_SIZE: 'Kích cỡ container không phải 20/40 feet.',
+  UNKNOWN_FULL_EMPTY: 'F/E phải là F hoặc E.',
+  UNKNOWN_TRADE_SCOPE: 'Không nhận diện được Hàng nội/Hàng ngoại.',
+  UNKNOWN_MOVEMENT_METHOD: 'Không nhận diện được phương án xếp dỡ.',
+  WEIGHT_BLANK: 'Thiếu trọng lượng container.',
+  WEIGHT_INVALID: 'Trọng lượng không phải số.',
+  UNMATCHED_VESSEL: 'Chưa có phương tiện tương ứng trong Sổ theo dõi. Xử lý tại mục Liên kết phương tiện bên dưới.',
+  AMBIGUOUS_VESSEL: 'Có nhiều phương tiện có thể trùng. Chọn đúng phương tiện tại mục Liên kết bên dưới.',
+  REVIEW_NORMALIZED_VESSEL_LINK: 'Tên chỉ khớp sau chuẩn hóa. Xác nhận tại mục Liên kết phương tiện bên dưới.',
+};
+
+function historicalWarnings(row) {
+  // Provenance keeps the original warning codes for audit. Once a row becomes
+  // VALID, those codes are resolved history and must not be presented as an
+  // active error to the operator.
+  if (row.validationStatus === 'VALID') return [];
+  const codes = [...(row.warnings || row.provenance?.warnings || [])];
+  if (row.matchStatus === 'UNMATCHED' && !codes.includes('UNMATCHED_CALL')) codes.push('UNMATCHED_CALL');
+  if (row.matchStatus === 'AMBIGUOUS' && !codes.includes('AMBIGUOUS_CALL')) codes.push('AMBIGUOUS_CALL');
+  return [...new Set(codes)].map(code => {
+    if (code === 'UNMATCHED_CALL') return 'Chưa ghép được lượt Berth. Xác nhận file Berth trong cùng đợt rồi mở lại file này.';
+    if (code === 'AMBIGUOUS_CALL') return 'Có nhiều lượt Berth trùng khóa chuyến; cần kiểm tra file Berth.';
+    const metric = /^INVALID_METRIC_([A-Z]+)$/.exec(code);
+    if (metric) return `Cột ${metric[1]} không phải số. Sửa ô tương ứng trong file PL.03 rồi upload lại.`;
+    return HISTORICAL_WARNING_LABELS[code] || code.replaceAll('_', ' ').toLowerCase();
+  });
+}
+
+function historicalWarningCell(row) {
+  const warnings = historicalWarnings(row);
+  return warnings.length ? `<ul class="historical-warning-list">${warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '<span class="muted">—</span>';
+}
+
+function setImportMode(mode) {
+  state.importMode = mode === 'historical' ? 'historical' : 'operational';
+  const historical = state.importMode === 'historical';
+  $('#operational-import-panel').hidden = historical;
+  $('#historical-import-panel').hidden = !historical;
+  $('#operational-import-tab').classList.toggle('active', !historical);
+  $('#historical-import-tab').classList.toggle('active', historical);
+  $('#operational-import-tab').setAttribute('aria-selected', String(!historical));
+  $('#historical-import-tab').setAttribute('aria-selected', String(historical));
+  if (historical) {
+    ensureHistoricalExportPanel();
+    loadHistoricalImportHistory();
+  }
+}
+
+// Report period picker: two selects (Tháng / Năm) instead of the native month
+// input, to match the app's own control styling. Value is a "YYYY-MM" string.
+function pl03PeriodSelectsHtml() {
+  const now = new Date().getFullYear();
+  const years = Array.from({length: 7}, (_, i) => now - i);
+  const months = Array.from({length: 12}, (_, i) => String(i + 1).padStart(2, '0'));
+  return `<label>Tháng<select id="historical-pl03-month"><option value="">—</option>${months.map(m => `<option value="${m}">${Number(m)}</option>`).join('')}</select></label>`
+    + `<label>Năm<select id="historical-pl03-year"><option value="">—</option>${years.map(y => `<option value="${y}">${y}</option>`).join('')}</select></label>`;
+}
+
+function pl03PeriodValue() {
+  const m = $('#historical-pl03-month')?.value;
+  const y = $('#historical-pl03-year')?.value;
+  return (m && y) ? `${y}-${m}` : '';
+}
+
+function setPl03Period(period) {
+  if (!period) return;
+  const [y, m] = period.split('-');
+  const monthSel = $('#historical-pl03-month');
+  const yearSel = $('#historical-pl03-year');
+  if (!monthSel || !yearSel) return;
+  if (y && !Array.from(yearSel.options).some(option => option.value === y)) {
+    yearSel.insertBefore(new Option(y, y), yearSel.options[1] || null);
+  }
+  monthSel.value = m;
+  yearSel.value = y;
+}
+
+function ensureHistoricalExportPanel() {
+  if ($('#historical-pl03-export')) return;
+  const historyPanel = $('.historical-history-panel');
+  if (!historyPanel) return;
+  const panel = document.createElement('section');
+  panel.id = 'historical-pl03-export';
+  panel.className = 'panel historical-export-panel';
+  panel.innerHTML = `<div><p class="eyebrow">KẾT QUẢ ĐỐI SOÁT</p><h2>PL.03 tổng hợp từ TOS</h2></div><div class="historical-export-actions">${pl03PeriodSelectsHtml()}<button id="export-historical-pl03" type="button" class="primary-button">Xuất PL.03 tổng hợp</button></div>`;
+  historyPanel.before(panel);
+  $('#export-historical-pl03').onclick = exportHistoricalPl03;
+}
+
+async function exportHistoricalPl03() {
+  const reportingPeriod = pl03PeriodValue();
+  if (!reportingPeriod) {
+    toast('Chọn tháng báo cáo trước khi xuất PL.03 tổng hợp.', true);
+    $('#historical-pl03-month')?.focus();
+    return;
+  }
+  const button = $('#export-historical-pl03');
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Đang tổng hợp…';
+  try {
+    await downloadFile(
+      `/api/historical-imports/exports/pl03?reporting_period=${encodeURIComponent(reportingPeriod)}`,
+      `PL03_TOS_${reportingPeriod}.xlsx`,
+    );
+    toast('Đã xuất PL.03 tổng hợp từ dữ liệu TOS đã xác nhận.');
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; button.textContent = original; }
+}
+
+function historicalStatusTone(status) {
+  if (status === 'COMMITTED') return 'submitted';
+  if (status === 'REJECTED') return 'danger';
+  return 'draft';
+}
+
+// Result cell: colour carries the meaning (green = hợp lệ, cam = cần kiểm tra,
+// đỏ = từ chối). Zeros are omitted; only non-zero exceptions show. Titles keep
+// the words available for screen readers and hover without visual clutter.
+function historicalResultCell(item) {
+  const n = value => number(value).toLocaleString('vi-VN');
+  const parts = [`<b class="hres ok" title="${n(item.accepted)} hợp lệ">${n(item.accepted)}</b>`];
+  if (item.review) parts.push(`<b class="hres warn" title="${n(item.review)} cần kiểm tra">${n(item.review)}</b>`);
+  if (item.rejected) parts.push(`<b class="hres rej" title="${n(item.rejected)} từ chối">${n(item.rejected)}</b>`);
+  return `<span class="hres-cell">${parts.join('')}</span>`;
+}
+
+// Revision cell: rev 1 is the default, so keep it quiet; a superseding revision
+// (rev >= 2) or a superseded link is what actually needs attention.
+function historicalRevCell(item) {
+  const link = item.supersededByImportId ? `<br><small>→ #${item.supersededByImportId}</small>` : '';
+  const rev = item.revisionNo > 1
+    ? `<span class="rev-badge">rev ${item.revisionNo}</span>`
+    : `<span class="rev-muted">${item.revisionNo}</span>`;
+  return rev + link;
+}
+
+function historicalEffectivePeriod(item, activeBerthPeriods) {
+  if (item.reportingPeriod) return item.reportingPeriod;
+  if (item.sourceKind === 'reported_pl03' && activeBerthPeriods.length === 1) {
+    return activeBerthPeriods[0];
+  }
+  return 'Chưa xác định';
+}
+
+function renderHistoricalHistorySummary(summary = {}) {
+  const target = $('#historical-history-summary');
+  if (!target) return;
+  const accepted = number(summary.accepted);
+  const review = number(summary.review);
+  const rejected = number(summary.rejected);
+  const parts = [
+    `<span class="history-total-ok"><b>${accepted.toLocaleString('vi-VN')}</b> đạt</span>`,
+    `<span class="history-total-review"><b>${review.toLocaleString('vi-VN')}</b> cần kiểm tra</span>`,
+  ];
+  if (rejected) parts.push(`<span class="history-total-rejected"><b>${rejected.toLocaleString('vi-VN')}</b> bị loại</span>`);
+  target.innerHTML = parts.join('<span class="history-total-separator">·</span>');
+}
+
+function renderHistoricalPagination(container, result, attribute, callback) {
+  const totalPages = Math.max(1, Math.ceil((result.total || 0) / (result.pageSize || 1)));
+  if (totalPages <= 1) { container.innerHTML = ''; return; }
+  container.innerHTML = `<span>Trang ${result.page}/${totalPages}</span><button type="button" data-${attribute}="${result.page - 1}" ${result.page <= 1 ? 'disabled' : ''}>Trước</button><button type="button" data-${attribute}="${result.page + 1}" ${result.page >= totalPages ? 'disabled' : ''}>Sau</button>`;
+  $$(`[data-${attribute}]`, container).forEach(button => button.onclick = () => callback(Number(button.dataset[attribute.replace(/-([a-z])/g, (_, c) => c.toUpperCase())])));
+}
+
+function updateHistoricalSteps(item) {
+  const steps = $$('.historical-import-steps li');
+  steps.forEach(step => step.classList.remove('active', 'done'));
+  if (!item) { steps[0]?.classList.add('active'); return; }
+  steps[0]?.classList.add('done');
+  steps[1]?.classList.add('done');
+  if (item.status !== 'PREVIEWED') {
+    steps.forEach(step => step.classList.add('done'));
+  } else if (item.conflictingImportIds?.length) {
+    steps[2]?.classList.add('active');
+  } else {
+    steps[2]?.classList.add('done');
+    steps[3]?.classList.add('active');
+  }
+}
+
+async function previewHistoricalImport(input) {
+  const files = [...input.files];
+  if (!files.length) return;
+  const panel = $('#historical-preview');
+  panel.hidden = true;
+  const batchPanel = $('#historical-batch');
+  batchPanel.hidden = false;
+  state.historicalBatch = files.map(file => ({filename: file.name, loading: true}));
+  renderHistoricalBatch();
+  batchPanel.scrollIntoView({behavior: 'smooth', block: 'start'});
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    try {
+      const result = await api('/api/historical-imports/preview', {
+        method: 'POST',
+        headers: {...IMPORT_FILE_HEADERS, 'X-Source-Filename': encodeURIComponent(file.name)},
+        body: file,
+      });
+      state.historicalBatch[index] = {filename: file.name, result};
+    } catch (error) {
+      state.historicalBatch[index] = {filename: file.name, error: error.message};
+    }
+    renderHistoricalBatch();
+  }
+  input.value = '';
+  const successful = state.historicalBatch.filter(item => item.result);
+  if (!successful.length) {
+    toast('Không file nào tạo được preview.', true);
+    return;
+  }
+  const first = successful.sort((a, b) => {
+    const priority = {tos_berth_call: 0, tos_cargo_detail: 1, reported_pl03: 2};
+    return (priority[a.result.sourceKind] ?? 9) - (priority[b.result.sourceKind] ?? 9);
+  })[0].result;
+  state.historicalImport = first;
+  state.historicalPreviewPage = 1;
+  state.historicalRowFilter = first.review ? 'review' : (first.rejected ? 'rejected' : 'all');
+  await renderHistoricalImportWorkspace();
+  await loadHistoricalImportHistory();
+  toast(`Đã tạo preview cho ${successful.length}/${files.length} file. Chưa có dữ liệu nào được kích hoạt.`);
+}
+
+function renderHistoricalBatch() {
+  const panel = $('#historical-batch');
+  panel.hidden = !state.historicalBatch.length;
+  if (panel.hidden) return;
+  const complete = state.historicalBatch.filter(item => !item.loading).length;
+  $('#historical-batch-title').textContent = complete < state.historicalBatch.length
+    ? `Đang đọc ${complete}/${state.historicalBatch.length} file`
+    : `${state.historicalBatch.length} file trong đợt upload`;
+  $('#historical-batch-list').innerHTML = state.historicalBatch.map(item => {
+    if (item.loading) return `<article class="historical-batch-row"><div><strong>${esc(item.filename)}</strong><small>Đang nhận diện cấu trúc…</small></div><span class="table-badge draft">Đang đọc</span></article>`;
+    if (item.error) return `<article class="historical-batch-row error"><div><strong>${esc(item.filename)}</strong><small>${esc(item.error)}</small></div><span class="table-badge danger">Không đọc được</span></article>`;
+    const result = item.result;
+    return `<article class="historical-batch-row"><div><strong>${esc(item.filename)}</strong><small>${esc(HISTORICAL_SOURCE_LABELS[result.sourceKind] || result.sourceKind)} · ${number(result.accepted)} hợp lệ · ${number(result.review)} cần xử lý · ${number(result.rejected)} bị loại</small></div><button type="button" class="outline-button" data-open-batch-import="${result.id}">Mở kiểm tra</button></article>`;
+  }).join('');
+  $$('[data-open-batch-import]', panel).forEach(button => button.onclick = () => openHistoricalImport(Number(button.dataset.openBatchImport)));
+}
+
+async function refreshHistoricalBatch() {
+  if (!state.historicalBatch.length) return;
+  await Promise.all(state.historicalBatch.map(async entry => {
+    if (!entry.result) return;
+    try { entry.result = await api(`/api/historical-imports/${entry.result.id}`); }
+    catch (_) { /* Keep the last visible receipt if one refresh fails. */ }
+  }));
+  renderHistoricalBatch();
+}
+
+async function openHistoricalImport(importId) {
+  try {
+    state.historicalImport = await api(`/api/historical-imports/${importId}`);
+    state.historicalPreviewPage = 1;
+    state.historicalRowFilter = state.historicalImport.review ? 'review' : (state.historicalImport.rejected ? 'rejected' : 'all');
+    const batchEntry = state.historicalBatch.find(entry => entry.result?.id === importId);
+    if (batchEntry) { batchEntry.result = state.historicalImport; renderHistoricalBatch(); }
+    await renderHistoricalImportWorkspace();
+    $('#historical-preview').scrollIntoView({behavior: 'smooth', block: 'start'});
+  } catch (error) { toast(error.message, true); }
+}
+
+async function renderHistoricalImportWorkspace() {
+  const item = state.historicalImport;
+  if (!item) return;
+  $('#historical-preview').hidden = false;
+  $('#historical-preview-title').textContent = HISTORICAL_SOURCE_LABELS[item.sourceKind] || item.sourceKind;
+  $('#historical-preview-subtitle').textContent = `${item.sourceFilename || 'File Excel'} · Mapping ${item.mappingVersion || '—'} · SHA-256 ${String(item.checksum || '').slice(0, 12)}…`;
+  $('#historical-preview-summary').innerHTML = `
+    <article class="historical-summary-card"><small>Kỳ báo cáo</small><strong>${esc(item.reportingPeriod || 'Chưa xác định')}</strong></article>
+    <article class="historical-summary-card"><small>Trạng thái</small><strong>${esc(HISTORICAL_STATUS_LABELS[item.status] || item.status)}</strong></article>
+    <article class="historical-summary-card valid"><small>Hợp lệ</small><strong>${number(item.accepted).toLocaleString('vi-VN')}</strong></article>
+    <article class="historical-summary-card review"><small>Cần xử lý</small><strong>${number(item.review).toLocaleString('vi-VN')}</strong></article>
+    <article class="historical-summary-card rejected"><small>Bị loại</small><strong>${number(item.rejected).toLocaleString('vi-VN')}</strong></article>`;
+  const conflicts = item.conflictingImportIds || [];
+  const conflictNotice = $('#historical-conflict-notice');
+  conflictNotice.hidden = !conflicts.length;
+  conflictNotice.innerHTML = conflicts.length
+    ? `<strong>Phát hiện dữ liệu cùng nguồn và cùng kỳ đang được sử dụng</strong>File hiện tại chưa thay bản cũ. Chọn “Giữ bản đang dùng” hoặc ghi lý do và chọn “Dùng file mới · tạo revision”. Lượt liên quan: ${conflicts.map(id => `#${esc(id)}`).join(', ')}.` : '';
+  const reviewGuide = $('#historical-review-guide');
+  reviewGuide.hidden = !item.review && !item.rejected;
+  if (!reviewGuide.hidden) {
+    const pendingBerth = [
+      ...state.historicalBatch.map(entry => entry.result), ...state.historicalHistory,
+    ].find(entry => entry?.sourceKind === 'tos_berth_call' && entry.status === 'PREVIEWED');
+    const location = item.sourceKind === 'tos_berth_call'
+      ? 'Lỗi liên kết phương tiện xử lý tại mục “Liên kết phương tiện” ngay dưới bảng.'
+      : item.sourceKind === 'tos_cargo_detail'
+        ? 'Nếu chưa ghép lượt, mở file Berth đang chờ và xác nhận; hệ thống sẽ tự kiểm tra lại Detail, kể cả sau khi khởi động lại.'
+        : 'Lỗi giá trị phải sửa đúng ô trong file PL.03 nguồn rồi upload lại.';
+    reviewGuide.innerHTML = `<strong>Kiểm tra ở đâu?</strong><span>Màn hình đang ưu tiên các dòng cần xử lý. Cột “Lý do / xử lý” ghi rõ lỗi và cách xử lý. ${esc(location)}</span>${pendingBerth && item.sourceKind === 'tos_cargo_detail' ? `<button type="button" class="outline-button" data-open-required-berth="${pendingBerth.id}">Mở Berth #${pendingBerth.id}</button>` : ''}`;
+    const requiredBerth = $('[data-open-required-berth]', reviewGuide);
+    if (requiredBerth) requiredBerth.onclick = () => openHistoricalImport(Number(requiredBerth.dataset.openRequiredBerth));
+  }
+  const isPreview = item.status === 'PREVIEWED';
+  $('.historical-confirm-area').hidden = !isPreview;
+  $('#keep-historical-existing').hidden = !conflicts.length;
+  $('#historical-revision-reason').hidden = !conflicts.length;
+  $('#confirm-historical-import').textContent = conflicts.length
+    ? 'Dùng file mới · tạo revision'
+    : item.sourceKind === 'tos_berth_call'
+      ? 'Xác nhận Berth & ghép Detail'
+      : item.sourceKind === 'tos_cargo_detail'
+        ? 'Ghi nhận Detail · chờ Berth'
+        : 'Xác nhận import';
+  const filters = {all: `Tất cả (${number(item.accepted) + number(item.review) + number(item.rejected)})`, review: `Cần xử lý (${number(item.review)})`, rejected: `Bị loại (${number(item.rejected)})`};
+  $$('[data-historical-row-filter]').forEach(button => {
+    button.textContent = filters[button.dataset.historicalRowFilter];
+    button.classList.toggle('active', button.dataset.historicalRowFilter === state.historicalRowFilter);
+    button.disabled = button.dataset.historicalRowFilter === 'review' ? !item.review : button.dataset.historicalRowFilter === 'rejected' ? !item.rejected : false;
+    button.onclick = () => {
+      state.historicalRowFilter = button.dataset.historicalRowFilter;
+      state.historicalPreviewPage = 1;
+      renderHistoricalImportWorkspace();
+    };
+  });
+  updateHistoricalSteps(item);
+  await Promise.all([loadHistoricalPreviewRows(state.historicalPreviewPage), loadHistoricalVesselLinks()]);
+}
+
+async function loadHistoricalPreviewRows(page = 1) {
+  const item = state.historicalImport;
+  if (!item) return;
+  try {
+    const status = state.historicalRowFilter === 'review' ? 'REVIEW' : state.historicalRowFilter === 'rejected' ? 'REJECTED' : '';
+    const result = await api(`/api/historical-imports/${item.id}/rows?page=${page}&page_size=50${status ? `&status=${status}` : ''}`);
+    state.historicalPreviewPage = result.page;
+    const rows = result.items || [];
+    let headers;
+    let body;
+    if (item.sourceKind === 'tos_berth_call') {
+      headers = '<th>Dòng</th><th>Phương tiện / chuyến</th><th>Bến đến & rời</th><th>ATB</th><th>ATD</th><th>Kết quả</th><th>Lý do / xử lý</th>';
+      body = rows.map(row => `<tr><td data-label="Dòng">${row.sourceRow}</td><td data-label="Phương tiện / chuyến"><strong>${esc(row.vesselName)}</strong><br><small>${esc(row.year)} · chuyến ${esc(row.voyage)}</small></td><td data-label="Bến đến & rời">${esc(row.berth || '—')}</td><td data-label="ATB">${esc(row.atb || '—')}</td><td data-label="ATD">${esc(row.atd || '—')}</td><td data-label="Kết quả"><span class="table-badge ${row.validationStatus === 'VALID' ? 'submitted' : row.validationStatus === 'REJECTED' ? 'danger' : 'draft'}">${row.validationStatus === 'VALID' ? 'Hợp lệ' : row.validationStatus === 'REJECTED' ? 'Bị loại' : 'Cần xử lý'}</span></td><td data-label="Lý do / xử lý">${historicalWarningCell(row)}</td></tr>`).join('');
+    } else if (item.sourceKind === 'tos_cargo_detail') {
+      headers = '<th>Dòng</th><th>Khóa chuyến</th><th>Container</th><th>Luồng hàng</th><th>Trọng lượng</th><th>Ghép lượt</th><th>Kết quả</th><th>Lý do / xử lý</th>';
+      body = rows.map(row => `<tr><td data-label="Dòng">${row.sourceRow}</td><td data-label="Khóa chuyến">${esc(row.sourceCallKey)}</td><td data-label="Container">${esc(row.size)} · ${esc(row.fullEmpty)} · ${row.teuFactor || '—'} TEU</td><td data-label="Luồng hàng">${esc(row.trade || '—')} · ${esc(row.direction || '—')}</td><td data-label="Trọng lượng">${row.weightTonnes == null ? '—' : `${number(row.weightTonnes).toLocaleString('vi-VN')} tấn`}</td><td data-label="Ghép lượt"><span class="table-badge ${row.matchStatus === 'MATCHED' ? 'submitted' : 'draft'}">${row.matchStatus === 'MATCHED' ? 'Đã ghép' : 'Chưa ghép'}</span></td><td data-label="Kết quả"><span class="table-badge ${row.validationStatus === 'VALID' ? 'submitted' : row.validationStatus === 'REJECTED' ? 'danger' : 'draft'}">${row.validationStatus === 'VALID' ? 'Hợp lệ' : row.validationStatus === 'REJECTED' ? 'Bị loại' : 'Cần xử lý'}</span></td><td data-label="Lý do / xử lý">${historicalWarningCell(row)}</td></tr>`).join('');
+    } else {
+      headers = '<th>Dòng</th><th>STT báo cáo</th><th>Phương tiện</th><th>Số đăng ký</th><th>Kết quả</th><th>Lý do / xử lý</th>';
+      body = rows.map(row => `<tr><td data-label="Dòng">${row.sourceRow}</td><td data-label="STT báo cáo">${row.appendixRowNo}</td><td data-label="Phương tiện">${esc(row.dimensions?.vesselNameRaw || '—')}</td><td data-label="Số đăng ký">${esc(row.dimensions?.registrationRaw || '—')}</td><td data-label="Kết quả"><span class="table-badge ${row.validationStatus === 'VALID' ? 'submitted' : 'draft'}">${row.validationStatus === 'VALID' ? 'Hợp lệ' : 'Cần xử lý'}</span></td><td data-label="Lý do / xử lý">${historicalWarningCell(row)}</td></tr>`).join('');
+    }
+    $('#historical-preview-table').innerHTML = rows.length
+      ? `<table class="data-table responsive-table historical-preview-table"><thead><tr>${headers}</tr></thead><tbody>${body}</tbody></table>`
+      : empty('Không có dòng preview', 'File không có dòng nghiệp vụ phù hợp với cấu trúc đã nhận diện.');
+    renderHistoricalPagination($('#historical-preview-pagination'), result, 'historical-preview-page', loadHistoricalPreviewRows);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadHistoricalVesselLinks() {
+  const item = state.historicalImport;
+  const section = $('#historical-link-review');
+  if (!item || item.sourceKind !== 'tos_berth_call') { section.hidden = true; return; }
+  try {
+    const [links, register] = await Promise.all([
+      api(`/api/historical-imports/${item.id}/vessel-links?status=PENDING&page=1&page_size=200`),
+      state.historicalRegisterItems.length ? Promise.resolve({items: state.historicalRegisterItems}) : api('/api/port-vessel-register'),
+    ]);
+    state.historicalRegisterItems = register.items || [];
+    section.hidden = !links.items?.length;
+    if (!links.items?.length) return;
+    $('#historical-link-list').innerHTML = links.items.map(link => {
+      const suggested = link.candidateVesselId
+        ? `<strong>${esc(link.candidateVesselName)}</strong><small>${esc(link.candidateRegistration || '')} · ${link.matchMethod === 'EXACT' ? 'Khớp chính xác' : 'Khớp sau chuẩn hóa'}</small>`
+        : `<label class="sr-only" for="historical-link-${link.id}">Chọn phương tiện cho ${esc(link.rawVesselName)}</label><select id="historical-link-${link.id}" data-historical-link-select="${link.id}"><option value="">Chọn trong Sổ theo dõi</option>${state.historicalRegisterItems.map(vessel => `<option value="${vessel.id}">${esc(vessel.name)} · ${esc(vessel.registration_no)}</option>`).join('')}</select>`;
+      return `<div class="historical-link-row"><div><strong>${esc(link.rawVesselName)}</strong><small>${esc(link.reason || 'Cần xác nhận liên kết')}</small></div><div>${suggested}</div><div class="historical-link-actions"><button type="button" class="outline-button" data-reject-historical-link="${link.id}">Không đúng</button><button type="button" class="primary-button" data-accept-historical-link="${link.id}" data-candidate-id="${link.candidateVesselId || ''}">Xác nhận</button></div></div>`;
+    }).join('');
+    $$('[data-accept-historical-link]', section).forEach(button => button.onclick = () => {
+      const linkId = Number(button.dataset.acceptHistoricalLink);
+      const selected = Number(button.dataset.candidateId || $(`[data-historical-link-select="${linkId}"]`)?.value || 0);
+      if (!selected) { toast('Chọn một phương tiện trong Sổ theo dõi trước khi xác nhận.', true); return; }
+      resolveHistoricalVesselLink(linkId, 'ACCEPT', selected);
+    });
+    $$('[data-reject-historical-link]', section).forEach(button => button.onclick = () => resolveHistoricalVesselLink(Number(button.dataset.rejectHistoricalLink), 'REJECT'));
+  } catch (error) { section.hidden = true; toast(error.message, true); }
+}
+
+async function resolveHistoricalVesselLink(linkId, decision, candidateVesselId = null) {
+  try {
+    await api(`/api/historical-imports/${state.historicalImport.id}/vessel-links/${linkId}/resolve`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({decision, candidate_vessel_id: candidateVesselId, reason: decision === 'ACCEPT' ? 'Nhân viên Cảng xác nhận trên preview.' : 'Nhân viên Cảng xác nhận không đúng phương tiện.'}),
+    });
+    state.historicalImport = await api(`/api/historical-imports/${state.historicalImport.id}`);
+    const batchEntry = state.historicalBatch.find(entry => entry.result?.id === state.historicalImport.id);
+    if (batchEntry) batchEntry.result = state.historicalImport;
+    renderHistoricalBatch();
+    await renderHistoricalImportWorkspace();
+    await loadHistoricalImportHistory();
+    toast(decision === 'ACCEPT' ? 'Đã xác nhận liên kết phương tiện.' : 'Đã từ chối liên kết phương tiện.');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function confirmHistoricalImport(action = null) {
+  const item = state.historicalImport;
+  if (!item) return;
+  const reason = $('#historical-revision-reason-input').value.trim();
+  if (action === 'ACTIVATE_NEW_REVISION' && reason.length < 5) {
+    toast('Ghi lý do cụ thể trước khi dùng file mới làm revision đang hoạt động.', true);
+    $('#historical-revision-reason-input').focus();
+    return;
+  }
+  const button = action === 'KEEP_EXISTING' ? $('#keep-historical-existing') : $('#confirm-historical-import');
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Đang xác nhận…';
+  try {
+    const payload = action ? {conflict_action: action, reason: reason || 'Người dùng chọn giữ bản đang dùng.'} : {};
+    const result = await api(`/api/historical-imports/${item.id}/confirm`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+    });
+    state.historicalImport = await api(`/api/historical-imports/${result.id}`);
+    await refreshHistoricalBatch();
+    await renderHistoricalImportWorkspace();
+    await loadHistoricalImportHistory();
+    toast(result.status === 'REVIEW' ? 'Đã ghi nhận; các dòng cần kiểm tra vẫn chưa được đưa vào báo cáo.' : result.status === 'REJECTED' ? 'Đã giữ bản đang dùng; file preview không được kích hoạt.' : 'Đã kích hoạt dữ liệu lịch sử.');
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; button.textContent = original; }
+}
+
+async function cancelHistoricalImport() {
+  const item = state.historicalImport;
+  if (!item || item.status !== 'PREVIEWED') return;
+  try {
+    await api(`/api/historical-imports/${item.id}/cancel`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reason: 'Người dùng hủy sau khi xem preview.'}),
+    });
+    await refreshHistoricalBatch();
+    state.historicalImport = null;
+    $('#historical-preview').hidden = true;
+    updateHistoricalSteps(null);
+    await loadHistoricalImportHistory();
+    toast('Đã hủy lượt import; không có dữ liệu lịch sử nào được kích hoạt.');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadHistoricalImportHistory(page = state.historicalHistoryPage) {
+  if (state.importMode !== 'historical' || !state.activeReportingUnitId) return;
+  ensureHistoricalExportPanel();
+  const container = $('#historical-import-history');
+  container.innerHTML = '<div class="empty-state">Đang tải lịch sử import…</div>';
+  try {
+    await api('/api/historical-imports/reconcile', {method: 'POST'});
+    const result = await api(`/api/historical-imports?page=${page}&page_size=20`);
+    state.historicalHistoryPage = result.page;
+    state.historicalHistory = result.items || [];
+    const activeBerthPeriods = result.activeBerthPeriods || [];
+    renderHistoricalHistorySummary(result.summary);
+    if ($('#historical-pl03-month') && !pl03PeriodValue()) {
+      setPl03Period(state.historicalHistory.find(item => item.sourceKind === 'tos_berth_call' && item.reportingPeriod)?.reportingPeriod || '');
+    }
+    container.innerHTML = state.historicalHistory.length
+      ? `<table class="data-table responsive-table"><thead><tr><th>Mã</th><th>Nguồn</th><th>Kỳ</th><th>Kết quả</th><th>Revision</th><th>Trạng thái</th><th></th></tr></thead><tbody>${state.historicalHistory.map(item => `<tr><td data-label="Mã">#${item.id}<br><small>${fmtDate(item.createdAt)}</small></td><td data-label="Nguồn"><strong>${esc(HISTORICAL_SOURCE_LABELS[item.sourceKind] || item.sourceKind)}</strong><br><small title="${esc(item.sourceFilename)}">${esc(item.sourceFilename)}</small></td><td data-label="Kỳ">${esc(historicalEffectivePeriod(item, activeBerthPeriods))}</td><td data-label="Kết quả">${historicalResultCell(item)}</td><td data-label="Revision">${historicalRevCell(item)}</td><td data-label="Trạng thái" class="historical-status"><span class="table-badge ${historicalStatusTone(item.status)}">${esc(HISTORICAL_STATUS_LABELS[item.status] || item.status)}</span></td><td data-label="Thao tác" class="historical-history-action"><button type="button" class="outline-button" data-open-historical-import="${item.id}">${item.status === 'PREVIEWED' ? 'Tiếp tục' : 'Xem'}</button></td></tr>`).join('')}</tbody></table>`
+      : empty('Chưa có dữ liệu lịch sử', 'Chọn một file TOS hoặc PL.03 cũ để tạo preview đầu tiên.');
+    $$('[data-open-historical-import]', container).forEach(button => button.onclick = () => openHistoricalImport(Number(button.dataset.openHistoricalImport)));
+    renderHistoricalPagination($('#historical-history-pagination'), result, 'historical-history-page', loadHistoricalImportHistory);
+  } catch (error) {
+    container.innerHTML = empty('Không thể tải lịch sử import', error.message);
     toast(error.message, true);
   }
 }
@@ -1292,10 +1923,38 @@ async function downloadFile(path, filename) {
 }
 
 async function exportReport(kind) {
-  const from = $('#report-from').value || '1900-01-01';
-  const to = $('#report-to').value || '2999-12-31';
+  let from = $('#report-from').value || '1900-01-01';
+  let to = $('#report-to').value || '2999-12-31';
+  if (kind === 'appendix2') {
+    const month = $('#report-month').value;
+    if (!month) { toast('Vui lòng chọn tháng báo cáo PL.02.', true); return; }
+    const [year, monthNumber] = month.split('-').map(Number);
+    from = `${month}-01`;
+    to = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+  }
   try {
     await downloadFile(`/api/reports/${kind}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, `report_${kind}_${from}_${to}.xlsx`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadReportAdjustments() {
+  const month = $('#report-month').value;
+  if (!month || !['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role)) return;
+  const items = await api(`/api/reports/appendix2/adjustments?report_month=${encodeURIComponent(month)}`);
+  $('#report-adjustment-history').innerHTML = items.length
+    ? `<table class="data-table responsive-table"><thead><tr><th>Thời gian</th><th>Chỉ tiêu</th><th>Delta</th><th>Lý do</th></tr></thead><tbody>${items.map(item => `<tr><td data-label="Thời gian">${fmtDate(item.created_at)}</td><td data-label="Chỉ tiêu">${item.metric === 'calls' ? 'Lượt tàu' : 'Lượt tàu khách'}</td><td data-label="Delta">${item.delta > 0 ? '+' : ''}${item.delta}</td><td data-label="Lý do">${esc(item.reason)}</td></tr>`).join('')}</tbody></table>`
+    : 'Chưa có điều chỉnh trong tháng.';
+}
+
+async function saveReportAdjustment(event) {
+  event.preventDefault();
+  const data = values(event.currentTarget);
+  try {
+    await api('/api/reports/appendix2/adjustments', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...data, delta:Number(data.delta)})});
+    event.currentTarget.elements.delta.value = '';
+    event.currentTarget.elements.reason.value = '';
+    await loadReportAdjustments();
+    toast('Đã ghi điều chỉnh PL.02 vào nhật ký audit.');
   } catch (error) { toast(error.message, true); }
 }
 
@@ -1310,10 +1969,14 @@ async function loadIntegration() {
 }
 
 const ANALYTICS_KPIS = [['trips', 'Lượt tàu'], ['tons', 'Khối lượng (tấn)'], ['teu', 'TEU'], ['pax', 'Hành khách']];
+const ANALYTICS_SOURCE_LABELS = {live:'LIVE · Phiếu đã duyệt', historical:'LỊCH SỬ · TOS', combined:'KẾT HỢP'};
+const ANALYTICS_COVERAGE_LABELS = {COMPLETE:'Đầy đủ', PARTIAL:'Một phần', MISSING:'Thiếu dữ liệu', BLOCKED:'Đang khóa'};
 
 function renderAnalyticsUnavailable() {
   $('#analytics-title').textContent = 'Thống kê sản lượng';
   $('#analytics-unavailable').hidden = false;
+  $('#analytics-coverage').hidden = true;
+  $('#analytics-combined-blocked').hidden = true;
   $('#kpi-grid').hidden = true;
   $('.analytics-split').hidden = true;
   $$('.period-switch button').forEach(button => {
@@ -1329,18 +1992,49 @@ function analyticsDelta(cur, prev) {
   return { up, txt: `${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(1).replace('.', ',')}%` };
 }
 
-async function loadReportAnalytics(period = 'month') {
+function renderAnalyticsCoverage(data) {
+  const coverage = data.coverage || {status:'MISSING', periods:[], warnings:[]};
+  const internal = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role);
+  $('#analytics-source-controls').hidden = !internal;
+  $$('.analytics-source-switch button').forEach(button => {
+    button.classList.toggle('active', button.dataset.source === data.source);
+    button.setAttribute('aria-pressed', button.dataset.source === data.source ? 'true' : 'false');
+    button.onclick = () => loadReportAnalytics(data.period, button.dataset.source);
+  });
+  const coveragePanel = $('#analytics-coverage');
+  coveragePanel.hidden = data.source === 'live' && !internal;
+  $('#analytics-coverage-status').textContent = ANALYTICS_COVERAGE_LABELS[coverage.status] || coverage.status;
+  $('#analytics-coverage-status').className = `table-badge ${coverage.status === 'COMPLETE' ? 'submitted' : 'draft'}`;
+  $('#analytics-coverage-title').textContent = (ANALYTICS_SOURCE_LABELS[data.source] || data.source).split(' · ')[0];
+  coveragePanel.title = (coverage.warnings || []).join(' ');
+  $('#analytics-coverage-periods').innerHTML = (coverage.periods || [])
+    .filter(item => item.overlap || number(item.liveApproved) || number(item.historicalCalls) || number(item.historicalCargoRows))
+    .map(item => {
+      const facts = [];
+      if (number(item.liveApproved)) facts.push(`LIVE ${number(item.liveApproved).toLocaleString('vi-VN')}`);
+      if (number(item.historicalCalls)) facts.push(`TOS ${number(item.historicalCalls).toLocaleString('vi-VN')} lượt`);
+      if (number(item.historicalCargoRows)) facts.push(`${number(item.historicalCargoRows).toLocaleString('vi-VN')} dòng`);
+      return `<span class="coverage-period ${item.overlap ? 'overlap' : ''}"><strong>${esc(item.month)}</strong><span>${facts.join(' · ')}</span>${item.overlap ? '<b>ĐỐI SOÁT</b>' : ''}</span>`;
+    }).join('');
+}
+
+async function loadReportAnalytics(period = 'month', source = state.analyticsSource) {
   try {
-    const data = await api(`/api/reports/analytics?period=${period}`);
+    const allowedSource = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role) ? source : 'live';
+    const data = await api(`/api/reports/analytics?period=${period}&source=${allowedSource}`);
+    state.analyticsSource = data.source;
     $('#analytics-unavailable').hidden = true;
     $('#analytics-demo-notice').hidden = data.dataSource !== 'DEMO';
-    $('#kpi-grid').hidden = false;
-    $('.analytics-split').hidden = false;
-    $('#export-analytics').disabled = false;
+    renderAnalyticsCoverage(data);
+    const blocked = data.combinedAllowed === false;
+    $('#analytics-combined-blocked').hidden = !blocked;
+    $('#kpi-grid').hidden = blocked;
+    $('.analytics-split').hidden = blocked;
+    $('#export-analytics').disabled = blocked;
     const fmt = value => number(value).toLocaleString('vi-VN');
     $$('.period-switch button').forEach(button => {
       button.classList.toggle('active', button.dataset.period === data.period);
-      button.onclick = () => loadReportAnalytics(button.dataset.period);
+      button.onclick = () => loadReportAnalytics(button.dataset.period, state.analyticsSource);
     });
     const meta = data.meta || {};
     $('#analytics-title').textContent = meta.analyticsTitle || '';
@@ -1349,14 +2043,21 @@ async function loadReportAnalytics(period = 'month') {
     $('#compare-sub').textContent = meta.compareSub || '';
     $('#kpi-grid').innerHTML = ANALYTICS_KPIS.map(([key, label]) => {
       const kpi = data.kpis[key] || { cur: 0, prev: 0 };
+      if (kpi.cur === null || kpi.cur === undefined) {
+        return `<article class="kpi-card incomplete"><p>${label.toUpperCase()}</p><div class="kpi-value"><strong>—</strong></div><small>Chưa đủ độ phủ để tính</small></article>`;
+      }
       const delta = analyticsDelta(kpi.cur, kpi.prev);
-      return `<article class="kpi-card"><p>${label.toUpperCase()}</p><div class="kpi-value"><strong>${fmt(kpi.cur)}</strong><span class="kpi-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</span></div><small>Cùng kỳ: ${fmt(kpi.prev)}</small></article>`;
+      const prior = kpi.prev === null || kpi.prev === undefined ? 'Chưa đủ dữ liệu' : fmt(kpi.prev);
+      return `<article class="kpi-card"><p>${label.toUpperCase()}</p><div class="kpi-value"><strong>${fmt(kpi.cur)}</strong>${kpi.prev === null || kpi.prev === undefined ? '' : `<span class="kpi-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</span>`}</div><small>Cùng kỳ: ${prior}</small></article>`;
     }).join('');
     const trend = data.trend || { labels: [], cur: [], prev: [] };
     const max = Math.max(...trend.cur, ...trend.prev, 1);
     $('#trend-chart').innerHTML = trend.labels.map((label, i) => `<div class="trend-col"><div class="trend-bars"><span class="trend-bar cur" style="height:${Math.round((trend.cur[i] || 0) / max * 100)}%"></span><span class="trend-bar prev" style="height:${Math.round((trend.prev[i] || 0) / max * 100)}%"></span></div><small>${esc(label)}</small></div>`).join('');
     $('#compare-body').innerHTML = ANALYTICS_KPIS.map(([key, label]) => {
       const kpi = data.kpis[key] || { cur: 0, prev: 0 };
+      if (kpi.cur === null || kpi.prev === null || kpi.cur === undefined || kpi.prev === undefined) {
+        return `<tr><td>${label}</td><td>${kpi.cur == null ? '—' : fmt(kpi.cur)}</td><td>${kpi.prev == null ? '—' : fmt(kpi.prev)}</td><td class="muted">Chưa đủ dữ liệu</td></tr>`;
+      }
       const delta = analyticsDelta(kpi.cur, kpi.prev);
       return `<tr><td>${label}</td><td>${fmt(kpi.cur)}</td><td>${fmt(kpi.prev)}</td><td class="compare-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</td></tr>`;
     }).join('');
@@ -1369,7 +2070,7 @@ async function loadReportAnalytics(period = 'month') {
 
 function exportAnalyticsReport() {
   const period = $('.period-switch button.active')?.dataset.period || 'month';
-  downloadFile(`/api/reports/analytics/export?period=${period}`, `bao_cao_tong_hop_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  downloadFile(`/api/reports/analytics/export?period=${period}&source=${state.analyticsSource}`, `bao_cao_tong_hop_${state.analyticsSource}_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`)
     .catch(error => toast(error.message, true));
 }
 
@@ -1425,6 +2126,7 @@ async function init() {
       await api('/api/auth/logout', { method: 'POST' });
     } catch (_) {}
     localStorage.removeItem('token');
+    if (state.currentUser?.username) localStorage.removeItem(reportingUnitStorageKey());
     state.currentUser = null;
     location.reload();
   };
@@ -1437,7 +2139,7 @@ async function init() {
 
     // Role-based UI visibility constraints
     const isCustomer = state.currentUser.role === 'CUSTOMER';
-    const isAdmin = state.currentUser.role === 'ADMIN';
+    const isAdmin = state.currentUser.role === 'PLATFORM_ADMIN';
     const isReviewer = state.currentUser.role === 'PORT_STAFF';
 
     const canCreateDeclaration = isCustomer || isAdmin;
@@ -1452,7 +2154,7 @@ async function init() {
     const addVesselBtn = $('#add-vessel');
     if (addVesselBtn) addVesselBtn.hidden = isReviewer || isCustomer;
     const addCrewBtn = $('#add-crew');
-    if (addCrewBtn) addCrewBtn.hidden = isReviewer;
+    if (addCrewBtn) addCrewBtn.hidden = false;
 
     if (isCustomer) {
       $$('nav a[data-route]').forEach(link => {
@@ -1484,12 +2186,22 @@ async function init() {
     const integrationJobs = $('#sync-jobs');
     if (integrationActions) integrationActions.hidden = !isAdmin;
     if (integrationJobs) integrationJobs.hidden = !isAdmin;
+    $('#report-adjustment-panel').hidden = !(isReviewer || isAdmin);
 
   } catch (err) {
     state.currentUser = null;
     $('#user-display').innerHTML = '';
     $('#logout-button').style.display = 'none';
     showLoginDialog();
+    return;
+  }
+
+  try {
+    if (!await loadReportingUnitContext()) return;
+  } catch (error) {
+    $('#api-state').className = 'state-badge pending';
+    $('#api-state').textContent = 'Lỗi phạm vi';
+    toast(error.message, true);
     return;
   }
 
@@ -1527,6 +2239,11 @@ async function init() {
   $('#declaration-form').addEventListener('submit', saveDeclaration);
   $('#workflow-form').addEventListener('submit', saveWorkflow);
   $('#in-app-certificate-reminders').addEventListener('change', saveNotificationPreferences);
+  $('#report-adjustment-form').addEventListener('submit', saveReportAdjustment);
+  $('#report-month').addEventListener('change', event => {
+    $('#report-adjustment-form').elements.report_month.value = event.target.value;
+    loadReportAdjustments().catch(error => toast(error.message, true));
+  });
 
   $('#add-crew').onclick = () => openCrew();
   $$('[data-close-dialog]').forEach(button => button.onclick = () => document.getElementById(button.dataset.closeDialog).close());
@@ -1538,14 +2255,42 @@ async function init() {
   $('#import-declaration').onchange = event => previewImport(event.target, '/api/import/declaration', 'declaration');
   $('#import-crew').onchange = event => previewImport(event.target, '/api/import/crew', 'crew');
   $('#import-port-register').onchange = event => previewImport(event.target, '/api/import/port-vessel-register', 'vessels');
+  $('#operational-import-tab').onclick = () => setImportMode('operational');
+  $('#historical-import-tab').onclick = () => setImportMode('historical');
+  $$('.import-mode-tabs [role="tab"]').forEach(tab => tab.onkeydown = event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const next = tab.id === 'operational-import-tab' ? $('#historical-import-tab') : $('#operational-import-tab');
+    next.focus();
+    next.click();
+  });
+  $('#import-historical').onchange = event => previewHistoricalImport(event.target);
+  $('#close-historical-preview').onclick = () => { $('#historical-preview').hidden = true; };
+  $('#cancel-historical-import').onclick = cancelHistoricalImport;
+  $('#keep-historical-existing').onclick = () => confirmHistoricalImport('KEEP_EXISTING');
+  $('#confirm-historical-import').onclick = () => confirmHistoricalImport(
+    state.historicalImport?.conflictingImportIds?.length ? 'ACTIVATE_NEW_REVISION' : null
+  );
+  $('#refresh-historical-history').onclick = () => loadHistoricalImportHistory(1);
   $('#close-port-import').onclick = cancelImport;
   $$('[data-report]').forEach(button => button.onclick = () => exportReport(button.dataset.report));
   $('#export-analytics').onclick = exportAnalyticsReport;
   $('#trigger-backup').onclick = triggerBackup;
   $('#prepare-sync').onclick = prepareSync;
   const today = new Date(); $('#report-to').value = today.toISOString().slice(0,10); $('#report-from').value = `${today.getFullYear()}-01-01`;
+  $('#report-month').value = today.toISOString().slice(0, 7);
+  $('#report-adjustment-form').elements.report_month.value = $('#report-month').value;
+  if (['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role)) loadReportAdjustments().catch(error => toast(error.message, true));
   try {
-    [state.catalogs, state.vessels, state.crew] = await Promise.all([api('/api/catalogs'), api('/api/vessels'), api('/api/crew')]);
+    const organizationRequest = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role)
+      ? api('/api/reporting-unit/organizations') : Promise.resolve({items: []});
+    const [catalogs, vessels, crew, organizations] = await Promise.all([
+      api('/api/catalogs'), api('/api/vessels'), api('/api/crew'), organizationRequest,
+    ]);
+    state.catalogs = catalogs;
+    state.vessels = vessels;
+    state.crew = crew;
+    state.reportingUnitOrganizations = organizations.items || [];
     $('#api-state').className = 'state-badge ok'; $('#api-state').textContent = 'Đã kết nối';
   } catch (error) { $('#api-state').className = 'state-badge pending'; $('#api-state').textContent = 'Mất kết nối'; toast(error.message, true); }
   route();

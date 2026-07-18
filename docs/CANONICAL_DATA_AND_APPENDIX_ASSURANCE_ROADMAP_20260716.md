@@ -1,11 +1,11 @@
 # Roadmap — Canonical Data and Appendix Assurance
 
-Status: T0 CLOSED — T1 DESIGN AUTHORIZED; BUILD NOT AUTHORIZED
+Status: T0–T4 IMPLEMENTATION CLOSED — LIVE BUSINESS VALIDATION REMAINS
 Date: 2026-07-16
 Updated: 2026-07-17 — incorporated the 67-column mapping and owner decision register
 Project: Khai-bao-Cang-vu-recovery-ux
-Current phase: DESIGN
-Next implementation phase: BUILD after T1 approval
+Current phase: REVIEW
+Next phase: downstream live-data acceptance or separate T5 upstream proposal
 Risk level: R2
 
 ## 1. Outcome
@@ -138,7 +138,7 @@ Exit gate:
 
 ### T1 — Canonical data contract and index
 
-Status: IN PROGRESS — DESIGN ONLY
+Status: CLOSED — DESIGN CONTRACT RECORDED; OWNER AUTHORIZED BUILD 2026-07-17
 Phase: DESIGN
 
 Deliverables:
@@ -155,20 +155,24 @@ Deliverables:
   or weakening its source, blank and conflict rules.
 - Define PL.03 aggregation for multiple declarations per vessel, especially
   cargo names, dates, ports and agents that cannot be numerically summed.
-- Define the audited PORT_STAFF/ADMIN manual-adjustment record and workflow for
+- Define the audited PORT_STAFF or explicit-context PLATFORM_ADMIN manual-adjustment record and workflow for
   PL.02 call counts.
 - Define the analytical dashboard projections separately from the official
   PL.01/PL.02/PL.03 exports.
 
 Exit gate:
 
-- Human review approves entity ownership, field precedence, tenant scope and
-  report inclusion rules before any schema or application change.
+- **PASSED 2026-07-17:** entity ownership, field precedence, tenant scope,
+  PL.02 adjustment and PL.03 aggregation are recorded in `DATA_PLATFORM_README.md`,
+  `DATA_INDEX.md`, `DATA_FIELD_CATALOG.md`, `DATA_INHERITANCE_RULES.md` and
+  `data_field_manifest.json`.
+- **PASSED 2026-07-17:** the owner's instruction `Tiến hành sửa` authorizes the
+  documented implementation plan in `REPORT_IMPLEMENTATION_PLAN_20260717.md`.
 
 ### T2 — Canonical foundation and provenance
 
-Status: NOT STARTED
-Phase: BUILD after T1 approval
+Status: CLOSED — APPROVED LOCAL IMPLEMENTATION SCOPE 2026-07-17
+Phase: BUILD
 
 Actions:
 
@@ -189,10 +193,13 @@ Exit gate:
 
 - Migration rehearsal, integrity checks, tenant isolation, provenance and
   conflict-resolution tests pass.
+- **PASSED 2026-07-17:** local DB backup and migration to `l11f0f000011`,
+  canonical snapshot fields, append-only adjustment audit model and full test
+  suite are recorded in the implementation handoff.
 
 ### T3 — Shared projections and inheritance between tabs
 
-Status: NOT STARTED
+Status: CLOSED — APPROVED LOCAL IMPLEMENTATION SCOPE 2026-07-17
 Phase: BUILD after T2
 
 Actions:
@@ -214,10 +221,13 @@ Exit gate:
 
 - Cross-tab inheritance tests cover create, update, blank input, conflicting
   source, tenant boundary and approved-snapshot behavior.
+- **PASSED 2026-07-17:** canonical vessel/crew/declaration projections,
+  snapshot behavior, explicit-overwrite import rules and role/tenant controls
+  are covered by the 95-test application suite.
 
 ### T4 — Report hardening and repeatable artifact assurance
 
-Status: NOT STARTED
+Status: CLOSED — SPREADSHEET IMPLEMENTATION GATE PASS 2026-07-17
 Phase: REVIEW after T3
 
 Actions:
@@ -246,6 +256,10 @@ Exit gate:
   traceable exception; MAP-01 through MAP-05 are closed.
 - Any remaining limitation is explicit; no `100% template compliant` claim is
   made without complete evidence.
+- **PASSED 2026-07-17:** six-workbook regression plus focused PL.03 recheck
+  close REG-01, APPX-01–04 and MAP-01–05 at implementation level.
+- **LIMITATION:** live business data remains NOT PROVABLE because the
+  operational database contains no approved declarations.
 
 ### T5 — Upstream CVF lesson extraction
 
@@ -269,7 +283,7 @@ Exit gate:
 
 ## 5. Execution order
 
-`T0 CLOSED → T1 DESIGN → human design approval → T2 → T3 → T4 → downstream acceptance → T5`
+`T0 CLOSED → T1 CLOSED → T2 CLOSED → T3 CLOSED → T4 CLOSED → live-data acceptance → T5 DEFERRED`
 
 No tranche may use the existence of this roadmap as implementation approval.
 T2 and T3 are production-data/schema-impacting R2 work and require explicit
@@ -277,8 +291,29 @@ human review at the T1 gate.
 
 ## 6. Current hold point
 
-The repository is now in DESIGN. T0 is closed and T1 documentation may proceed.
-No code, schema, template or operational-data change is authorized yet. The
-safe next move is to complete the T1 canonical field catalog, inheritance
-rules, PL.03 vessel-aggregation contract, PL.02 adjustment contract, dashboard
-projections and acceptance tests, then obtain human approval before BUILD.
+The approved canonical-data and appendix implementation tranche is CLOSED for
+the local implementation scope. T0 through T4 have passed their documented
+business, design, migration, automated-test and Spreadsheet artifact gates.
+The focused recheck reviewed seven artifact-tool renders: REG-01 is CLOSED,
+positive PL.03 is PASS, the 47-Salan operational guardrail is PASS and the
+overall Spreadsheet implementation gate is PASS.
+
+The repository remains in REVIEW rather than claiming production/live-data
+readiness. The operational database has 47 canonical Salan but no approved
+declarations; therefore activity cells are correctly blank and live business
+data remains NOT PROVABLE. The next downstream evidence step is to reconcile a
+small approved operational sample against its declaration source using
+`LIVE_DATA_VALIDATION_AND_POST_PILOT_RUNBOOK_20260717.md`. This live-data gate
+is separate from the already closed implementation tranche. T5 remains deferred
+and must be performed in a separate CVF-core session; no upstream change is
+authorized here.
+
+## 7. Separate historical-import workstream
+
+The owner's new requirement to import old PL.01, PL.02 and PL.03 workbooks into
+a historical reporting store is tracked separately in
+`HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md`. It does not
+reopen the closed canonical appendix implementation tranche and must not create
+synthetic declarations. The new H-series roadmap remains at INTAKE until real
+sample workbooks are audited and its data/revision/overlap decisions are
+approved.

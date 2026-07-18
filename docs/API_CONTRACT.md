@@ -141,6 +141,76 @@ an obsolete status.
 *   **External link safety**: passive Excel `hyperlink` and `externalLinkPath` relationships are ignored and never fetched. Other external relationship types remain rejected.
 *   **Demo transition**: the sentinel demo dataset is removed on first real create/import. A demo CUSTOMER keeps its organization/user binding while the sentinel is cleared and the real organization profile is applied.
 
+### HISTORICAL TOS / PL.03 IMPORT (H3A)
+
+All routes require an explicit `X-Reporting-Unit-ID`. `PORT_STAFF` must have an
+FK-backed membership in that unit; `PLATFORM_ADMIN` must deliberately select the
+unit. `CUSTOMER` is denied.
+
+| Method | Path | Request | Response |
+|--------|------|---------|----------|
+| POST | `/api/historical-imports/preview` | XLSX body; optional `X-Source-Filename` provenance | detected source, checksum, mapping receipt, counts, conflicts |
+| POST | `/api/historical-imports/reconcile` | — | idempotently rechecks active Berth-to-Detail links in the selected reporting unit and returns changed import ids |
+| GET | `/api/historical-imports/exports/pl03` | `reporting_period=YYYY-MM` | synthesized official PL.03 XLSX plus compact provenance receipt header |
+| GET | `/api/historical-imports` | `page`, `page_size` | tenant-scoped import history |
+| GET | `/api/historical-imports/{id}` | — | import detail, conflicts and mapping receipt |
+| GET | `/api/historical-imports/{id}/rows` | `page`, `page_size`, optional `status=VALID|REVIEW|REJECTED` | cell-provenance preview rows with warning codes |
+| GET | `/api/historical-imports/{id}/vessel-links` | optional status, pagination | vessel-link review queue |
+| POST | `/api/historical-imports/{id}/confirm` | optional conflict action/reason | committed, review, rejected or superseded revision state |
+| POST | `/api/historical-imports/{id}/cancel` | reason | cancel a PREVIEWED import without activating facts |
+| POST | `/api/historical-imports/{id}/vessel-links/{link_id}/resolve` | accept/reject candidate | audited link decision |
+
+The browser may select several historical workbooks in one upload action. Each
+workbook still creates or reuses its own checksum-backed import receipt; this is
+not a merged opaque upload and there is no required upload order. After a Berth
+import is confirmed, the server reconciles both active and still-PREVIEWED
+cargo-detail imports in the same reporting unit, updates their row
+match/validation states and refreshes their counts. Opening historical history
+also invokes the idempotent reconcile route, so a browser restart repairs stale
+derived match states without silently confirming a PREVIEWED source. The UI can
+then reopen the cargo receipt without uploading it again.
+
+Detection is based on approved sheet/header/structure signatures, not the file
+name. A repeated checksum is idempotent. Overlap never overwrites silently:
+confirmation must choose `KEEP_EXISTING` or `ACTIVATE_NEW_REVISION` and a new
+revision requires a reason. TOS ATB/ATD remains distinct and authoritative;
+legacy PL.03 time is stored only as reported provenance.
+
+Numeric extraction accepts Excel numeric cells and audited text representations
+using Vietnamese or English separators: `331,47`, `331.47`, `1.088,84` and
+`1,088.84`. Decimal-comma support is versioned as `tos_cargo_detail_v2` and
+`reported_pl03_35col_historical_v2` (`KBCV-HIST-TOS-1.1`), so uploading a file
+previously previewed under v1 creates a corrected receipt instead of reusing the
+stale validation result.
+
+Warning codes remain in provenance as audit evidence, but the UI does not show
+them as active errors after a row becomes `VALID`. A confirmed Berth receipt
+reconciles matching Detail receipts, including receipts already in `REVIEW`;
+resolved Detail rows/counts update in place. When the same source checksum is
+reprocessed under a newer mapping, an active older mapping is an explicit
+revision conflict even if the legacy workbook has no trustworthy report period.
+Activating the corrected receipt marks the older one `SUPERSEDED`.
+
+The synthesized PL.03 export uses active Berth ATB/ATD and matched Detail
+weight, movement, trade, size and full/empty facts as authoritative. Container
+shell weight remains report tonnes; TEU is split into full and empty columns.
+The historical PL.03 source supplies only legacy vessel/static dimensions when
+the canonical port register has no value; its manual cargo totals and ETA-era
+time cells never override matched TOS facts. The canonical port register wins
+for vessel dimensions. The export remains scoped to the explicitly selected
+reporting unit and records contributing import ids in its receipt.
+
+### REPORTING UNIT ADMINISTRATION
+
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/reporting-units` | PORT_STAFF, PLATFORM_ADMIN | — | Active units visible to the caller |
+| POST | `/api/reporting-units` | PLATFORM_ADMIN | `{name, code}` | Creates an empty active unit and records a tenant-scoped audit event |
+
+Creating a unit never copies memberships, customer organizations, vessels,
+declarations or historical facts from the currently selected unit. The new
+unit must be configured separately before PORT_STAFF can operate it.
+
 ### REPORTS
 
 | Method | Path | Allowed Roles | Request | Response |
@@ -148,8 +218,8 @@ an obsolete status.
 | GET | `/api/reports/appendix1` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 | GET | `/api/reports/appendix2` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 | GET | `/api/reports/appendix3` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
-| GET | `/api/reports/analytics` | CUSTOMER, PORT_STAFF, ADMIN | `period=week\|month\|quarter\|year`, optional `as_of` | `{period, dataSource, kpis, trend, meta}` |
-| GET | `/api/reports/analytics/export` | CUSTOMER, PORT_STAFF, ADMIN | same as analytics | XLSX download |
+| GET | `/api/reports/analytics` | CUSTOMER (`source=live` only), PORT_STAFF, PLATFORM_ADMIN with explicit unit context | `period=week\|month\|quarter\|year`, `source=live\|historical\|combined` (default `live`), optional `as_of` | `{period, source, dataSource, combinedAllowed, kpis, trend, coverage, meta}`; combined KPI values are `null` while source overlap is unresolved |
+| GET | `/api/reports/analytics/export` | Same as analytics | Same query as analytics | XLSX download; returns `409` instead of exporting an unresolved combined total |
 
 *   **Tenant Constraint**: CUSTOMER receives only records from its own organization; reviewers and ADMIN receive the operational scope allowed by their role.
 *   Analytics includes only declarations in `APPROVED` and compares the selected period with the same period of the previous year. `dataSource=DEMO` is a display marker only; it is not governance evidence.

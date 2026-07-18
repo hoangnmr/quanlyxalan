@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import math
 import re
 import unicodedata
 import zipfile
@@ -533,6 +534,8 @@ DECLARATION_CELLS = {
     "certificate_expiry_date": "C17", "crew_count": "C18", "passenger_count": "C19",
     "last_port": "C22", "working_port": "C23", "destination_port": "C24",
     "eta": "C25", "etd": "C26", "master_name": "C57", "master_phone": "C58",
+    "departure_berth": None, "agent_ptnd_name": None, "is_passenger_call": None,
+    "actual_arrival_at": None, "actual_departure_at": None,
 }
 
 
@@ -551,9 +554,14 @@ DECLARATION_LABEL_ALIASES = {
     "passenger_count": ("Số hành khách",),
     "last_port": ("Cảng rời cuối cùng", "Cảng xuất phát"),
     "working_port": ("Cảng cầu bến đến làm hàng", "Cảng đến làm hàng"),
+    "departure_berth": ("Cảng cầu bến rời", "Cầu bến rời", "Vị trí rời"),
     "destination_port": ("Cảng đích", "Điểm đến cuối cùng"),
+    "agent_ptnd_name": ("Đại lý PTND",),
+    "is_passenger_call": ("Lượt tàu khách", "Phương tiện tàu khách"),
     "eta": ("Thời gian dự kiến đến",),
     "etd": ("Thời gian dự kiến rời",),
+    "actual_arrival_at": ("Thời gian đến thực tế", "ATA"),
+    "actual_departure_at": ("Thời gian rời thực tế", "ATD"),
     "master_name": ("Họ tên thuyền trưởng", "Thuyền trưởng"),
     "master_phone": ("Số điện thoại thuyền trưởng", "SĐT thuyền trưởng"),
 }
@@ -578,7 +586,11 @@ def declaration_row(sheets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     sheet_name, sheet = _detect_declaration_sheet(sheets)
     result: dict[str, Any] = {}
     for key, fallback_cell in DECLARATION_CELLS.items():
-        result[key] = _value_after_label(sheet, DECLARATION_LABEL_ALIASES[key]) or sheet.get(fallback_cell)
+        result[key] = _value_after_label(sheet, DECLARATION_LABEL_ALIASES[key]) or (
+            sheet.get(fallback_cell) if fallback_cell else None
+        )
+    passenger_call = import_match_key(result.get("is_passenger_call"))
+    result["is_passenger_call"] = passenger_call in {"CO", "YES", "TRUE", "1", "TAUKHACH"}
     result["unload"] = _cargo_from_cells(sheet, 30, 31, 32, 33)
     result["load"] = _cargo_from_cells(sheet, 44, 45, 46, 47)
     result["_source_sheet"] = sheet_name
@@ -627,18 +639,21 @@ def make_xlsx(title: str, headers: list[str], rows: list[list[Any]]) -> bytes:
     return output.getvalue()
 
 
-def _report_table_style(ws, header_rows: int, column_count: int, data_rows: int) -> None:
+def _report_table_style(
+    ws, header_rows: int, column_count: int, data_rows: int, *, header_start: int = 1
+) -> None:
     thin = Side(style="thin", color="000000")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    for row in ws.iter_rows(min_row=1, max_row=header_rows, min_col=1, max_col=column_count):
+    header_end = header_start + header_rows - 1
+    for row in ws.iter_rows(min_row=header_start, max_row=header_end, min_col=1, max_col=column_count):
         for cell in row:
             cell.font = Font(name="Times New Roman", size=10, bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             cell.border = border
             cell.fill = PatternFill(fill_type="solid", fgColor="F2F2F2")
     for row in ws.iter_rows(
-        min_row=header_rows + 1,
-        max_row=header_rows + max(data_rows, 1),
+        min_row=header_end + 1,
+        max_row=header_end + max(data_rows, 1),
         min_col=1,
         max_col=column_count,
     ):
@@ -647,96 +662,143 @@ def _report_table_style(ws, header_rows: int, column_count: int, data_rows: int)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             cell.border = border
     ws.sheet_view.showGridLines = False
-    ws.freeze_panes = f"A{header_rows + 1}"
+    ws.freeze_panes = f"A{header_end + 1}"
     ws.page_setup.orientation = "landscape"
     ws.page_setup.fitToWidth = 1
     ws.sheet_properties.pageSetUpPr.fitToPage = True
 
 
-def _make_appendix1_xlsx(rows: list[list[Any]]) -> bytes:
+def _merged_title_row(ws, row: int, text: str, *, size: int = 11, bold: bool = False) -> None:
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+    cell = ws.cell(row, 1, text)
+    cell.font = Font(name="Times New Roman", size=size, bold=bold)
+    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+
+def _make_appendix1_xlsx(
+    rows: list[list[Any]], report_from=None, report_to=None, reporting_unit: str = ""
+) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Phụ lục 1"
+    _merged_title_row(ws, 1, "Phụ lục 1", size=11, bold=True)
+    _merged_title_row(ws, 2, "(Kèm theo biểu mẫu báo cáo hoạt động cảng)", size=10)
+    _merged_title_row(ws, 3, "KẾ HOẠCH HOẠT ĐỘNG CỦA PHƯƠNG TIỆN THỦY NỘI ĐỊA", size=14, bold=True)
+    period_text = "Ngày " + (report_to.strftime("%d/%m/%Y") if report_to else "……/……/………")
+    _merged_title_row(ws, 4, period_text, size=11, bold=True)
+    _merged_title_row(ws, 5, f"Tên doanh nghiệp: {reporting_unit or '………………………………'}", size=11)
+    _merged_title_row(ws, 6, "Ghi chú: Đối với phương tiện chở container, ghi rõ sức chở theo TEUs.", size=10)
     merges = (
-        "A1:A4", "B1:H1", "I1:O1", "P1:P4",
-        "B2:B4", "C2:C4", "D2:D4", "E2:E4", "F2:F4",
-        "G2:H3", "I2:J2", "K2:L2", "I3:I4", "J3:J4",
-        "K3:K4", "L3:L4", "M2:M4", "N2:N4", "O2:O4",
+        "A7:A10", "B7:H7", "I7:O7", "P7:P10",
+        "B8:B10", "C8:C10", "D8:D10", "E8:E10", "F8:F10",
+        "G8:H9", "I8:J8", "K8:L8", "I9:I10", "J9:J10",
+        "K9:K10", "L9:L10", "M8:M10", "N8:N10", "O8:O10",
     )
     for cell_range in merges:
         ws.merge_cells(cell_range)
     values = {
-        "A1": "TT", "B1": "PHƯƠNG TIỆN", "I1": "HOẠT ĐỘNG",
-        "P1": "Tên và số điện thoại thuyền trưởng",
-        "B2": "Tên", "C2": "Số đăng ký", "D2": "Cấp phương tiện",
-        "E2": "Công dụng", "F2": "Ngày hết hạn GCNATKT & BVMT",
-        "G2": "Khả năng khai thác", "G4": "Lượng hàng (tấn/TEU)",
-        "H4": "Sức chở (khách)", "I2": "Đến", "I3": "Vị trí (Cảng/cầu)",
-        "J3": "Thời gian (ngày, giờ)", "K2": "Rời", "K3": "Vị trí (Cảng/cầu)",
-        "L3": "Thời gian (ngày, giờ)", "M2": "Hàng dỡ (loại, số lượng)",
-        "N2": "Hàng xếp (loại, số lượng)", "O2": "Số thuyền viên/Hành khách",
+        "A7": "TT", "B7": "PHƯƠNG TIỆN", "I7": "HOẠT ĐỘNG",
+        "P7": "Tên và số điện thoại thuyền trưởng",
+        "B8": "Tên", "C8": "Số đăng ký", "D8": "Cấp phương tiện",
+        "E8": "Công dụng", "F8": "Ngày hết hạn GCNATKT&BVMT",
+        "G8": "Khả năng khai thác", "G10": "Lượng hàng (tấn/TEU)",
+        "H10": "Sức chở (khách)", "I8": "Đến", "I9": "Vị trí (Cảng/cầu)",
+        "J9": "Thời gian (ngày, giờ)", "K8": "Rời", "K9": "Vị trí (Cảng/cầu)",
+        "L9": "Thời gian (ngày, giờ)", "M8": "Hàng dỡ (loại, số lượng)",
+        "N8": "Hàng xếp (loại, số lượng)", "O8": "Số thuyền viên/Hành khách",
     }
     for address, value in values.items():
         ws[address] = value
-    for row_number, row in enumerate(rows, start=5):
+    for row_number, row in enumerate(rows, start=11):
         for column_number, value in enumerate(row, start=1):
             ws.cell(row_number, column_number, value)
     widths = [6, 18, 14, 16, 22, 16, 20, 12, 18, 18, 18, 18, 24, 24, 16, 24]
     for index, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(index)].width = width
-    for row_number in range(1, 5):
+    for row_number in range(7, 11):
         ws.row_dimensions[row_number].height = 28
-    _report_table_style(ws, 4, 16, len(rows))
-    ws.print_area = f"A1:P{max(5, len(rows) + 4)}"
+    _report_table_style(ws, 4, 16, len(rows), header_start=7)
+    footer_row = 11 + max(len(rows), 1) + 1
+    ws.merge_cells(start_row=footer_row, start_column=1, end_row=footer_row, end_column=6)
+    ws.cell(footer_row, 1, "Người lập báo cáo\n(Ký, ghi rõ họ tên)")
+    ws.merge_cells(start_row=footer_row, start_column=11, end_row=footer_row, end_column=16)
+    ws.cell(footer_row, 11, "Đại diện doanh nghiệp\n(Ký, ghi rõ họ tên, đóng dấu)")
+    for cell in (ws.cell(footer_row, 1), ws.cell(footer_row, 11)):
+        cell.font = Font(name="Times New Roman", size=11, italic=True)
+        cell.alignment = Alignment(horizontal="center", vertical="top", wrap_text=True)
+    ws.row_dimensions[footer_row].height = 48
+    ws.print_area = f"A1:P{footer_row}"
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
 
 
-def _make_appendix2_xlsx(rows: list[list[Any]]) -> bytes:
+def _make_appendix2_xlsx(
+    rows: list[list[Any]], report_from=None, report_to=None, reporting_unit: str = ""
+) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Phụ lục 2"
+    _merged_title_row(ws, 1, "Phụ lục 2", size=11, bold=True)
+    _merged_title_row(ws, 2, "(Kèm theo biểu mẫu báo cáo hoạt động cảng)", size=10)
+    _merged_title_row(ws, 3, "BÁO CÁO KHỐI LƯỢNG HÀNG HÓA, LƯỢT TÀU VÀ HÀNH KHÁCH", size=14, bold=True)
+    month_text = report_to.strftime("Tháng %m năm %Y") if report_to else "Tháng ……"
+    _merged_title_row(ws, 4, month_text, size=12, bold=True)
+    _merged_title_row(ws, 5, f"Đơn vị báo cáo: {reporting_unit or '………………………………'}", size=11)
     merges = (
-        "A1:A3", "B1:B3", "C1:F1", "G1:H1", "I1:J1", "K1:L1",
-        "M1:N1", "O1:P1", "C2:D2", "E2:F2",
+        "A7:A9", "B7:B9", "C7:F7", "G7:H7", "I7:J7", "K7:L7",
+        "M7:N7", "O7:P7", "C8:D8", "E8:F8",
     )
     for cell_range in merges:
         ws.merge_cells(cell_range)
     values = {
-        "A1": "STT", "B1": "Chỉ tiêu", "C1": "Container", "G1": "Hàng khô",
-        "I1": "Hàng lỏng", "K1": "Hàng XNK", "M1": "Lượt tàu", "O1": "Hành khách",
-        "C2": "Thực hiện kỳ báo cáo", "E2": "Lũy kế đến kỳ báo cáo",
-        "G2": "Thực hiện kỳ báo cáo", "H2": "Lũy kế đến kỳ báo cáo",
-        "I2": "Thực hiện kỳ báo cáo", "J2": "Lũy kế đến kỳ báo cáo",
-        "K2": "Thực hiện kỳ báo cáo", "L2": "Lũy kế đến kỳ báo cáo",
-        "M2": "Thực hiện kỳ báo cáo", "N2": "Lũy kế đến kỳ báo cáo",
-        "O2": "Lượt tàu khách", "P2": "Lượt khách",
-        "C3": "Tấn", "D3": "TEUs", "E3": "Tấn", "F3": "TEUs",
-        "G3": "Tấn", "H3": "Tấn", "I3": "Tấn", "J3": "Tấn",
-        "K3": "Tấn", "L3": "Tấn", "M3": "Lượt", "N3": "Lượt",
-        "O3": "Lượt", "P3": "Lượt",
+        "A7": "STT", "B7": "Chỉ tiêu", "C7": "Container", "G7": "Hàng khô",
+        "I7": "Hàng lỏng", "K7": "Hàng XNK", "M7": "Lượt tàu", "O7": "Hành khách",
+        "C8": "Thực hiện tháng báo cáo", "E8": "Lũy kế đến tháng báo cáo",
+        "G8": "Thực hiện tháng báo cáo", "H8": "Lũy kế đến tháng báo cáo",
+        "I8": "Thực hiện tháng báo cáo", "J8": "Lũy kế đến tháng báo cáo",
+        "K8": "Thực hiện tháng báo cáo", "L8": "Lũy kế đến tháng báo cáo",
+        "M8": "Thực hiện tháng báo cáo", "N8": "Lũy kế đến tháng báo cáo",
+        "O8": "Lượt tàu khách", "P8": "Lượt khách",
+        "C9": "Tấn", "D9": "TEUs", "E9": "Tấn", "F9": "TEUs",
+        "G9": "Tấn", "H9": "Tấn", "I9": "Tấn", "J9": "Tấn",
+        "K9": "Tấn", "L9": "Tấn", "M9": "Lượt", "N9": "Lượt",
+        "O9": "Lượt", "P9": "Lượt",
     }
     for address, value in values.items():
         ws[address] = value
-    ws.append(["A", "B", *range(1, 15)])
-    for row in rows:
-        ws.append(row)
+    for column, value in enumerate(["A", "B", *range(1, 15)], start=1):
+        ws.cell(10, column, value)
+    for row_number, row in enumerate(rows, start=11):
+        for column_number, value in enumerate(row, start=1):
+            ws.cell(row_number, column_number, value)
+    total_row = 10 + len(rows)
+    if len(rows) >= 1:
+        ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=2)
     widths = [6, 24, *([12] * 14)]
     for index, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(index)].width = width
-    for row_number in range(1, 5):
+    for row_number in range(7, 11):
         ws.row_dimensions[row_number].height = 28
-    _report_table_style(ws, 4, 16, len(rows))
-    ws.print_area = f"A1:P{max(5, len(rows) + 4)}"
+    _report_table_style(ws, 4, 16, len(rows), header_start=7)
+    ws.print_area = f"A1:P{max(11, 10 + len(rows))}"
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
 
 
-def _make_appendix3_xlsx(rows: list[list[Any]], template_path: Path) -> bytes:
+def _make_appendix3_xlsx(
+    rows: list[list[Any]], template_path: Path,
+    report_from=None, report_to=None, reporting_unit: str = "",
+) -> bytes:
     wb = load_workbook(template_path)
     ws = wb.active
+    if report_to:
+        ws["A2"] = (
+            "(Kèm theo Văn bản số        /CVHHTPHCM-TTTT, ngày        "
+            f"tháng {report_to.month} năm {report_to.year} của Cảng vụ Hàng hải Thành phố Hồ Chí Minh)"
+        )
+    ws["A4"] = f"Đơn vị báo cáo: {reporting_unit or '………………………………'}"
     for cell_range in ("A15:E15", "O15:T15", "A16:E16", "O16:T16"):
         if cell_range in {str(item) for item in ws.merged_cells.ranges}:
             ws.unmerge_cells(cell_range)
@@ -765,6 +827,33 @@ def _make_appendix3_xlsx(rows: list[list[Any]], template_path: Path) -> bytes:
     for row_number, row in enumerate(rows, start=10):
         for column_number, value in enumerate(row, start=1):
             ws.cell(row_number, column_number, value)
+    for address in ("J7", "M7", "P7", "S7", "Z7"):
+        ws[address] = "TEUs"
+    for address in ("K7", "N7", "Q7", "T7"):
+        ws[address] = "TEUs Rỗng"
+    for address in ("V7", "X7"):
+        ws[address] = "TEUs"
+    ws["W6"] = "Quá cảnh\n(bốc dỡ)"
+    ws["Y6"] = "Quá cảnh\n(không bốc dỡ)"
+    ws.column_dimensions["D"].width = max(ws.column_dimensions["D"].width or 0, 18)
+    for target_row in range(10, 10 + desired_rows):
+        estimated_lines = 1
+        for column_number in range(1, 36):
+            cell = ws.cell(target_row, column_number)
+            if cell.value is None or not cell.alignment.wrap_text:
+                continue
+            column_width = ws.column_dimensions[cell.column_letter].width or 8.43
+            chars_per_line = max(int(column_width), 1)
+            cell_lines = sum(
+                max(1, math.ceil(len(line) / chars_per_line))
+                for line in str(cell.value).splitlines() or [""]
+            )
+            estimated_lines = max(estimated_lines, cell_lines)
+        ws.row_dimensions[target_row].height = max(
+            ws.row_dimensions[target_row].height or 0,
+            66,
+            min(180, estimated_lines * 18),
+        )
     ws.sheet_view.showGridLines = False
     ws.freeze_panes = "A10"
     ws.print_area = f"A5:AI{9 + desired_rows}"
@@ -781,14 +870,19 @@ def make_report_xlsx(
     rows: list[list[Any]],
     *,
     appendix3_template: Path | None = None,
+    report_from=None,
+    report_to=None,
+    reporting_unit: str = "",
 ) -> bytes:
     """Create report workbooks with the approved appendix table structures."""
     if kind == "appendix1":
-        return _make_appendix1_xlsx(rows)
+        return _make_appendix1_xlsx(rows, report_from, report_to, reporting_unit)
     if kind == "appendix2":
-        return _make_appendix2_xlsx(rows)
+        return _make_appendix2_xlsx(rows, report_from, report_to, reporting_unit)
     if kind == "appendix3" and appendix3_template:
-        return _make_appendix3_xlsx(rows, appendix3_template)
+        return _make_appendix3_xlsx(
+            rows, appendix3_template, report_from, report_to, reporting_unit,
+        )
     raise ValueError(f"Không có cấu trúc bảng cho báo cáo {kind}.")
 
 

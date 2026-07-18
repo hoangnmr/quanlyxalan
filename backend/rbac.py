@@ -3,7 +3,10 @@ from fastapi import HTTPException, status, Depends
 from .models import User
 from .auth import get_current_user
 
-ROLE_ENUM = {"CUSTOMER", "PORT_STAFF", "ADMIN"}
+# Final product roles. There is no tenant-local ADMIN; PORT_STAFF performs all
+# tenant/port operations for the reporting units in which the user has membership,
+# and PLATFORM_ADMIN carries product-wide platform authority.
+ROLE_ENUM = {"CUSTOMER", "PORT_STAFF", "PLATFORM_ADMIN"}
 
 class RoleChecker:
     def __init__(self, allowed_roles: List[str]):

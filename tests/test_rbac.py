@@ -19,12 +19,16 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 
 import pytest
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 
-from backend.models import Base, User, Organization, Vessel, CrewMember, Declaration
+from backend.models import (
+    Base, User, Organization, Vessel, CrewMember, Declaration, AuditEvent,
+    ReportingUnit, ReportingUnitOrganization, ReportingUnitUser, ReportingUnitVessel,
+)
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import create_access_token, get_password_hash
 from backend.app import app, get_db
@@ -54,15 +58,52 @@ try:
 
     # 2. Seed Users
     users = [
-        User(username="admin", password_hash=get_password_hash("adminpass"), full_name="Admin User", role="ADMIN", is_active=1),
+        User(username="admin", password_hash=get_password_hash("adminpass"), full_name="Admin User", role="PLATFORM_ADMIN", is_active=1),
         User(username="cust_a", password_hash=get_password_hash("custpass"), full_name="Customer A", role="CUSTOMER", organization_id=org_a.id, is_active=1),
         User(username="cust_b", password_hash=get_password_hash("custpass"), full_name="Customer B", role="CUSTOMER", organization_id=org_b.id, is_active=1),
         User(username="cust_no_org", password_hash=get_password_hash("custpass"), full_name="No Org Cust", role="CUSTOMER", organization_id=None, is_active=1),
         User(username="disabled_user", password_hash=get_password_hash("pass"), full_name="Disabled", role="CUSTOMER", organization_id=org_a.id, is_active=0),
         User(username="user_port", password_hash=get_password_hash("portpass"), full_name="Port Employee", role="PORT_STAFF", is_active=1),
+        User(username="user_port_b", password_hash=get_password_hash("portpass"), full_name="Port B Employee", role="PORT_STAFF", is_active=1),
+        User(username="user_port_none", password_hash=get_password_hash("portpass"), full_name="Unassigned Port Employee", role="PORT_STAFF", is_active=1),
     ]
     db.add_all(users)
     db.commit()
+
+    unit_a = ReportingUnit(
+        name="Reporting Unit A", code="UNIT-A", is_active=1,
+        created_at=now_iso(), updated_at=now_iso(),
+    )
+    unit_b = ReportingUnit(
+        name="Reporting Unit B", code="UNIT-B", is_active=1,
+        created_at=now_iso(), updated_at=now_iso(),
+    )
+    unit_inactive = ReportingUnit(
+        name="Inactive Reporting Unit", code="UNIT-INACTIVE", is_active=0,
+        created_at=now_iso(), updated_at=now_iso(),
+    )
+    db.add_all([unit_a, unit_b, unit_inactive])
+    db.flush()
+    port_user = db.query(User).filter(User.username == "user_port").one()
+    port_user_b = db.query(User).filter(User.username == "user_port_b").one()
+    db.add_all([
+        ReportingUnitOrganization(
+            reporting_unit_id=unit_a.id, organization_id=org_a.id, created_at=now_iso(),
+        ),
+        ReportingUnitOrganization(
+            reporting_unit_id=unit_b.id, organization_id=org_b.id, created_at=now_iso(),
+        ),
+        ReportingUnitUser(
+            reporting_unit_id=unit_a.id, user_id=port_user.id, created_at=now_iso(),
+        ),
+        ReportingUnitUser(
+            reporting_unit_id=unit_b.id, user_id=port_user_b.id, created_at=now_iso(),
+        ),
+    ])
+    db.commit()
+    TEST_UNIT_A_ID = unit_a.id
+    TEST_UNIT_B_ID = unit_b.id
+    TEST_UNIT_INACTIVE_ID = unit_inactive.id
 
     # 3. Seed Vessel for Org A
     vessel_a = Vessel(
@@ -88,6 +129,15 @@ try:
     db.commit()
     db.refresh(vessel_a)
     db.refresh(vessel_b)
+    db.add_all([
+        ReportingUnitVessel(
+            reporting_unit_id=TEST_UNIT_A_ID, vessel_id=vessel_a.id, created_at=now_iso(),
+        ),
+        ReportingUnitVessel(
+            reporting_unit_id=TEST_UNIT_B_ID, vessel_id=vessel_b.id, created_at=now_iso(),
+        ),
+    ])
+    db.commit()
 
     # 4. Seed Crew for Org A
     crew_a = CrewMember(
@@ -188,10 +238,17 @@ def client():
         yield c
 
 # Token headers helper
-def get_auth_header(client, username, password):
+def get_auth_header(client, username, password, *, unit_id="default"):
     res = client.post("/api/auth/login", json={"username": username, "password": password})
     if res.status_code == 200:
-        return {"Authorization": f"Bearer {res.json()['access_token']}"}
+        headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
+        if unit_id == "default" and username in {"admin", "user_port", "user_port_none"}:
+            headers["X-Reporting-Unit-ID"] = str(TEST_UNIT_A_ID)
+        elif unit_id == "default" and username == "user_port_b":
+            headers["X-Reporting-Unit-ID"] = str(TEST_UNIT_B_ID)
+        elif unit_id is not None and unit_id != "default":
+            headers["X-Reporting-Unit-ID"] = str(unit_id)
+        return headers
     return {}
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -328,12 +385,180 @@ def test_customer_cannot_update_other_tenant_crew(client):
     })
     assert response.status_code == 403
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 2B. REPORTING-UNIT CONTEXT (R4)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_port_staff_requires_fk_membership_and_unit_list_is_scoped(client):
+    unassigned = get_auth_header(client, "user_port_none", "portpass")
+    assert client.get("/api/vessels", headers=unassigned).status_code == 403
+
+    staff_a = get_auth_header(client, "user_port", "portpass")
+    units = client.get("/api/reporting-units", headers=staff_a)
+    assert units.status_code == 200
+    assert [item["id"] for item in units.json()["items"]] == [TEST_UNIT_A_ID]
+    organizations = client.get("/api/reporting-unit/organizations", headers=staff_a)
+    assert organizations.status_code == 200
+    assert [item["name"] for item in organizations.json()["items"]] == ["Organization A"]
+
+
+def test_platform_admin_context_is_explicit_and_validated(client):
+    no_context = get_auth_header(client, "admin", "adminpass", unit_id=None)
+    assert client.get("/api/vessels", headers=no_context).status_code == 400
+
+    malformed = {**no_context, "X-Reporting-Unit-ID": "not-an-id"}
+    assert client.get("/api/vessels", headers=malformed).status_code == 400
+
+    missing = {**no_context, "X-Reporting-Unit-ID": "999999"}
+    assert client.get("/api/vessels", headers=missing).status_code == 404
+
+    inactive = {**no_context, "X-Reporting-Unit-ID": str(TEST_UNIT_INACTIVE_ID)}
+    assert client.get("/api/vessels", headers=inactive).status_code == 403
+
+
+def test_live_reads_dashboard_and_register_are_isolated_by_unit(client):
+    admin_a = get_auth_header(client, "admin", "adminpass", unit_id=TEST_UNIT_A_ID)
+    admin_b = get_auth_header(client, "admin", "adminpass", unit_id=TEST_UNIT_B_ID)
+
+    vessels_a = client.get("/api/vessels", headers=admin_a)
+    vessels_b = client.get("/api/vessels", headers=admin_b)
+    assert {item["registration_no"] for item in vessels_a.json()} == {"REG-A-123"}
+    assert {item["registration_no"] for item in vessels_b.json()} == {"REG-B-123"}
+
+    dashboard_a = client.get("/api/dashboard?q=REG-B-123", headers=admin_a).json()
+    dashboard_b = client.get("/api/dashboard?q=REG-A-123", headers=admin_b).json()
+    assert dashboard_a["stats"]["vessels"] == 1 and dashboard_a["matches"] == []
+    assert dashboard_b["stats"]["vessels"] == 1 and dashboard_b["matches"] == []
+
+    register_a = client.get("/api/port-vessel-register", headers=admin_a).json()["items"]
+    register_b = client.get("/api/port-vessel-register", headers=admin_b).json()["items"]
+    assert {item["registration_no"] for item in register_a} == {"REG-A-123"}
+    assert {item["registration_no"] for item in register_b} == {"REG-B-123"}
+
+
+def test_port_register_export_and_remove_cannot_cross_units(client):
+    staff_a = get_auth_header(client, "user_port", "portpass")
+    exported = client.get("/api/port-vessel-register/export", headers=staff_a)
+    assert exported.status_code == 200
+    sheet = load_workbook(BytesIO(exported.content), read_only=True).active
+    values = {str(cell.value) for row in sheet.iter_rows() for cell in row if cell.value is not None}
+    assert "REG-A-123" in values
+    assert "REG-B-123" not in values
+
+    db = SessionLocal()
+    vessel_b_id = db.query(Vessel.id).filter(Vessel.registration_no == "REG-B-123").scalar()
+    db.close()
+    denied = client.post(
+        "/api/port-vessel-register/remove", headers=staff_a, json={"ids": [vessel_b_id]},
+    )
+    assert denied.status_code == 404
+
+
+def test_same_vessel_register_membership_is_independent_between_units(client):
+    admin_a = get_auth_header(client, "admin", "adminpass", unit_id=TEST_UNIT_A_ID)
+    admin_b = get_auth_header(client, "admin", "adminpass", unit_id=TEST_UNIT_B_ID)
+    db = SessionLocal()
+    vessel_a_id = db.query(Vessel.id).filter(Vessel.registration_no == "REG-A-123").scalar()
+    db.close()
+
+    added = client.post(
+        "/api/port-vessel-register/add", headers=admin_b, json={"ids": [vessel_a_id]},
+    )
+    assert added.status_code == 200 and added.json()["added"] == 1
+    assert {item["registration_no"] for item in client.get(
+        "/api/port-vessel-register", headers=admin_b,
+    ).json()["items"]} == {"REG-A-123", "REG-B-123"}
+    assert {item["registration_no"] for item in client.get(
+        "/api/port-vessel-register", headers=admin_a,
+    ).json()["items"]} == {"REG-A-123"}
+
+    removed = client.post(
+        "/api/port-vessel-register/remove", headers=admin_b, json={"ids": [vessel_a_id]},
+    )
+    assert removed.status_code == 200 and removed.json()["removed"] == 1
+    assert {item["registration_no"] for item in client.get(
+        "/api/port-vessel-register", headers=admin_a,
+    ).json()["items"]} == {"REG-A-123"}
+
+
+def test_cross_unit_mutation_and_workflow_are_rejected(client):
+    admin_a = get_auth_header(client, "admin", "adminpass", unit_id=TEST_UNIT_A_ID)
+    db = SessionLocal()
+    vessel_b = db.query(Vessel).filter(Vessel.registration_no == "REG-B-123").one()
+    declaration_b = db.query(Declaration).filter(Declaration.reference_no == "REF-B-SUB-1").one()
+    vessel_b_id, declaration_b_id = vessel_b.id, declaration_b.id
+    db.close()
+
+    changed = client.post("/api/vessels", headers=admin_a, json={
+        "id": vessel_b_id,
+        "name": "Cross-tenant overwrite",
+        "registration_no": "REG-B-123",
+        "vessel_type": "Tàu container",
+        "vessel_class": "VR-SI",
+        "organization_name": "Organization B",
+    })
+    assert changed.status_code == 403
+
+    workflow = client.post(
+        f"/api/declarations/{declaration_b_id}/workflow",
+        headers=admin_a,
+        json={"action": "PORT_APPROVE"},
+    )
+    assert workflow.status_code == 403
+
+    create_for_foreign_org = client.post("/api/vessels", headers=admin_a, json={
+        "name": "Foreign Org Vessel",
+        "registration_no": "FOREIGN-UNIT-NEW",
+        "vessel_type": "Sà lan",
+        "vessel_class": "VR-SI",
+        "organization_name": "Organization B",
+    })
+    assert create_for_foreign_org.status_code == 403
+
+
+def test_tenant_mutation_audit_records_reporting_unit(client):
+    admin_a = get_auth_header(client, "admin", "adminpass", unit_id=TEST_UNIT_A_ID)
+    registration = f"AUDIT-{time.time_ns()}"
+    created = client.post("/api/vessels?port_register=true", headers=admin_a, json={
+        "name": "Tenant Audit Vessel",
+        "registration_no": registration,
+        "vessel_type": "Sà lan",
+        "vessel_class": "VR-SI",
+        "organization_name": "Organization A",
+    })
+    assert created.status_code == 200, created.text
+    vessel_id = created.json()["id"]
+
+    db = SessionLocal()
+    try:
+        events = db.query(AuditEvent).filter(
+            AuditEvent.entity_type == "VESSEL",
+            AuditEvent.entity_id == vessel_id,
+            AuditEvent.action == "CREATE",
+            AuditEvent.summary.contains(registration),
+        ).all()
+        assert events
+        assert {event.reporting_unit_id for event in events} == {TEST_UNIT_A_ID}
+        db.query(ReportingUnitVessel).filter_by(vessel_id=vessel_id).delete()
+        for event in events:
+            db.delete(event)
+        db.query(Vessel).filter(Vessel.id == vessel_id).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_customer_cannot_access_internal_port_register(client):
+    customer = get_auth_header(client, "cust_a", "custpass")
+    assert client.get("/api/port-vessel-register", headers=customer).status_code == 403
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. ROLE-BASED ACCESS CONTROL (RBAC MATRIX)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_workflow_transitions_matrix(client):
-    """Only port employees can make the enterprise review decision."""
+    """Port staff and platform support in explicit context may review."""
     headers_port = get_auth_header(client, "user_port", "portpass")
     headers_customer = get_auth_header(client, "cust_a", "custpass")
     headers_admin = get_auth_header(client, "admin", "adminpass")
@@ -348,11 +573,6 @@ def test_workflow_transitions_matrix(client):
     })
     assert res.status_code == 403
 
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_admin, json={
-        "action": "PORT_APPROVE"
-    })
-    assert res.status_code == 403
-
     res = client.post(
         f"/api/declarations/{decl_id}/workflow",
         headers=headers_port,
@@ -360,7 +580,7 @@ def test_workflow_transitions_matrix(client):
     )
     assert res.status_code == 410
 
-    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_port, json={
+    res = client.post(f"/api/declarations/{decl_id}/workflow", headers=headers_admin, json={
         "action": "PORT_APPROVE"
     })
     assert res.status_code == 200
@@ -453,8 +673,10 @@ def test_unknown_role_and_expired_token_fail_closed(client):
 
 def test_fail_fast_outside_test_mode():
     """Verify that auth module triggers fail-fast check outside local test/db mode."""
-    # Temporarily unset TEST_DATABASE_URL to trigger fail-fast condition
+    # CI supplies both variables globally. Remove both so this test actually
+    # exercises the unsafe production-default branch, then restore them exactly.
     original_db_url = os.environ.pop("TEST_DATABASE_URL", None)
+    original_secret = os.environ.pop("SECRET_KEY", None)
     try:
         # Reloading auth inside try-except should fail with SystemExit
         import importlib
@@ -465,6 +687,9 @@ def test_fail_fast_outside_test_mode():
         # Restore environment variable
         if original_db_url:
             os.environ["TEST_DATABASE_URL"] = original_db_url
+        if original_secret:
+            os.environ["SECRET_KEY"] = original_secret
+        importlib.reload(backend.auth)
 
 
 def test_alembic_t1_upgrade_and_downgrade_rehearsal(monkeypatch, tmp_path):

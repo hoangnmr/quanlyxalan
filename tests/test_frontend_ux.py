@@ -58,7 +58,7 @@ def test_role_dashboard_layout():
 
     assert "function roleLabel(role)" in app_js
     assert "const isCustomer = state.currentUser.role === 'CUSTOMER'" in app_js
-    assert "const isAdmin = state.currentUser.role === 'ADMIN'" in app_js
+    assert "const isAdmin = state.currentUser.role === 'PLATFORM_ADMIN'" in app_js
     assert "const isReviewer = state.currentUser.role === 'PORT_STAFF'" in app_js
     assert 'id="admin-operations"' in index_html
     assert 'id="integration-admin-actions"' in index_html
@@ -66,6 +66,33 @@ def test_role_dashboard_layout():
     assert "$('#import-declaration-card').hidden = !isAdmin" in app_js
     assert "$('#admin-operations').hidden = true" in app_js
     assert "api('/api/admin/operations-summary')" not in app_js
+
+
+def test_reporting_unit_picker_is_compact_and_kept_out_of_topbar():
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    sidebar_start = index_html.index('<aside class="sidebar"')
+    sidebar_end = index_html.index('</aside>', sidebar_start)
+    topbar_start = index_html.index('<header class="topbar"')
+    topbar_end = index_html.index('</header>', topbar_start)
+    assert 'id="reporting-unit-trigger"' in index_html[sidebar_start:sidebar_end]
+    assert 'Chọn đơn vị báo cáo' not in index_html[sidebar_start:sidebar_end]
+    assert 'id="reporting-unit-trigger"' not in index_html[topbar_start:topbar_end]
+    assert 'id="reporting-unit-select"' not in index_html
+    assert 'role="menuitemradio"' in app_js
+    assert "event.key === 'Escape'" in app_js
+    assert "['ArrowUp', 'ArrowDown']" in app_js
+    assert '.reporting-unit-trigger' in styles_css
+    assert '.reporting-unit-menu button.selected' in styles_css
+    assert 'id="reporting-unit-dialog"' in index_html
+    assert '+ Tạo đơn vị mới' in app_js
+    assert 'Dành cho Platform Admin' not in app_js
+    active_section = app_js[app_js.index("const active = state.reportingUnits.find"):app_js.index("if (!active)")]
+    assert 'active.code' not in active_section
+    assert "state.currentUser.role === 'PLATFORM_ADMIN'" in app_js
+    assert "method: 'POST'" in app_js[app_js.index('async function saveReportingUnit'):app_js.index('async function loadReportingUnitContext')]
 
 
 def test_crew_form_keeps_readable_controls_with_compact_two_column_layout():
@@ -82,11 +109,66 @@ def test_terminology_standardized():
     app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
 
-    assert "Import dữ liệu Excel" in app_js
-    assert "Import Excel" in index_html
+    assert "Import dữ liệu" in app_js
+    assert "Import dữ liệu" in index_html
     assert "Backup ngay" in index_html
     assert "NHẬP DỮ LIỆU CÓ KIỂM SOÁT" in index_html
     assert "Xác nhận import" in app_js
+
+
+def test_historical_import_is_visually_and_semantically_separate_from_live_import():
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'id="operational-import-tab"' in index_html
+    assert 'id="historical-import-tab"' in index_html
+    assert 'role="tabpanel" aria-labelledby="historical-import-tab"' in index_html
+    assert "Không sửa phiếu khai báo gốc" in index_html
+    assert 'id="import-historical" accept=".xlsx" multiple' in index_html
+    assert 'id="historical-batch"' in index_html
+    assert 'data-historical-row-filter="review"' in index_html
+    assert 'id="historical-review-guide"' in index_html
+    assert "Giữ bản đang dùng" in index_html
+    assert "Dùng file mới · tạo revision" in app_js
+    assert "function setImportMode(" in app_js
+    assert "function previewHistoricalImport(" in app_js
+    assert "function renderHistoricalBatch(" in app_js
+    assert "function historicalWarnings(" in app_js
+    assert "if (row.validationStatus === 'VALID') return [];" in app_js
+    assert "function ensureHistoricalExportPanel(" in app_js
+    assert "function exportHistoricalPl03(" in app_js
+    assert "/api/historical-imports/reconcile" in app_js
+    assert "Xác nhận Berth & ghép Detail" in app_js
+    assert "Xuất PL.03 tổng hợp" in app_js
+    assert "ATB/ATD, TEU và tấn lấy từ Berth/Detail" not in app_js
+    assert "function historicalEffectivePeriod(" in app_js
+    assert "function renderHistoricalHistorySummary(" in app_js
+    assert "Lý do / xử lý" in app_js
+    assert "status=${status}" in app_js
+    assert "function loadHistoricalImportHistory(" in app_js
+    assert ".historical-import-steps" in styles_css
+    assert "@media (max-width: 760px)" in styles_css
+
+
+def test_report_dashboard_makes_source_coverage_and_overlap_explicit():
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'role="group" aria-label="Nguồn số liệu thống kê"' in index_html
+    assert 'data-source="live" class="active"' in index_html
+    assert 'data-source="historical"' in index_html
+    assert 'data-source="combined"' in index_html
+    assert 'id="analytics-coverage" class="analytics-coverage" aria-live="polite"' in index_html
+    assert 'id="analytics-combined-blocked"' in index_html
+    assert "const allowedSource = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes" in app_js
+    assert "data.combinedAllowed === false" in app_js
+    assert "Chưa đủ độ phủ để tính" in app_js
+    assert ".coverage-period.overlap" in styles_css
+    assert "Chọn rõ nguồn trước khi đọc hoặc xuất tổng" not in index_html
+    assert "Thống kê luôn ghi rõ nguồn" not in index_html
+    assert "Tính từ TOS đã xác nhận" not in app_js
 
 
 def test_wizard_step_order_customer_friendly():

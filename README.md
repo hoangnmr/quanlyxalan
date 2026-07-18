@@ -50,7 +50,9 @@ The `data/` directory is intentionally ignored by Git.
 
 ## Architecture
 
-See `docs/ARCHITECTURE.md` (if present) and `docs/ADR-001-FASTAPI-MIGRATION.md`.
+Start with [CATALOG.md](CATALOG.md) for a full technical index (module map,
+API route index, data model, docs map, "where do I change X" lookup). For
+narrative detail see `docs/ARCHITECTURE.md` and `docs/ADR-001-FASTAPI-MIGRATION.md`.
 
 ## Production boundary
 

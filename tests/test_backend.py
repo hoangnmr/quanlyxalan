@@ -262,8 +262,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.2.0' in res.text
-    assert '/app.js?v=1.2.1' in res.text
+    assert '/styles.css?v=1.3.0' in res.text
+    assert '/app.js?v=1.3.0' in res.text
     assert 'id="reporting-unit-select"' in res.text
     assert 'id="reporting-unit-required"' in res.text
     assert 'data-page="port-register"' in res.text
@@ -1368,6 +1368,9 @@ def test_all_frontend_routes_registered():
         "/api/import/declaration",
         "/api/historical-imports/preview",
         "/api/historical-imports/{import_id}/rows",
+        "/api/historical-imports/{import_id}",
+        "/api/historical-imports/{import_id}/vessel-links",
+        "/api/historical-imports/{import_id}/cancel",
         "/api/historical-imports/{import_id}/confirm",
         "/api/reports/analytics",
         "/api/reports/analytics/export",
@@ -1921,6 +1924,25 @@ def test_historical_tos_preview_cross_import_join_and_revision(
     assert preview.json()["reportingPeriod"] == "2026-07"
     assert preview.json()["mappingReceipt"]["filenameUsedForDetection"] is False
     assert preview.json()["accepted"] == 1
+    detail = client.get(f"/api/historical-imports/{berth_import_id}", headers=auth_headers)
+    assert detail.status_code == 200
+    assert detail.json()["sourceSheets"] == ["User renamed sheet"]
+    links = client.get(
+        f"/api/historical-imports/{berth_import_id}/vessel-links?status=PENDING",
+        headers=auth_headers,
+    )
+    assert links.status_code == 200
+    assert links.json()["total"] == 1
+    suggested_link = links.json()["items"][0]
+    assert suggested_link["candidateVesselId"] is not None
+    resolved = client.post(
+        f"/api/historical-imports/{berth_import_id}/vessel-links/{suggested_link['id']}/resolve",
+        json={"decision": "ACCEPT", "candidate_vessel_id": suggested_link["candidateVesselId"],
+              "reason": "Confirmed in H4 preview"},
+        headers=auth_headers,
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["status"] == "ACCEPTED"
     confirmed = client.post(
         f"/api/historical-imports/{berth_import_id}/confirm", json={}, headers=auth_headers,
     )
@@ -1995,6 +2017,21 @@ def test_historical_tos_preview_cross_import_join_and_revision(
 
     forbidden = client.post("/api/historical-imports/preview", content=berth, headers=customer_headers)
     assert forbidden.status_code == 403
+
+    cancellable = _historical_fixture(berth_headers, [{
+        2: "2026", 3: "0008", 5: vessel_name, 8: "K12",
+        20: "18/08/2026 08:30:00", 23: "18/08/2026 13:00:00",
+    }])
+    cancellable_preview = client.post(
+        "/api/historical-imports/preview", content=cancellable, headers=preview_headers,
+    )
+    assert cancellable_preview.status_code == 200
+    cancelled = client.post(
+        f"/api/historical-imports/{cancellable_preview.json()['id']}/cancel",
+        json={"reason": "Operator cancelled after preview"}, headers=auth_headers,
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "REJECTED"
 
     # The same platform identity sees no data unless it explicitly switches to
     # the correct reporting-unit context; PORT_STAFF without membership fails.

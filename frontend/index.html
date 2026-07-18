@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.2.0">
+  <link rel="stylesheet" href="/styles.css?v=1.3.0">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -29,7 +29,7 @@
       </nav>
       <nav class="data-nav" aria-label="Dữ liệu và báo cáo">
         <p class="nav-label">Dữ liệu</p>
-        <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import Excel</a>
+        <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import dữ liệu</a>
         <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động</a>
       </nav>
       <div class="sidebar-footer">
@@ -105,13 +105,47 @@
         </section>
 
         <section class="page" data-page="import">
-          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Hệ thống tự nhận diện sheet, hàng tiêu đề và tên cột; file mẫu vẫn được hỗ trợ.</p></div></div>
-          <div class="import-grid">
-            <section class="panel upload-card" id="import-vessels-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện khách hàng gửi</h2><p>Dùng khi khách hàng gửi Excel và đề nghị Cảng nhập thay. Dữ liệu phục vụ khai báo của khách hàng, không tự đưa vào Sổ theo dõi nội bộ của Cảng.</p><label class="file-button">Chọn file khách hàng<input type="file" id="import-vessels" accept=".xlsx"></label></section>
-            <section class="panel upload-card" id="import-crew-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span><h2>Thông tin thuyền viên</h2><p>Dành cho nhân viên Cảng cập nhật file khách hàng gửi. File cần có Tên doanh nghiệp, Họ và tên, Chức danh; hỗ trợ thêm Ngày sinh, CCCD/Hộ chiếu và thông tin chứng chỉ.</p><label class="file-button">Chọn file<input type="file" id="import-crew" accept=".xlsx"></label></section>
-            <section class="panel upload-card" id="import-declaration-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Tự dò nhãn dữ liệu trong workbook; file mẫu <code>Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx</code> có đủ dữ liệu là có thể nhập.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
+          <div class="page-heading"><div><p class="eyebrow">NHẬP DỮ LIỆU CÓ KIỂM SOÁT</p><p>Chọn đúng luồng để tránh nhầm dữ liệu vận hành hiện tại với dữ liệu lịch sử dùng cho báo cáo.</p></div></div>
+          <div class="import-mode-tabs" role="tablist" aria-label="Loại dữ liệu import">
+            <button id="operational-import-tab" type="button" role="tab" aria-selected="true" aria-controls="operational-import-panel" class="active">Dữ liệu vận hành</button>
+            <button id="historical-import-tab" type="button" role="tab" aria-selected="false" aria-controls="historical-import-panel">Lịch sử / TOS</button>
           </div>
-          <section class="panel"><div class="panel-header"><div><p class="eyebrow">NHẬT KÝ IMPORT</p><h2>Kết quả gần nhất</h2></div></div><div id="import-result" class="empty-state">Chưa có file nào được import trong phiên này.</div></section>
+          <section id="operational-import-panel" role="tabpanel" aria-labelledby="operational-import-tab">
+            <div class="import-boundary-note"><strong>Dùng cho công việc hiện tại</strong><span>Nhập hồ sơ phương tiện, thuyền viên hoặc phiếu khai báo khách hàng gửi. Có thể cập nhật dữ liệu vận hành theo quyền được cấp.</span></div>
+            <div class="import-grid">
+              <section class="panel upload-card" id="import-vessels-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện khách hàng gửi</h2><p>Dữ liệu phục vụ khai báo của khách hàng, không tự đưa vào Sổ theo dõi nội bộ của Cảng.</p><label class="file-button">Chọn file khách hàng<input type="file" id="import-vessels" accept=".xlsx"></label></section>
+              <section class="panel upload-card" id="import-crew-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span><h2>Thông tin thuyền viên</h2><p>Cập nhật danh sách và chứng chỉ từ file khách hàng gửi trong đúng phạm vi Cảng.</p><label class="file-button">Chọn file<input type="file" id="import-crew" accept=".xlsx"></label></section>
+              <section class="panel upload-card" id="import-declaration-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h6.5L18 8v11.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-14A1.5 1.5 0 0 1 7 3.5z"></path><path d="M13 3.5V8h5"></path><path d="M9 12.5h6M9 15.5h6M9 18h3.5"></path></svg></span><h2>Phiếu khai báo</h2><p>Nhập một phiếu khai báo khách hàng gửi; hệ thống tự dò nhãn dữ liệu trong workbook.</p><label class="file-button">Chọn file<input type="file" id="import-declaration" accept=".xlsx"></label></section>
+            </div>
+            <section class="panel"><div class="panel-header"><div><p class="eyebrow">KẾT QUẢ TRONG PHIÊN</p><h2>Import vận hành gần nhất</h2></div></div><div id="import-result" class="empty-state">Chưa có file vận hành nào được import trong phiên này.</div></section>
+          </section>
+
+          <section id="historical-import-panel" role="tabpanel" aria-labelledby="historical-import-tab" hidden>
+            <div class="import-boundary-note historical"><strong>Dùng để dựng lại báo cáo lịch sử</strong><span>Tạo nguồn dữ liệu lịch sử riêng theo Cảng. Không sửa phiếu khai báo gốc, hồ sơ phương tiện, thuyền viên hoặc dữ liệu vận hành hiện tại.</span></div>
+            <ol class="historical-import-steps" aria-label="Quy trình import lịch sử">
+              <li class="active"><span>1</span><div><strong>Chọn file</strong><small>Berth, chi tiết xếp dỡ hoặc PL.03 cũ</small></div></li>
+              <li><span>2</span><div><strong>Kiểm tra</strong><small>Loại nguồn, kỳ ATB và từng dòng</small></div></li>
+              <li><span>3</span><div><strong>Xử lý trùng</strong><small>Giữ bản đang dùng hoặc tạo revision</small></div></li>
+              <li><span>4</span><div><strong>Xác nhận</strong><small>Chỉ dòng hợp lệ được kích hoạt</small></div></li>
+            </ol>
+            <section class="panel historical-upload-panel">
+              <div><p class="eyebrow">NGUỒN LỊCH SỬ</p><h2>Chọn một file Excel</h2><p>Hệ thống nhận diện theo cấu trúc sheet và tên cột, không dựa vào tên file. Mỗi lần chỉ xử lý dữ liệu của Cảng đang chọn.</p><div class="source-kind-list"><span>TOS Berth · ATB/ATD</span><span>Chi tiết container · TEU/tấn</span><span>PL.03 cũ · dữ liệu đã báo cáo</span></div></div>
+              <label class="primary-button historical-file-button">Chọn file lịch sử<input type="file" id="import-historical" accept=".xlsx"></label>
+            </section>
+            <section id="historical-preview" class="panel historical-preview" aria-live="polite" hidden>
+              <div class="panel-header historical-preview-head"><div><p class="eyebrow">PREVIEW CÓ DẤU VẾT</p><h2 id="historical-preview-title">Kết quả nhận diện</h2><p id="historical-preview-subtitle" class="muted"></p></div><button id="close-historical-preview" class="ghost-button" type="button">Đóng preview</button></div>
+              <div id="historical-preview-summary" class="historical-summary-grid"></div>
+              <div id="historical-conflict-notice" class="historical-conflict-notice" hidden></div>
+              <div id="historical-preview-table" class="table-wrap"></div>
+              <div id="historical-preview-pagination" class="pagination" aria-label="Phân trang preview lịch sử"></div>
+              <section id="historical-link-review" class="historical-link-review" hidden><div class="panel-header"><div><p class="eyebrow">LIÊN KẾT CẦN KIỂM TRA</p><h3>Tên phương tiện trong TOS</h3><p>Chỉ xác nhận khi đúng phương tiện trong Sổ theo dõi của Cảng.</p></div></div><div id="historical-link-list"></div></section>
+              <div class="historical-confirm-area">
+                <label id="historical-revision-reason" hidden>Lý do dùng file mới thay bản đang dùng<input id="historical-revision-reason-input" type="text" minlength="5" placeholder="Ví dụ: TOS cập nhật ATB/ATD chính xác hơn"></label>
+                <div class="historical-preview-actions"><button id="cancel-historical-import" class="ghost-button" type="button">Hủy lượt import</button><button id="keep-historical-existing" class="outline-button" type="button" hidden>Giữ bản đang dùng</button><button id="confirm-historical-import" class="primary-button" type="button">Xác nhận import</button></div>
+              </div>
+            </section>
+            <section class="panel historical-history-panel"><div class="panel-header"><div><p class="eyebrow">LỊCH SỬ VÀ REVISION</p><h2>Các lượt import của Cảng đang chọn</h2><p>Mở lại preview, xem trạng thái hoặc tiếp tục một lượt chưa xác nhận.</p></div><button id="refresh-historical-history" class="outline-button" type="button">Làm mới</button></div><div id="historical-import-history" class="table-wrap"><div class="empty-state">Chưa tải lịch sử import.</div></div><div id="historical-history-pagination" class="pagination" aria-label="Phân trang lịch sử import"></div></section>
+          </section>
         </section>
 
         <section class="page" data-page="reports">
@@ -170,6 +204,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.2.1" defer></script>
+  <script src="/app.js?v=1.3.0" defer></script>
 </body>
 </html>

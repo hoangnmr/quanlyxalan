@@ -82,11 +82,30 @@ def test_terminology_standardized():
     app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
 
-    assert "Import dữ liệu Excel" in app_js
-    assert "Import Excel" in index_html
+    assert "Import dữ liệu" in app_js
+    assert "Import dữ liệu" in index_html
     assert "Backup ngay" in index_html
     assert "NHẬP DỮ LIỆU CÓ KIỂM SOÁT" in index_html
     assert "Xác nhận import" in app_js
+
+
+def test_historical_import_is_visually_and_semantically_separate_from_live_import():
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'id="operational-import-tab"' in index_html
+    assert 'id="historical-import-tab"' in index_html
+    assert 'role="tabpanel" aria-labelledby="historical-import-tab"' in index_html
+    assert "Không sửa phiếu khai báo gốc" in index_html
+    assert "không dựa vào tên file" in index_html
+    assert "Giữ bản đang dùng" in index_html
+    assert "Dùng file mới · tạo revision" in app_js
+    assert "function setImportMode(" in app_js
+    assert "function previewHistoricalImport(" in app_js
+    assert "function loadHistoricalImportHistory(" in app_js
+    assert ".historical-import-steps" in styles_css
+    assert "@media (max-width: 760px)" in styles_css
 
 
 def test_wizard_step_order_customer_friendly():

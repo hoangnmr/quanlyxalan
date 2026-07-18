@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -49,6 +50,10 @@ class ResolveVesselLink(BaseModel):
     reason: str = Field(default="", max_length=500)
 
 
+class CancelHistoricalImport(BaseModel):
+    reason: str = Field(default="Người dùng hủy sau khi xem preview.", max_length=500)
+
+
 def _authorize(db: Session, scope: Scope, *, reviewer: bool = False) -> None:
     try:
         validator = validate_reviewer if reviewer else validate_import_actor
@@ -64,7 +69,7 @@ def _authorize(db: Session, scope: Scope, *, reviewer: bool = False) -> None:
 def _source_filename(value: str | None) -> str:
     if not value:
         return "uploaded.xlsx"
-    cleaned = Path(value.replace("\\", "/")).name.strip()
+    cleaned = Path(unquote(value).replace("\\", "/")).name.strip()
     cleaned = re.sub(r"[\x00-\x1f\x7f]", "", cleaned)[:255]
     return cleaned or "uploaded.xlsx"
 
@@ -413,6 +418,24 @@ def list_historical_imports(
     return {"items": [_import_json(item) for item in items], "page": page, "pageSize": page_size, "total": total}
 
 
+@router.get("/{import_id}")
+def historical_import_detail(
+    import_id: int, db: Session = Depends(get_db), scope: Scope = Depends(require_port_scope),
+):
+    _authorize(db, scope)
+    item = db.query(HistoricalReportImport).filter_by(
+        id=import_id, reporting_unit_id=scope.reporting_unit_id,
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lượt import.")
+    return {
+        **_import_json(item, conflicts=[entry.id for entry in _conflicts(db, item)]),
+        "mappingReceipt": json.loads(item.mapping_receipt_json or "{}"),
+        "sourceSheets": json.loads(item.source_sheets_json or "[]"),
+        "supersedeReason": item.supersede_reason,
+    }
+
+
 @router.get("/{import_id}/rows")
 def historical_import_rows(
     import_id: int, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
@@ -448,6 +471,75 @@ def historical_import_rows(
                     "validationStatus": row.validation_status, "warnings": json.loads(row.warning_json),
                     "provenance": json.loads(row.provenance_json)} for row in rows]
     return {"items": payload, "page": page, "pageSize": page_size, "total": total}
+
+
+@router.get("/{import_id}/vessel-links")
+def historical_vessel_links(
+    import_id: int, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
+    status_filter: Literal["PENDING", "ACCEPTED", "REJECTED"] | None = Query(
+        default=None, alias="status"
+    ),
+    db: Session = Depends(get_db), scope: Scope = Depends(require_port_scope),
+):
+    _authorize(db, scope)
+    item = db.query(HistoricalReportImport).filter_by(
+        id=import_id, reporting_unit_id=scope.reporting_unit_id,
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lượt import.")
+    query = db.query(HistoricalVesselLink).filter_by(
+        import_id=import_id, reporting_unit_id=scope.reporting_unit_id,
+    )
+    if status_filter:
+        query = query.filter(HistoricalVesselLink.link_status == status_filter)
+    total = query.count()
+    links = query.order_by(HistoricalVesselLink.id).offset((page - 1) * page_size).limit(page_size).all()
+    candidates = {
+        vessel.id: vessel for vessel in db.query(Vessel).filter(
+            Vessel.id.in_([link.candidate_vessel_id for link in links if link.candidate_vessel_id])
+        ).all()
+    }
+    return {
+        "items": [{
+            "id": link.id, "portCallId": link.port_call_id,
+            "rawVesselName": link.raw_vessel_name,
+            "normalizedVesselName": link.normalized_vessel_name,
+            "rawRegistration": link.raw_registration,
+            "candidateVesselId": link.candidate_vessel_id,
+            "candidateVesselName": candidates.get(link.candidate_vessel_id).name
+                if candidates.get(link.candidate_vessel_id) else None,
+            "candidateRegistration": candidates.get(link.candidate_vessel_id).registration_no
+                if candidates.get(link.candidate_vessel_id) else None,
+            "matchMethod": link.match_method, "confidence": link.confidence,
+            "status": link.link_status, "reason": link.reason,
+        } for link in links],
+        "page": page, "pageSize": page_size, "total": total,
+    }
+
+
+@router.post("/{import_id}/cancel")
+def cancel_historical_import(
+    import_id: int, body: CancelHistoricalImport,
+    db: Session = Depends(get_db), scope: Scope = Depends(require_port_scope),
+):
+    _authorize(db, scope)
+    item = db.query(HistoricalReportImport).filter_by(
+        id=import_id, reporting_unit_id=scope.reporting_unit_id,
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lượt import.")
+    if item.status == "REJECTED":
+        return {**_import_json(item), "idempotent": True}
+    if item.status != "PREVIEWED":
+        raise HTTPException(status_code=409, detail="Chỉ có thể hủy lượt import đang ở bước preview.")
+    item.status = "REJECTED"
+    item.supersede_reason = body.reason.strip() or "Người dùng hủy sau khi xem preview."
+    item.updated_at = now_iso()
+    audit(db, "historical_report_import", item.id, "IMPORT_PREVIEW_CANCELLED",
+          item.supersede_reason, actor_user_id=scope.user.id,
+          reporting_unit_id=scope.reporting_unit_id)
+    db.commit()
+    return _import_json(item)
 
 
 @router.post("/{import_id}/confirm")
@@ -514,6 +606,14 @@ def resolve_historical_vessel_link(
     ).first()
     if not link:
         raise HTTPException(status_code=404, detail="Không tìm thấy liên kết phương tiện.")
+    item = db.query(HistoricalReportImport).filter_by(
+        id=import_id, reporting_unit_id=scope.reporting_unit_id,
+    ).one()
+    if item.status in {"REJECTED", "SUPERSEDED"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Không thể xử lý liên kết của lượt import đã hủy hoặc đã được thay thế.",
+        )
     if body.decision == "ACCEPT":
         candidate_id = body.candidate_vessel_id or link.candidate_vessel_id
         if candidate_id is None:
@@ -536,6 +636,14 @@ def resolve_historical_vessel_link(
                 call.vessel_id = candidate_id
                 if call.ambiguity_status in {"UNMATCHED", "AMBIGUOUS"}:
                     call.ambiguity_status = "NONE"
+                original_warnings = json.loads(call.provenance_json or "{}").get("warnings", [])
+                link_warnings = {
+                    "REVIEW_NORMALIZED_VESSEL_LINK", "UNMATCHED_VESSEL", "AMBIGUOUS_VESSEL",
+                }
+                if call.validation_status != "REJECTED" and not any(
+                    warning not in link_warnings for warning in original_warnings
+                ):
+                    call.validation_status = "VALID"
     else:
         link.link_status = "REJECTED"
     link.reason = body.reason.strip()
@@ -544,5 +652,9 @@ def resolve_historical_vessel_link(
     audit(db, "historical_vessel_link", link.id, f"LINK_{link.link_status}",
           link.reason or link.raw_vessel_name, actor_user_id=scope.user.id,
           reporting_unit_id=scope.reporting_unit_id)
+    db.flush()
+    _refresh_counts(db, item)
+    if item.status == "REVIEW" and item.review_count == 0:
+        item.status = "COMMITTED"
     db.commit()
     return {"id": link.id, "status": link.link_status, "candidateVesselId": link.candidate_vessel_id}

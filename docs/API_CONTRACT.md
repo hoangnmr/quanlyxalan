@@ -151,8 +151,11 @@ unit. `CUSTOMER` is denied.
 |--------|------|---------|----------|
 | POST | `/api/historical-imports/preview` | XLSX body; optional `X-Source-Filename` provenance | detected source, checksum, mapping receipt, counts, conflicts |
 | GET | `/api/historical-imports` | `page`, `page_size` | tenant-scoped import history |
+| GET | `/api/historical-imports/{id}` | — | import detail, conflicts and mapping receipt |
 | GET | `/api/historical-imports/{id}/rows` | `page`, `page_size` | cell-provenance preview rows |
+| GET | `/api/historical-imports/{id}/vessel-links` | optional status, pagination | vessel-link review queue |
 | POST | `/api/historical-imports/{id}/confirm` | optional conflict action/reason | committed, review, rejected or superseded revision state |
+| POST | `/api/historical-imports/{id}/cancel` | reason | cancel a PREVIEWED import without activating facts |
 | POST | `/api/historical-imports/{id}/vessel-links/{link_id}/resolve` | accept/reject candidate | audited link decision |
 
 Detection is based on approved sheet/header/structure signatures, not the file

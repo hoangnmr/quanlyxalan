@@ -1687,3 +1687,38 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
 - H4 can now implement the separate historical import workspace and review
   queues. PL.01/PL.02 parser completion remains deferred until representative
   source files are supplied, as approved by the owner.
+
+---
+
+## Historical TOS H4A — import workspace UI — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally. H4 remains open for historical,
+  live and combined dashboard/report-source selection (H4B).
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+
+### Delivered
+
+- Import now has separate `Dữ liệu vận hành` and `Lịch sử / TOS` tab panels.
+  The historical boundary explicitly says it does not alter declarations,
+  vessel master, crew or current operational data.
+- H3A APIs are exposed as a four-step workflow: structural detection, preview,
+  explicit overlap decision and confirmation. Source kind, ATB month, mapping,
+  checksum, counts and paginated row evidence are visible before activation.
+- Import history shows revision/supersession state and lets staff reopen a
+  pending preview. Cancel is a server-side audited transition, not a client-only
+  dismissal. Conflict actions say “keep active” versus “activate new revision”
+  and require a reason for the latter.
+- TOS vessel-link review displays the raw TOS name, suggested/selected register
+  vessel and explicit accept/reject actions. Backend detail, queue and cancel
+  endpoints remain tenant-scoped and reject cancelled/superseded mutations.
+- Layout is responsive and keyboard-accessible without replacing the existing
+  static HTML/CSS/JS architecture or adding browser storage as business truth.
+
+### Verification and boundary
+
+- `python -m pytest -q`: **164 passed**, one retained openpyxl warning.
+- Static HTML parser: 138 ids, zero duplicates. Python compile and diff checks
+  pass. Browser visual QA was not requested and was not claimed.
+- No workbook/database/backup is included in Git; no deployment and no push.
+- Next move: H4B source-aware historical/live/combined dashboard and overlap
+  coverage indicators. PL.01/PL.02 remain owner-deferred pending real samples.

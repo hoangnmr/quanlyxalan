@@ -492,20 +492,35 @@ Final H3 exit gate (not yet claimed for deferred PL.01/PL.02):
 
 ### H4 — Import UI and historical dashboard
 
-Status: NOT STARTED
+Status: IN PROGRESS — H4A IMPORT WORKSPACE IMPLEMENTED; H4B DASHBOARD PENDING
 Phase: BUILD
 
-Actions:
+Implemented in H4A (2026-07-18):
 
-- Add an Admin/PORT_STAFF import workspace with appendix type, detected period,
-  preview, conflict warnings and commit confirmation.
-- Add import history, revision/supersession and source drill-down.
+- The Import page has two explicit, accessible modes: `Dữ liệu vận hành` and
+  `Lịch sử / TOS`. Copy and visual boundaries state which records may change;
+  historical import never presents itself as an operational/master overwrite.
+- Historical flow shows four steps, detected source kind, ATB reporting period,
+  mapping/checksum receipt, valid/review/rejected counts and paginated rows.
+- Conflict actions use unambiguous language: keep the active import or activate
+  the new file as a revision with a required reason. Preview can be cancelled
+  without activating facts and an unfinished preview can be reopened from
+  tenant-scoped history.
+- TOS vessel-link candidates have a review queue backed by the port register.
+  Accept/reject remains server-authorized, audited and tenant-scoped; resolving
+  the final blocking link refreshes import counts/status.
+- Responsive layouts, native tab keyboard controls, live status regions and
+  mobile action stacking were added without a new frontend framework or
+  browser-owned business state.
+
+H4A verification: `164 passed`, one retained openpyxl warning; HTML contains no
+duplicate ids. No browser QA/deployment was performed because the owner asked
+for local implementation and did not request publishing.
+
+Remaining H4B actions:
+
 - Add historical/live/combined dashboard filters and coverage indicators.
 - Block combined totals when period overlap is unresolved.
-- Separate operational import cards from the clearly labelled historical/TOS
-  workspace; do not reuse the current Vessel/Declaration import actions.
-- Show detected source kind, mapping version, period and confidence before
-  confirmation, with actionable unmatched/ambiguous review queues.
 - Make the report source (`Live approved`, `Historical imported`, `Combined`)
   explicit and accessible; keep current live behavior as the default.
 

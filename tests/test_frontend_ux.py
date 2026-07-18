@@ -135,6 +135,7 @@ def test_historical_import_is_visually_and_semantically_separate_from_live_impor
     assert "function previewHistoricalImport(" in app_js
     assert "function renderHistoricalBatch(" in app_js
     assert "function historicalWarnings(" in app_js
+    assert "if (row.validationStatus === 'VALID') return [];" in app_js
     assert "Lý do / xử lý" in app_js
     assert "status=${status}" in app_js
     assert "function loadHistoricalImportHistory(" in app_js

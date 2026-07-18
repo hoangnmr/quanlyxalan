@@ -1458,6 +1458,10 @@ const HISTORICAL_WARNING_LABELS = {
 };
 
 function historicalWarnings(row) {
+  // Provenance keeps the original warning codes for audit. Once a row becomes
+  // VALID, those codes are resolved history and must not be presented as an
+  // active error to the operator.
+  if (row.validationStatus === 'VALID') return [];
   const codes = [...(row.warnings || row.provenance?.warnings || [])];
   if (row.matchStatus === 'UNMATCHED' && !codes.includes('UNMATCHED_CALL')) codes.push('UNMATCHED_CALL');
   if (row.matchStatus === 'AMBIGUOUS' && !codes.includes('AMBIGUOUS_CALL')) codes.push('AMBIGUOUS_CALL');

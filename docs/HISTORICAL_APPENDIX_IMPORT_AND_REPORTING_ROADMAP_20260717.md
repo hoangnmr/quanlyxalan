@@ -673,3 +673,18 @@ Status: IMPLEMENTED / source workbook verified locally.
 - Read-only verification against `BC THANG 7.26 -PL3.xlsx`: 73 valid, 0 review,
   0 rejected; `BAO CAO!O12` maps raw `331,47` to numeric `331.47`.
 - Full regression: 171 passed with one retained openpyxl warning.
+
+### H4E — warning lifecycle and stale-mapping replacement — 2026-07-18
+
+Status: IMPLEMENTED / VERIFIED locally.
+
+- Active warnings disappear from the operator table when their row becomes
+  valid; original warning codes remain only in provenance/audit evidence.
+- Confirming Berth rechecks Detail receipts whether they are still PREVIEWED or
+  were already confirmed into REVIEW. Match-only warnings and counts resolve in
+  place; genuine source/link warnings remain until their stated action is done.
+- A corrected mapping of the same source checksum now conflicts with and
+  explicitly supersedes the active stale mapping, including legacy PL.03 files
+  without a reliable report period.
+- Current local source comparison proves all 1,067 Detail rows have a unique
+  Berth key. Full regression: 172 passed with one retained openpyxl warning.

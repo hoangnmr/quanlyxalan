@@ -1799,3 +1799,16 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
 - Direct read-only source check: PL.03 now yields 73 valid and zero review rows;
   full regression is 171 passed with one retained openpyxl warning. No workbook
   was modified or staged for Git.
+
+### Warning lifecycle correction
+
+- A warning remains active only while its row is REVIEW/REJECTED. The original
+  code remains in provenance after resolution but is no longer displayed as a
+  current error on a VALID row.
+- Berth confirmation reconciles cargo receipts already confirmed into REVIEW as
+  well as PREVIEWED receipts. The current audited source pair has 38 unique
+  Detail call keys and all 1,067 rows match exactly one Berth call.
+- Same-checksum/new-mapping receipts now enter the explicit revision flow and
+  supersede the active stale mapping even when reporting period is unavailable.
+- Regression: 172 passed with one retained openpyxl warning. No runtime database
+  mutation, deployment or push was performed.

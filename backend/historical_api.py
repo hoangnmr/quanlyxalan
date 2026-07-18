@@ -332,6 +332,15 @@ def _conflicts(db: Session, item: HistoricalReportImport) -> list[HistoricalRepo
         HistoricalReportImport.id != item.id,
         HistoricalReportImport.status.in_(("COMMITTED", "REVIEW")),
     )
+    # A parser/mapping correction intentionally creates a new receipt for the
+    # same immutable source checksum.  Treat the active older mapping as a
+    # conflict even when a legacy report has no reliable reporting period, so
+    # confirmation supersedes it instead of leaving two apparently active rows.
+    same_source = query.filter(
+        HistoricalReportImport.source_checksum == item.source_checksum,
+    ).all()
+    if same_source:
+        return same_source
     if item.reporting_period:
         return query.filter(HistoricalReportImport.reporting_period == item.reporting_period).all()
     if item.source_kind == "tos_cargo_detail":

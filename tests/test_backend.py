@@ -2337,3 +2337,60 @@ def test_historical_batch_order_rechecks_pending_cargo_after_berth_confirmation(
         db.commit()
     finally:
         db.close()
+
+
+def test_historical_corrected_mapping_supersedes_same_source_without_period(
+    client, auth_headers,
+):
+    """A corrected parser receipt replaces the active stale mapping explicitly."""
+    cargo = _historical_fixture(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng",
+         20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [{3: "40HC", 5: "E", 17: "MAPPING REVISION | 2091 | 0001", 18: "331,47",
+          20: "Hàng nội", 23: "Hạ bãi"}],
+    )
+    first = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "same-source.xlsx"},
+    )
+    assert first.status_code == 200, first.text
+    old_id = first.json()["id"]
+    db = SessionLocal()
+    try:
+        old = db.get(HistoricalReportImport, old_id)
+        old.mapping_version = "tos_cargo_detail_v1"
+        old.status = "REVIEW"
+        db.commit()
+    finally:
+        db.close()
+
+    corrected = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "renamed-source.xlsx"},
+    )
+    assert corrected.status_code == 200, corrected.text
+    corrected_body = corrected.json()
+    new_id = corrected_body["id"]
+    assert corrected_body["idempotent"] is False
+    assert corrected_body["mappingVersion"] == "tos_cargo_detail_v2"
+    assert corrected_body["conflictingImportIds"] == [old_id]
+    assert client.post(
+        f"/api/historical-imports/{new_id}/confirm", json={}, headers=auth_headers,
+    ).status_code == 409
+    activated = client.post(
+        f"/api/historical-imports/{new_id}/confirm",
+        json={"conflict_action": "ACTIVATE_NEW_REVISION", "reason": "Correct decimal parser"},
+        headers=auth_headers,
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["revisionNo"] == 2
+
+    db = SessionLocal()
+    try:
+        assert db.get(HistoricalReportImport, old_id).status == "SUPERSEDED"
+        db.query(HistoricalReportImport).filter(
+            HistoricalReportImport.id.in_([old_id, new_id])
+        ).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()

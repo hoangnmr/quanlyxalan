@@ -178,6 +178,14 @@ using Vietnamese or English separators: `331,47`, `331.47`, `1.088,84` and
 previously previewed under v1 creates a corrected receipt instead of reusing the
 stale validation result.
 
+Warning codes remain in provenance as audit evidence, but the UI does not show
+them as active errors after a row becomes `VALID`. A confirmed Berth receipt
+reconciles matching Detail receipts, including receipts already in `REVIEW`;
+resolved Detail rows/counts update in place. When the same source checksum is
+reprocessed under a newer mapping, an active older mapping is an explicit
+revision conflict even if the legacy workbook has no trustworthy report period.
+Activating the corrected receipt marks the older one `SUPERSEDED`.
+
 ### REPORTING UNIT ADMINISTRATION
 
 | Method | Path | Allowed Roles | Request | Response |

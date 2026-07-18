@@ -157,6 +157,25 @@ function reportingUnitStorageKey() {
   return `reporting-unit:${state.currentUser?.username || 'anonymous'}`;
 }
 
+async function saveReportingUnit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!form.reportValidity()) return;
+  setSubmitting(form, event.submitter, true, 'Đang tạo…');
+  try {
+    const item = await api('/api/reporting-units', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(values(form)),
+    });
+    localStorage.setItem(reportingUnitStorageKey(), String(item.id));
+    $('#reporting-unit-dialog').close();
+    toast(`Đã tạo đơn vị ${item.name}.`);
+    location.reload();
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
 async function loadReportingUnitContext() {
   const context = $('#sidebar-unit-context');
   const trigger = $('#reporting-unit-trigger');
@@ -188,18 +207,38 @@ async function loadReportingUnitContext() {
     else localStorage.removeItem(reportingUnitStorageKey());
     location.reload();
   };
-  menu.innerHTML = state.reportingUnits.length
+  const unitItems = state.reportingUnits.length
     ? state.reportingUnits.map(unit => `<button type="button" role="menuitemradio" aria-checked="${unit.id === state.activeReportingUnitId}" data-reporting-unit-id="${unit.id}" class="${unit.id === state.activeReportingUnitId ? 'selected' : ''}"><span><strong>${esc(unit.name)}</strong>${unit.code ? `<small>${esc(unit.code)}</small>` : ''}</span><b aria-hidden="true">${unit.id === state.activeReportingUnitId ? '✓' : ''}</b></button>`).join('')
     : '<p>Chưa có đơn vị được cấp.</p>';
+  const createAction = state.currentUser.role === 'PLATFORM_ADMIN'
+    ? '<div class="reporting-unit-create-action"><button id="create-reporting-unit" type="button" role="menuitem"><span><strong>+ Tạo đơn vị mới</strong><small>Dành cho Platform Admin</small></span></button></div>'
+    : '';
+  menu.innerHTML = unitItems + createAction;
   $$('[data-reporting-unit-id]', menu).forEach(button => {
     button.onclick = () => chooseReportingUnit(Number(button.dataset.reportingUnitId));
   });
+  const createButton = $('#create-reporting-unit');
+  if (createButton) createButton.onclick = () => {
+    trigger.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+    const form = $('#reporting-unit-form');
+    form.reset();
+    $('#reporting-unit-dialog').showModal();
+    requestAnimationFrame(() => form.elements.name.focus());
+  };
+  const createForm = $('#reporting-unit-form');
+  if (createForm.dataset.bound !== 'true') {
+    createForm.dataset.bound = 'true';
+    createForm.addEventListener('submit', saveReportingUnit);
+    $('#close-reporting-unit-dialog').onclick = () => $('#reporting-unit-dialog').close();
+    $('#cancel-reporting-unit-dialog').onclick = () => $('#reporting-unit-dialog').close();
+  }
   trigger.onclick = event => {
     event.stopPropagation();
     const open = trigger.getAttribute('aria-expanded') !== 'true';
     trigger.setAttribute('aria-expanded', String(open));
     menu.hidden = !open;
-    if (open) $('[role="menuitemradio"]', menu)?.focus();
+    if (open) $('[role="menuitemradio"], [role="menuitem"]', menu)?.focus();
   };
   trigger.onkeydown = event => {
     if (event.key !== 'Escape') return;
@@ -207,7 +246,7 @@ async function loadReportingUnitContext() {
     menu.hidden = true;
   };
   menu.onkeydown = event => {
-    const items = $$('[role="menuitemradio"]', menu);
+    const items = $$('[role="menuitemradio"], [role="menuitem"]', menu);
     if (event.key === 'Escape') {
       event.preventDefault();
       trigger.setAttribute('aria-expanded', 'false');
@@ -235,7 +274,7 @@ async function loadReportingUnitContext() {
   trigger.title = active
     ? `Đơn vị đang chọn: ${active.name}${active.code ? ` (${active.code})` : ''}`
     : 'Chọn đơn vị báo cáo';
-  trigger.disabled = state.reportingUnits.length === 0;
+  trigger.disabled = state.reportingUnits.length === 0 && state.currentUser.role !== 'PLATFORM_ADMIN';
   if (!active) {
     notice.hidden = false;
     notice.querySelector('p:last-child').textContent = state.reportingUnits.length

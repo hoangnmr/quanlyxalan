@@ -86,6 +86,10 @@ def test_reporting_unit_picker_is_compact_and_kept_out_of_topbar():
     assert "['ArrowUp', 'ArrowDown']" in app_js
     assert '.reporting-unit-trigger' in styles_css
     assert '.reporting-unit-menu button.selected' in styles_css
+    assert 'id="reporting-unit-dialog"' in index_html
+    assert '+ Tạo đơn vị mới' in app_js
+    assert "state.currentUser.role === 'PLATFORM_ADMIN'" in app_js
+    assert "method: 'POST'" in app_js[app_js.index('async function saveReportingUnit'):app_js.index('async function loadReportingUnitContext')]
 
 
 def test_crew_form_keeps_readable_controls_with_compact_two_column_layout():

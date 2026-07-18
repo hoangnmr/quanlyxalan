@@ -164,6 +164,17 @@ confirmation must choose `KEEP_EXISTING` or `ACTIVATE_NEW_REVISION` and a new
 revision requires a reason. TOS ATB/ATD remains distinct and authoritative;
 legacy PL.03 time is stored only as reported provenance.
 
+### REPORTING UNIT ADMINISTRATION
+
+| Method | Path | Allowed Roles | Request | Response |
+|--------|------|---------------|---------|----------|
+| GET | `/api/reporting-units` | PORT_STAFF, PLATFORM_ADMIN | — | Active units visible to the caller |
+| POST | `/api/reporting-units` | PLATFORM_ADMIN | `{name, code}` | Creates an empty active unit and records a tenant-scoped audit event |
+
+Creating a unit never copies memberships, customer organizations, vessels,
+declarations or historical facts from the currently selected unit. The new
+unit must be configured separately before PORT_STAFF can operate it.
+
 ### REPORTS
 
 | Method | Path | Allowed Roles | Request | Response |

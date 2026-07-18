@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.4.1">
+  <link rel="stylesheet" href="/styles.css?v=1.4.2">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -179,6 +179,7 @@
   </div>
 
   <dialog id="port-import-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">SỔ THEO DÕI NỘI BỘ</p><h2>Kiểm tra file trước khi nhập</h2></div><button type="button" class="icon-button" id="close-port-import" aria-label="Đóng">×</button></div><div id="port-import-result" class="import-dialog-content"></div></dialog>
+  <dialog id="reporting-unit-dialog" class="modal reporting-unit-dialog" aria-labelledby="reporting-unit-dialog-title"><form id="reporting-unit-form"><div class="modal-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2 id="reporting-unit-dialog-title">Tạo đơn vị báo cáo</h2></div><button type="button" class="icon-button" id="close-reporting-unit-dialog" aria-label="Đóng">×</button></div><div class="reporting-unit-form-body"><p>Đơn vị mới được tạo trống, không sao chép nhân viên, doanh nghiệp hoặc dữ liệu từ Cảng đang chọn.</p><label>Tên đơn vị<input name="name" type="text" minlength="2" maxlength="150" required placeholder="Ví dụ: Cảng Nhà Rồng"></label><label>Mã đơn vị<input name="code" type="text" minlength="2" maxlength="30" required pattern="[A-Za-z0-9_-]+" placeholder="Ví dụ: NHA-RONG"><small>Dùng chữ A–Z, số, dấu “-” hoặc “_”.</small></label></div><div class="modal-actions"><button id="cancel-reporting-unit-dialog" type="button" class="ghost-button">Hủy</button><button type="submit" class="primary-button">Tạo đơn vị</button></div></form></dialog>
   <dialog id="vessel-dialog" class="modal"><form id="vessel-form"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ DÙNG LẠI</p><h2>Thông tin phương tiện</h2></div><button type="button" class="icon-button" data-close-dialog="vessel-dialog" aria-label="Đóng">×</button></div><div id="vessel-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="vessel-dialog">Hủy</button><button type="submit" class="primary-button" id="save-vessel">Lưu hồ sơ</button></div></form></dialog>
 
   <dialog id="crew-dialog" class="modal"><form id="crew-form"><div class="modal-header"><div><p class="eyebrow">DANH SÁCH THUYỀN VIÊN</p><h2>Thông tin và chứng chỉ chuyên môn</h2></div><button type="button" class="icon-button" data-close-dialog="crew-dialog" aria-label="Đóng">×</button></div><div id="crew-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="crew-dialog">Hủy</button><button type="submit" class="primary-button">Lưu thuyền viên</button></div></form></dialog>
@@ -210,6 +211,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.4.1" defer></script>
+  <script src="/app.js?v=1.4.2" defer></script>
 </body>
 </html>

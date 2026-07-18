@@ -1748,10 +1748,14 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
   compact sidebar button. The active unit name stays visible; clicking opens a
   tenant-safe list with menu-radio semantics, arrow/Escape keyboard handling
   and no change to the server-owned `X-Reporting-Unit-ID` boundary.
+- Platform Admin can now choose `+ Tạo đơn vị mới` in that menu. The audited
+  server endpoint validates and normalizes a unique name/code, creates an empty
+  active ReportingUnit and selects it after reload. PORT_STAFF/CUSTOMER are
+  denied and no memberships, organizations or tenant data are copied.
 
 ### Verification and boundary
 
-- `python -m pytest -q`: **167 passed**, one retained openpyxl warning. Targeted
+- `python -m pytest -q`: **168 passed**, one retained openpyxl warning. Targeted
   regression covers historical aggregation, empty-container weight,
   source authorization, partial coverage, combined no-overlap, overlap blocking
   and export rejection.

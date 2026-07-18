@@ -262,8 +262,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.4.1' in res.text
-    assert '/app.js?v=1.4.1' in res.text
+    assert '/styles.css?v=1.4.2' in res.text
+    assert '/app.js?v=1.4.2' in res.text
     assert 'id="analytics-source-controls"' in res.text
     assert 'data-source="historical"' in res.text
     assert 'id="analytics-coverage"' in res.text
@@ -271,6 +271,8 @@ def test_static_frontend(client):
     assert 'id="sidebar-unit-context"' in res.text
     assert 'id="reporting-unit-trigger"' in res.text
     assert 'id="reporting-unit-menu"' in res.text
+    assert 'id="reporting-unit-dialog"' in res.text
+    assert 'id="reporting-unit-form"' in res.text
     assert 'id="reporting-unit-select"' not in res.text
     assert 'id="reporting-unit-required"' in res.text
     assert 'data-page="port-register"' in res.text
@@ -337,6 +339,67 @@ def test_static_frontend(client):
     assert ".integration-readiness" in styles_css
     assert "#crew-dialog { width: min(720px" in styles_css
     assert "#crew-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }" in styles_css
+
+
+def test_platform_admin_can_create_empty_reporting_unit(
+    client, auth_headers, port_staff_headers, customer_headers,
+):
+    suffix = uuid.uuid4().hex[:8].upper()
+    name = f"Test Port {suffix}"
+    code = f"PORT-{suffix}"
+    unit_id = None
+    try:
+        assert client.post(
+            "/api/reporting-units", headers=port_staff_headers,
+            json={"name": name, "code": code},
+        ).status_code == 403
+        assert client.post(
+            "/api/reporting-units", headers=customer_headers,
+            json={"name": name, "code": code},
+        ).status_code == 403
+        invalid = client.post(
+            "/api/reporting-units", headers=auth_headers,
+            json={"name": "X", "code": "mã có dấu"},
+        )
+        assert invalid.status_code == 422
+
+        created = client.post(
+            "/api/reporting-units", headers=auth_headers,
+            json={"name": f"  {name}  ", "code": code.lower()},
+        )
+        assert created.status_code == 201, created.text
+        body = created.json()
+        unit_id = body["id"]
+        assert body == {"id": unit_id, "name": name, "code": code, "is_active": True}
+
+        duplicate_code = client.post(
+            "/api/reporting-units", headers=auth_headers,
+            json={"name": f"Other {suffix}", "code": code},
+        )
+        assert duplicate_code.status_code == 409
+        listed = client.get("/api/reporting-units", headers=auth_headers)
+        assert any(item["id"] == unit_id for item in listed.json()["items"])
+
+        db = SessionLocal()
+        try:
+            event = db.query(AuditEvent).filter_by(
+                entity_type="REPORTING_UNIT", entity_id=unit_id, action="CREATE",
+            ).one()
+            assert event.reporting_unit_id == unit_id
+            assert event.actor_user_id is not None
+            assert db.query(ReportingUnitOrganization).filter_by(reporting_unit_id=unit_id).count() == 0
+            assert db.query(ReportingUnitUser).filter_by(reporting_unit_id=unit_id).count() == 0
+        finally:
+            db.close()
+    finally:
+        if unit_id:
+            db = SessionLocal()
+            try:
+                db.query(AuditEvent).filter_by(reporting_unit_id=unit_id).delete()
+                db.query(ReportingUnit).filter_by(id=unit_id).delete()
+                db.commit()
+            finally:
+                db.close()
 
 
 def test_real_input_removes_only_sentinel_marked_demo_data():

@@ -226,6 +226,29 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ReportingUnitCreateRequest(BaseModel):
+    name: str
+    code: str
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, value: str) -> str:
+        value = " ".join(value.strip().split())
+        if len(value) < 2 or len(value) > 150:
+            raise ValueError("Tên đơn vị phải có từ 2 đến 150 ký tự.")
+        return value
+
+    @field_validator("code")
+    @classmethod
+    def valid_code(cls, value: str) -> str:
+        value = "-".join(value.strip().upper().split())
+        if len(value) < 2 or len(value) > 30:
+            raise ValueError("Mã đơn vị phải có từ 2 đến 30 ký tự.")
+        if any(char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in value):
+            raise ValueError("Mã đơn vị chỉ dùng chữ A-Z, số, dấu gạch ngang hoặc gạch dưới.")
+        return value
+
+
 class CargoPayload(BaseModel):
     cargo_type: str = ""
     movement_type: str = ""
@@ -1075,6 +1098,41 @@ def list_reporting_units(
         "items": [{"id": u.id, "name": u.name, "code": u.code} for u in units],
         "role": user.role,
     }
+
+
+@app.post("/api/reporting-units", status_code=201)
+def create_reporting_unit(
+    payload: ReportingUnitCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    """Create an empty tenant. Memberships and customer links are separate.
+
+    This is a platform operation and deliberately does not infer or copy the
+    currently selected tenant's organizations, staff or historical data.
+    """
+    duplicate = db.query(ReportingUnit).filter(
+        or_(
+            func.lower(ReportingUnit.name) == payload.name.lower(),
+            func.lower(ReportingUnit.code) == payload.code.lower(),
+        )
+    ).first()
+    if duplicate:
+        field = "tên" if duplicate.name.lower() == payload.name.lower() else "mã"
+        raise HTTPException(status_code=409, detail=f"Đã có đơn vị báo cáo dùng {field} này.")
+    item = ReportingUnit(
+        name=payload.name, code=payload.code, official_header_json="{}",
+        is_active=1, created_at=now_iso(), updated_at=now_iso(),
+    )
+    db.add(item)
+    db.flush()
+    audit(
+        db, "REPORTING_UNIT", item.id, "CREATE", f"{item.name} ({item.code})",
+        actor_user_id=user.id, reporting_unit_id=item.id,
+    )
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "name": item.name, "code": item.code, "is_active": bool(item.is_active)}
 
 
 @app.get("/api/reporting-unit/organizations")

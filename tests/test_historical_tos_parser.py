@@ -62,6 +62,50 @@ def test_unknown_size_and_invalid_weight_enter_review_not_zero():
     assert row["weight_state"] == "INVALID"
 
 
+def test_decimal_parser_accepts_vietnamese_and_mixed_excel_number_formats():
+    content = _xlsx(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng", 20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [
+            {3: "40HC", 5: "F", 17: "A | 2026 | 1", 18: "331,47", 20: "Hàng nội", 23: "Hạ bãi"},
+            {3: "40HC", 5: "F", 17: "B | 2026 | 2", 18: "1,088.84", 20: "Hàng nội", 23: "Hạ bãi"},
+            {3: "40HC", 5: "F", 17: "C | 2026 | 3", 18: "1.088,84", 20: "Hàng nội", 23: "Hạ bãi"},
+        ],
+    )
+    parsed = parse_workbook(content)
+    rows = parsed.rows
+    assert parsed.mapping_version == "tos_cargo_detail_v2"
+    assert [row["weight_tonnes"] for row in rows] == [331.47, 1088.84, 1088.84]
+    assert all(row["validation_status"] == "VALID" for row in rows)
+
+
+def test_pl03_decimal_comma_is_a_valid_tonnage_metric():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "PL03"
+    sheet.cell(5, 1, "STT")
+    sheet.cell(5, 2, "Tên PTTND")
+    sheet.cell(5, 3, "Số đăng ký")
+    sheet.cell(10, 1, 1)
+    sheet.cell(10, 2, "PHƯỚC TẠO 12")
+    sheet.cell(10, 3, "SG.10249")
+    sheet.cell(10, 15, "331,47")
+    sheet.cell(10, 16, 80)
+    sheet.cell(10, 35, None)
+    output = io.BytesIO()
+    workbook.save(output)
+
+    parsed = parse_workbook(output.getvalue())
+    assert parsed.mapping_version == "reported_pl03_35col_historical_v2"
+    row = parsed.rows[0]
+    inbound_tons = next(
+        metric for metric in row["metrics"]
+        if metric["metric_code"] == "domestic_inbound_tons_reported"
+    )
+    assert inbound_tons["numeric_value"] == 331.47
+    assert inbound_tons["invalid"] is False
+    assert row["validation_status"] == "VALID"
+
+
 def test_unknown_workbook_fails_closed():
     with pytest.raises(HistoricalWorkbookError, match="Không nhận diện"):
         parse_workbook(_xlsx({1: "unrelated"}, [{1: "value"}]))

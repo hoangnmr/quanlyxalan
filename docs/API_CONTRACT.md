@@ -171,6 +171,13 @@ confirmation must choose `KEEP_EXISTING` or `ACTIVATE_NEW_REVISION` and a new
 revision requires a reason. TOS ATB/ATD remains distinct and authoritative;
 legacy PL.03 time is stored only as reported provenance.
 
+Numeric extraction accepts Excel numeric cells and audited text representations
+using Vietnamese or English separators: `331,47`, `331.47`, `1.088,84` and
+`1,088.84`. Decimal-comma support is versioned as `tos_cargo_detail_v2` and
+`reported_pl03_35col_historical_v2` (`KBCV-HIST-TOS-1.1`), so uploading a file
+previously previewed under v1 creates a corrected receipt instead of reusing the
+stale validation result.
+
 ### REPORTING UNIT ADMINISTRATION
 
 | Method | Path | Allowed Roles | Request | Response |

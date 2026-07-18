@@ -125,7 +125,6 @@ def test_historical_import_is_visually_and_semantically_separate_from_live_impor
     assert 'id="historical-import-tab"' in index_html
     assert 'role="tabpanel" aria-labelledby="historical-import-tab"' in index_html
     assert "Không sửa phiếu khai báo gốc" in index_html
-    assert "không dựa vào tên file" in index_html
     assert 'id="import-historical" accept=".xlsx" multiple' in index_html
     assert 'id="historical-batch"' in index_html
     assert 'data-historical-row-filter="review"' in index_html

@@ -658,3 +658,18 @@ Status: IMPLEMENTED / VERIFIED locally; owner visual UAT remains open.
 - Targeted backend and frontend regression: 15 passed. Full application suite:
   169 passed with one retained openpyxl warning; raw workbooks remain outside
   Git.
+
+### H4D — localized decimal correction — 2026-07-18
+
+Status: IMPLEMENTED / source workbook verified locally.
+
+- Corrected the historical numeric parser: a Vietnamese decimal such as
+  `331,47` is `331.47` tonnes, not invalid text. Mixed grouping/decimal formats
+  `1,088.84` and `1.088,84` are also accepted without changing the raw cell
+  value retained in provenance.
+- Bumped Detail and PL.03 mapping versions to v2 and transform receipt to 1.1.
+  Re-uploading the unchanged workbook therefore produces a newly evaluated
+  receipt rather than returning the stale v1 preview by checksum.
+- Read-only verification against `BC THANG 7.26 -PL3.xlsx`: 73 valid, 0 review,
+  0 rejected; `BAO CAO!O12` maps raw `331,47` to numeric `331.47`.
+- Full regression: 171 passed with one retained openpyxl warning.

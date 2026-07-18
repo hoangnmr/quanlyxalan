@@ -1786,3 +1786,16 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
 - Regression: 169 passed with one retained openpyxl warning. Raw workbooks
   remain untracked; do not include them, databases or backups in Git. Next move
   is owner visual UAT; commit remains local only.
+
+### Decimal-comma correction
+
+- The v1 parser incorrectly classified PL.03 text values such as `331,47` as
+  invalid. v2 accepts Vietnamese/English decimal and grouping representations,
+  retains the original text in provenance and stores `331.47` numerically.
+- Mapping identifiers are now `tos_cargo_detail_v2` and
+  `reported_pl03_35col_historical_v2`; transform receipt is
+  `KBCV-HIST-TOS-1.1`. This deliberately bypasses stale checksum idempotency
+  from a prior v1 preview when the same source workbook is uploaded again.
+- Direct read-only source check: PL.03 now yields 73 valid and zero review rows;
+  full regression is 171 passed with one retained openpyxl warning. No workbook
+  was modified or staged for Git.

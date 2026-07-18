@@ -29,9 +29,9 @@ MAX_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 100
 
 BERTH_VERSION = "tos_berth_call_v1"
-CARGO_VERSION = "tos_cargo_detail_v1"
-PL03_VERSION = "reported_pl03_35col_historical_v1"
-TRANSFORM_VERSION = "KBCV-HIST-TOS-1.0"
+CARGO_VERSION = "tos_cargo_detail_v2"
+PL03_VERSION = "reported_pl03_35col_historical_v2"
+TRANSFORM_VERSION = "KBCV-HIST-TOS-1.1"
 
 
 class HistoricalWorkbookError(ValueError):
@@ -168,10 +168,42 @@ def _decimal(value: Any) -> tuple[str, float | None, str]:
     raw = _raw(value)
     if raw == "":
         return raw, None, "BLANK"
-    if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", raw):
+    compact = re.sub(r"[\s\u00a0]", "", raw)
+    if not re.fullmatch(r"[+-]?[\d.,]+", compact):
+        return raw, None, "INVALID"
+    sign = ""
+    if compact[:1] in {"+", "-"}:
+        sign, compact = compact[0], compact[1:]
+    if not compact or not re.search(r"\d", compact):
+        return raw, None, "INVALID"
+    if "," in compact and "." in compact:
+        # Accept both 1,088.84 and 1.088,84. The right-most separator is the
+        # decimal mark; separators to its left are grouping marks.
+        decimal_mark = "," if compact.rfind(",") > compact.rfind(".") else "."
+        grouping_mark = "." if decimal_mark == "," else ","
+        compact = compact.replace(grouping_mark, "")
+        if compact.count(decimal_mark) != 1:
+            return raw, None, "INVALID"
+        compact = compact.replace(decimal_mark, ".")
+    elif "," in compact:
+        # PL.03 is prepared in Vietnamese Excel, where 331,47 means 331.47.
+        # Repeated comma groups are accepted only as standard thousands groups.
+        if compact.count(",") == 1:
+            compact = compact.replace(",", ".")
+        elif re.fullmatch(r"\d{1,3}(?:,\d{3})+", compact):
+            compact = compact.replace(",", "")
+        else:
+            return raw, None, "INVALID"
+    elif compact.count(".") > 1:
+        if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", compact):
+            compact = compact.replace(".", "")
+        else:
+            return raw, None, "INVALID"
+    normalized = f"{sign}{compact}"
+    if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", normalized):
         return raw, None, "INVALID"
     try:
-        number = Decimal(raw)
+        number = Decimal(normalized)
     except InvalidOperation:
         return raw, None, "INVALID"
     if number < 0:

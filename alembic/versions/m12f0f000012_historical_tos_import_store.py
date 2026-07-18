@@ -163,12 +163,24 @@ def _verify_tenant_schema(connection) -> None:
     _require(_has_composite_fk(inspector, "historical_report_metrics", "historical_report_rows",
                                {"row_id", "import_id", "reporting_unit_id"}),
              "historical_report_metrics is missing the composite (row_id, import_id, reporting_unit_id) FK onto historical_report_rows")
-    _require(_has_composite_fk(inspector, "historical_cargo_rows", "historical_port_calls",
-                               {"port_call_id", "import_id", "reporting_unit_id"}),
-             "historical_cargo_rows is missing the composite (port_call_id, import_id, reporting_unit_id) FK onto historical_port_calls")
-    _require(_has_composite_fk(inspector, "historical_vessel_links", "historical_port_calls",
-                               {"port_call_id", "import_id", "reporting_unit_id"}),
-             "historical_vessel_links is missing the composite (port_call_id, import_id, reporting_unit_id) FK onto historical_port_calls")
+    # A fresh database may already carry the current H3 model because the b01
+    # baseline uses Base.metadata.create_all.  Accept both the original H2
+    # same-import FK and the H3 tenant-safe cross-import FK; o14 performs the
+    # forward conversion for an existing n13 database.
+    cargo_call_fk = (
+        _has_composite_fk(inspector, "historical_cargo_rows", "historical_port_calls",
+                          {"port_call_id", "import_id", "reporting_unit_id"})
+        or _has_composite_fk(inspector, "historical_cargo_rows", "historical_port_calls",
+                             {"port_call_id", "reporting_unit_id"})
+    )
+    _require(cargo_call_fk, "historical_cargo_rows is missing a tenant-scoped port_call FK")
+    link_call_fk = (
+        _has_composite_fk(inspector, "historical_vessel_links", "historical_port_calls",
+                          {"port_call_id", "import_id", "reporting_unit_id"})
+        or _has_composite_fk(inspector, "historical_vessel_links", "historical_port_calls",
+                             {"port_call_id", "reporting_unit_id"})
+    )
+    _require(link_call_fk, "historical_vessel_links is missing a tenant-scoped port_call FK")
 
     # Row/call identity keys and vessel-link.import_id NOT NULL.
     _require("uq_hist_row_identity" in _unique_names(inspector, "historical_report_rows"),

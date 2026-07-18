@@ -26,13 +26,14 @@ os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
 # ── Now import backend (picks up TEST_DATABASE_URL) ───────────────────────────
 import pytest
 from fastapi.testclient import TestClient
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 import backend.app as app_module
 
 from backend.models import (
     AuditEvent, Base, Declaration, ImportJob, ReportAdjustment, User, Organization, Vessel,
     VesselOperatingProfile, ReportingUnit, ReportingUnitOrganization, ReportingUnitUser,
     ReportingUnitVessel,
+    HistoricalCargoRow, HistoricalPortCall, HistoricalReportImport,
 )
 from backend.database import engine, SessionLocal, now_iso
 from backend.auth import get_password_hash
@@ -180,6 +181,39 @@ def _minimal_declaration(**overrides) -> dict:
     }
     base.update(overrides)
     return base
+
+
+def _historical_fixture(headers: dict[int, str], rows: list[dict[int, object]]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "User renamed sheet"
+    for column, value in headers.items():
+        sheet.cell(1, column, value)
+    for row_number, row in enumerate(rows, 2):
+        for column, value in row.items():
+            sheet.cell(row_number, column, value)
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def _seed_historical_registered_vessel(name: str) -> None:
+    db = SessionLocal()
+    try:
+        vessel = Vessel(
+            organization_id=TEST_ORGANIZATION_ID, name=name,
+            registration_no=_reg(), vessel_type="Chở hàng khô", vessel_class="VR-SI",
+            created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add(vessel)
+        db.flush()
+        db.add(ReportingUnitVessel(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, vessel_id=vessel.id,
+            created_at=now_iso(),
+        ))
+        db.commit()
+    finally:
+        db.close()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1305,7 +1339,10 @@ def test_report_unknown_kind(client, auth_headers):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_all_frontend_routes_registered():
-    routes = [route.path for route in app.routes]
+    routes = [route.path for route in app.routes if getattr(route, "path", None)]
+    for included in (getattr(route, "original_router", None) for route in app.routes):
+        if included is not None:
+            routes.extend(route.path for route in included.routes if getattr(route, "path", None))
     required_paths = [
         "/api/auth/login",
         "/api/health",
@@ -1329,6 +1366,9 @@ def test_all_frontend_routes_registered():
         "/api/import/port-vessel-register",
         "/api/import/crew",
         "/api/import/declaration",
+        "/api/historical-imports/preview",
+        "/api/historical-imports/{import_id}/rows",
+        "/api/historical-imports/{import_id}/confirm",
         "/api/reports/analytics",
         "/api/reports/analytics/export",
         "/api/reports/appendix2/adjustments",
@@ -1862,3 +1902,119 @@ def test_admin_backup_routes_are_registered_and_role_scoped(
     listed = client.get("/api/admin/backups", headers=auth_headers)
     assert listed.status_code == 200
     assert [item["filename"] for item in listed.json()] == [created.json()["filename"]]
+def test_historical_tos_preview_cross_import_join_and_revision(
+    client, auth_headers, customer_headers,
+):
+    """H3: detect without filename, stage, join separate files and revise explicitly."""
+    vessel_name = f"H3 BARGE {uuid.uuid4().hex[:8]}"
+    _seed_historical_registered_vessel(vessel_name)
+    berth_headers = {2: "Năm", 3: "Chuyến", 5: "Tên tàu", 8: "Mã bến", 20: "ATB", 23: "ATD"}
+    berth = _historical_fixture(berth_headers, [{
+        2: "2026", 3: "0007", 5: vessel_name, 8: "K12",
+        20: "18/07/2026 08:30:00", 23: "18/07/2026 13:00:00",
+    }])
+    preview_headers = {**auth_headers, "X-Source-Filename": "user-can-rename-anything.xlsx"}
+    preview = client.post("/api/historical-imports/preview", content=berth, headers=preview_headers)
+    assert preview.status_code == 200, preview.text
+    berth_import_id = preview.json()["id"]
+    assert preview.json()["sourceKind"] == "tos_berth_call"
+    assert preview.json()["reportingPeriod"] == "2026-07"
+    assert preview.json()["mappingReceipt"]["filenameUsedForDetection"] is False
+    assert preview.json()["accepted"] == 1
+    confirmed = client.post(
+        f"/api/historical-imports/{berth_import_id}/confirm", json={}, headers=auth_headers,
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "COMMITTED"
+
+    cargo = _historical_fixture(
+        {3: "Kích cỡ", 5: "F/E", 17: "Tên sà lan | Năm | Chuyến", 18: "Trọng lượng",
+         20: "Hàng nội/ ngoại", 23: "Phương án"},
+        [{3: "40HC", 5: "E", 17: f"{vessel_name} | 2026 | 0007", 18: "4.00",
+          20: "Hàng nội", 23: "Hạ bãi"}],
+    )
+    cargo_preview = client.post(
+        "/api/historical-imports/preview", content=cargo,
+        headers={**auth_headers, "X-Source-Filename": "different-name.xlsx"},
+    )
+    assert cargo_preview.status_code == 200, cargo_preview.text
+    cargo_import_id = cargo_preview.json()["id"]
+    rows = client.get(
+        f"/api/historical-imports/{cargo_import_id}/rows?page=1&page_size=10", headers=auth_headers,
+    )
+    assert rows.status_code == 200
+    assert rows.json()["items"][0]["validationStatus"] == "VALID", rows.json()["items"][0]
+    assert cargo_preview.json()["accepted"] == 1, rows.json()
+    assert cargo_preview.json()["reportingPeriod"] == "2026-07"
+    assert rows.json()["items"][0]["matchStatus"] == "MATCHED"
+    assert rows.json()["items"][0]["weightTonnes"] == 4.0
+    cargo_confirmed = client.post(
+        f"/api/historical-imports/{cargo_import_id}/confirm", json={}, headers=auth_headers,
+    )
+    assert cargo_confirmed.status_code == 200
+    assert cargo_confirmed.json()["status"] == "COMMITTED"
+
+    db = SessionLocal()
+    try:
+        cargo_row = db.query(HistoricalCargoRow).filter_by(import_id=cargo_import_id).one()
+        call = db.query(HistoricalPortCall).filter_by(id=cargo_row.port_call_id).one()
+        assert cargo_row.import_id != call.import_id
+        assert cargo_row.reporting_unit_id == call.reporting_unit_id
+    finally:
+        db.close()
+
+    duplicate = client.post("/api/historical-imports/preview", content=cargo, headers=preview_headers)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["idempotent"] is True
+    assert duplicate.json()["id"] == cargo_import_id
+
+    corrected = _historical_fixture(berth_headers, [{
+        2: "2026", 3: "0007", 5: vessel_name, 8: "K12B",
+        20: "18/07/2026 08:35:00", 23: "18/07/2026 13:05:00",
+    }])
+    corrected_preview = client.post("/api/historical-imports/preview", content=corrected, headers=preview_headers)
+    assert corrected_preview.status_code == 200
+    corrected_id = corrected_preview.json()["id"]
+    blocked = client.post(f"/api/historical-imports/{corrected_id}/confirm", json={}, headers=auth_headers)
+    assert blocked.status_code == 409
+    activated = client.post(
+        f"/api/historical-imports/{corrected_id}/confirm",
+        json={"conflict_action": "ACTIVATE_NEW_REVISION", "reason": "TOS corrected ATB/ATD"},
+        headers=auth_headers,
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["revisionNo"] == 2
+    db = SessionLocal()
+    try:
+        assert db.get(HistoricalReportImport, berth_import_id).status == "SUPERSEDED"
+        cargo_row = db.query(HistoricalCargoRow).filter_by(import_id=cargo_import_id).one()
+        replacement_call = db.query(HistoricalPortCall).filter_by(import_id=corrected_id).one()
+        assert cargo_row.port_call_id == replacement_call.id
+    finally:
+        db.close()
+
+    forbidden = client.post("/api/historical-imports/preview", content=berth, headers=customer_headers)
+    assert forbidden.status_code == 403
+
+    # The same platform identity sees no data unless it explicitly switches to
+    # the correct reporting-unit context; PORT_STAFF without membership fails.
+    db = SessionLocal()
+    try:
+        second_unit = ReportingUnit(
+            name=f"H3 Other Port {uuid.uuid4().hex[:8]}", code=f"H3-{uuid.uuid4().hex[:6]}",
+            is_active=1, created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add(second_unit)
+        db.commit()
+        db.refresh(second_unit)
+        second_unit_id = second_unit.id
+    finally:
+        db.close()
+    other_context = {**auth_headers, "X-Reporting-Unit-ID": str(second_unit_id)}
+    assert client.get(f"/api/historical-imports/{corrected_id}/rows", headers=other_context).status_code == 404
+    port_login = client.post("/api/auth/login", json={"username": "portstaff", "password": "testpass"})
+    no_membership = {
+        "Authorization": f"Bearer {port_login.json()['access_token']}",
+        "X-Reporting-Unit-ID": str(second_unit_id),
+    }
+    assert client.get("/api/historical-imports", headers=no_membership).status_code == 403

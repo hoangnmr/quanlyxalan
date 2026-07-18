@@ -174,7 +174,7 @@ def _import(db, unit_id: int, user_id: int, *, checksum: str,
 
 def test_fresh_database_upgrades_to_single_head(monkeypatch, tmp_path):
     heads = ScriptDirectory.from_config(Config(ALEMBIC_INI)).get_heads()
-    assert heads == ["n13f0f000013"], f"expected a single head, got {heads}"
+    assert heads == ["o14f0f000014"], f"expected a single head, got {heads}"
 
     fresh = tmp_path / "fresh_hist.db"
     url = f"sqlite:///{fresh}"

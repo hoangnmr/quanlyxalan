@@ -141,6 +141,26 @@ an obsolete status.
 *   **External link safety**: passive Excel `hyperlink` and `externalLinkPath` relationships are ignored and never fetched. Other external relationship types remain rejected.
 *   **Demo transition**: the sentinel demo dataset is removed on first real create/import. A demo CUSTOMER keeps its organization/user binding while the sentinel is cleared and the real organization profile is applied.
 
+### HISTORICAL TOS / PL.03 IMPORT (H3A)
+
+All routes require an explicit `X-Reporting-Unit-ID`. `PORT_STAFF` must have an
+FK-backed membership in that unit; `PLATFORM_ADMIN` must deliberately select the
+unit. `CUSTOMER` is denied.
+
+| Method | Path | Request | Response |
+|--------|------|---------|----------|
+| POST | `/api/historical-imports/preview` | XLSX body; optional `X-Source-Filename` provenance | detected source, checksum, mapping receipt, counts, conflicts |
+| GET | `/api/historical-imports` | `page`, `page_size` | tenant-scoped import history |
+| GET | `/api/historical-imports/{id}/rows` | `page`, `page_size` | cell-provenance preview rows |
+| POST | `/api/historical-imports/{id}/confirm` | optional conflict action/reason | committed, review, rejected or superseded revision state |
+| POST | `/api/historical-imports/{id}/vessel-links/{link_id}/resolve` | accept/reject candidate | audited link decision |
+
+Detection is based on approved sheet/header/structure signatures, not the file
+name. A repeated checksum is idempotent. Overlap never overwrites silently:
+confirmation must choose `KEEP_EXISTING` or `ACTIVATE_NEW_REVISION` and a new
+revision requires a reason. TOS ATB/ATD remains distinct and authoritative;
+legacy PL.03 time is stored only as reported provenance.
+
 ### REPORTS
 
 | Method | Path | Allowed Roles | Request | Response |

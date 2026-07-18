@@ -437,23 +437,55 @@ Exit gate (met):
 
 ### H3 — Parser and import API
 
-Status: READY — NOT STARTED
+Status: IN PROGRESS — H3A TOS/PL.03 IMPLEMENTED AND VERIFIED; PL.01/PL.02 DEFERRED
 Phase: BUILD
 
-Actions:
+Implemented in H3A (2026-07-18):
 
-- Implement type/version detection and explicit PL.01/PL.02/PL.03 parsers.
-- Provide preview, row/cell mapping evidence, partial acceptance and safe errors.
-- Support corrected-file revisions without destructive overwrite.
+- Python detection uses audited sheet/header/structure signatures, never the
+  filename. Approved adapters cover TOS Berth, TOS container detail and the
+  historical 35-column PL.03 variant.
+- Read-only source extraction is bounded by file, ZIP expansion, sheet, row and
+  column limits; hidden rows/columns are read and only approved fields are
+  staged with source cells, raw values, checksum and mapping receipt.
+- Tenant-scoped API now provides upload/preview, paginated rows, history,
+  confirmation, explicit keep/activate-revision conflict handling and vessel
+  link review. Exact checksum re-import is idempotent.
+- Forward migration `o14f0f000014` corrects the H2 same-import call FK so a
+  Detail row can reference a Berth call from another immutable source import,
+  while the composite FK still enforces the same reporting unit. Cargo links
+  are re-reconciled when a corrected Berth revision becomes active.
+- TOS ATB assigns reporting month and remains authoritative; PL.03 AG/AH is
+  retained only as immutable legacy reported provenance. Empty-container
+  weights remain report tonnes while F/E independently selects TEU class.
+- Controlled source copies are stored outside Git under a checksum key. No
+  workbook is modified and no historical import creates a declaration or
+  overwrites live/master data.
+
+Verified against the existing Desktop Codex audit evidence and a minimal
+read-only parser pass: 40 Berth rows, 1,067 Detail rows, 38 matched cargo call
+keys, two Berth calls without Detail and 73 PL.03 rows. All four direction/F-E
+aggregates reproduce the audit, totaling 1,923 TEU and 7,894.83 tonnes.
+
+Remaining H3B actions (owner-deferred until representative files exist):
+
+- Implement type/version detection and explicit PL.01/PL.02 parsers when the
+  deferred representative files are supplied (PL.03 historical v1 is done).
 - Add reconciliation for PL.02 monthly versus reported YTD.
-- Add manual review for ambiguous vessel links and classifications.
-- Validate archive/security limits, then use a memory-bounded Python extraction
-  path that reads only approved fields and stages batch results.
-- Implement job/status/paginated-preview/confirm contracts; avoid synchronous
-  full-row JSON preview and per-row database lookup.
-- Keep original checksum and mapping receipt while making re-import idempotent.
+- Add version-specific golden fixtures for real historical PL.01/PL.02 after
+  those samples are supplied; do not infer their semantics from filenames.
+- Complete classification-resolution UI/API together with H4 review queues.
 
-Exit gate:
+H3A verification:
+
+- `163 passed`, one retained openpyxl warning; fresh upgrade, n13 downgrade and
+  re-upgrade pass with one Alembic head.
+- Downgrade is intentionally fail-closed after cross-import facts exist because
+  n13 cannot represent those links; no rollback silently discards provenance.
+- Staging and operational revision `o14f0f000014` pass integrity/FK checks with
+  all 59 vessels and existing tenant memberships/register links retained.
+
+Final H3 exit gate (not yet claimed for deferred PL.01/PL.02):
 
 - Golden fixtures cover each approved layout version, duplicates, corrections,
   missing period, ambiguous registration, blanks, zeros and malformed files.

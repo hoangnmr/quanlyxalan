@@ -1634,3 +1634,56 @@ new audit row records the controlled legacy-unit bootstrap.
   gitignored. The four raw `templates/*.xlsx` files remain intentionally
   untracked.
 - H3 parser/import API and H4 historical dashboard UI remain not started.
+
+---
+
+## Historical TOS H3A — parser and import API — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED for audited TOS Berth, TOS container-detail
+  and legacy 35-column PL.03. H3 remains open only for owner-deferred PL.01/PL.02
+  samples and their monthly/YTD semantics.
+- **Phase**: BUILD; R2. No production-readiness/FREEZE claim.
+
+### Implemented
+
+- `backend/historical_tos_parser.py`: memory-bounded, filename-independent
+  structural detection; strict ATB/ATD, call key, TEU, F/E, trade, movement and
+  tonne transforms; safe errors; raw/cell provenance. Hidden data is included.
+- `backend/historical_api.py`: tenant-scoped preview, paginated rows/history,
+  confirm, idempotency, explicit revision conflict decision and audited vessel
+  link resolution. Source copies are checksum-addressed outside Git.
+- Migration `o14f0f000014` permits Detail-to-Berth links across immutable source
+  imports while preserving the composite reporting-unit FK. Active cargo links
+  follow a confirmed corrected Berth revision instead of a superseded call.
+- Legacy PL.03 is preserved as reported facts; its ETA-derived AG/AH values do
+  not override TOS ATB/ATD. No declaration/master/live record is synthesized.
+
+### Workbook evidence reused, not re-audited
+
+The committed Desktop Codex audit/mapping remained the contract. A minimal
+read-only parser verification reproduced 40 Berth rows, 1,067 Detail rows, 38
+matched cargo-call keys, two calls without Detail and 73 PL.03 rows. Aggregates
+match the audit exactly: load E 79/149 TEU/351.40 t; load F 225/443/2,984.37 t;
+unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
+
+### Database and regression evidence
+
+- Pre-H3 backup: `data/backups/cang_vu-20260718-131730-pre-h3.db`, SHA-256
+  `f01b5c1eebf3ddd282cd8510963e74afa1c265372ad65f247bef9d656efad1ea`.
+- Staging upgrade, downgrade to n13 and re-upgrade passed: integrity `ok`, zero
+  FK errors, one head `o14f0f000014`, 59 vessels and 9 audit events retained.
+- The downgrade fails closed once real cross-import TOS links exist because n13
+  cannot represent them; it never silently nulls or rewrites imported evidence.
+- Operational DB upgraded only after staging passed. Post-upgrade SHA-256
+  `e34390aa9c99dccd948974b7732ddf709a171031496dabbf1bf43e2ebe2b1ddf`;
+  integrity `ok`, zero FK errors, 59 vessels, 0 declarations, 9 audit events,
+  one unit, one staff membership, two Organization links and 59 register links.
+- `python -m pytest -q`: **163 passed**, one retained openpyxl warning.
+
+### Boundary / next move
+
+- No source workbook was changed or committed; no workbook/database/backup is
+  in Git and nothing was pushed.
+- H4 can now implement the separate historical import workspace and review
+  queues. PL.01/PL.02 parser completion remains deferred until representative
+  source files are supplied, as approved by the owner.

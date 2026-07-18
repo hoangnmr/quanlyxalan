@@ -48,6 +48,7 @@ from .xlsx_io import (
     crew_rows, declaration_row, excel_date, import_match_key, make_report_xlsx,
     make_xlsx, read_workbook, vessel_rows,
 )
+from .historical_api import router as historical_import_router
 from scripts.backup_local import backup as create_local_backup, prune as prune_local_backups
 
 IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.5"
@@ -65,6 +66,7 @@ attachment_scanner = ScannerNotConfigured()
 
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Khai-bao-Cang-vu API", version="1.0.0")
+app.include_router(historical_import_router)
 
 
 @app.middleware("http")

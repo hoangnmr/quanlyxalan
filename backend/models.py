@@ -538,6 +538,10 @@ class HistoricalPortCall(Base):
     __table_args__ = (
         # Composite identity target so cargo/links can reference (id, import_id, reporting_unit_id).
         UniqueConstraint("id", "import_id", "reporting_unit_id", name="uq_hist_call_identity"),
+        # TOS detail and berth calls arrive in separate source-file imports.  This
+        # tenant identity lets detail/link rows point across imports without ever
+        # crossing a reporting-unit boundary.
+        UniqueConstraint("id", "reporting_unit_id", name="uq_hist_call_tenant_identity"),
         # A source row appears once per import.
         UniqueConstraint(
             "reporting_unit_id", "import_id", "source_sheet", "source_row",
@@ -593,11 +597,11 @@ class HistoricalCargoRow(Base):
             ["historical_report_imports.id", "historical_report_imports.reporting_unit_id"],
             ondelete="CASCADE", name="fk_hist_cargo_import",
         ),
-        # Cargo -> call ownership (enforced when linked): guarantees the port call,
-        # import and reporting unit all agree.
+        # Berth and cargo detail are separate source files/imports.  A cargo row
+        # may therefore link across imports, but only to a call in the same unit.
         ForeignKeyConstraint(
-            ["port_call_id", "import_id", "reporting_unit_id"],
-            ["historical_port_calls.id", "historical_port_calls.import_id", "historical_port_calls.reporting_unit_id"],
+            ["port_call_id", "reporting_unit_id"],
+            ["historical_port_calls.id", "historical_port_calls.reporting_unit_id"],
             ondelete="CASCADE", name="fk_hist_cargo_call",
         ),
         CheckConstraint("teu_factor IS NULL OR teu_factor IN (1, 2)", name="ck_hist_cargo_teu_factor"),
@@ -615,6 +619,7 @@ class HistoricalCargoRow(Base):
     source_row = Column(Integer, nullable=False, default=0)
     port_call_id = Column(Integer, nullable=True)  # composite FK above; unmatched -> NULL + review
     source_call_key_raw = Column(String, nullable=False, default="")  # raw "name | year | voyage" composite
+    call_key_normalized = Column(String, nullable=False, default="")
     container_size_code_raw = Column(String, nullable=False, default="")
     teu_factor = Column(Integer)  # 1 or 2; NULL when size unsupported (review, not zero)
     full_empty_code_raw = Column(String, nullable=False, default="")  # F / E, independent of movement
@@ -647,8 +652,8 @@ class HistoricalVesselLink(Base):
             ondelete="CASCADE", name="fk_hist_link_import",
         ),
         ForeignKeyConstraint(
-            ["port_call_id", "import_id", "reporting_unit_id"],
-            ["historical_port_calls.id", "historical_port_calls.import_id", "historical_port_calls.reporting_unit_id"],
+            ["port_call_id", "reporting_unit_id"],
+            ["historical_port_calls.id", "historical_port_calls.reporting_unit_id"],
             ondelete="CASCADE", name="fk_hist_link_call",
         ),
         CheckConstraint(_in_clause("link_status", HISTORICAL_LINK_STATUSES), name="ck_hist_link_status"),

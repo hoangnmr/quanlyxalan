@@ -43,6 +43,7 @@ from .models import (
     DeclarationCrew, DeclarationEvent, ImportJob, IntegrationConnector, Organization,
     ReportAdjustment, SyncJob, User, Vessel, VesselOperatingProfile,
     ReportingUnit, ReportingUnitOrganization, ReportingUnitUser, ReportingUnitVessel,
+    HistoricalCargoRow, HistoricalPortCall, HistoricalReportImport,
 )
 from .xlsx_io import (
     crew_rows, declaration_row, excel_date, import_match_key, make_report_xlsx,
@@ -2600,6 +2601,8 @@ async def import_declaration(
 # ══════════════════════════════════════════════════════════════════════════════
 
 ANALYTICS_PERIODS = {"week", "month", "quarter", "year"}
+ANALYTICS_SOURCES = {"live", "historical", "combined"}
+ACTIVE_HISTORICAL_STATUSES = ("COMMITTED", "REVIEW")
 
 
 def _month_shift(value: date, offset: int) -> date:
@@ -2730,7 +2733,120 @@ def _declaration_metrics(declaration: Declaration) -> dict[str, float]:
     }
 
 
-def _analytics_payload(db: Session, scope: Scope, period: str, anchor: date) -> dict[str, Any]:
+def _month_key(value: date) -> str:
+    return value.strftime("%Y-%m")
+
+
+def _months_between(start: date, end: date) -> list[str]:
+    value = start.replace(day=1)
+    result = []
+    while value <= end:
+        result.append(_month_key(value))
+        value = _month_shift(value, 1)
+    return result
+
+
+def _historical_window(
+    db: Session, unit_id: int, start: date, end: date, labels: list[str], bucket,
+) -> dict[str, Any]:
+    """Aggregate only active, validated TOS facts using ATB as operating time.
+
+    PL.03 reported times are deliberately excluded: the approved business rule
+    makes matched TOS ATB/ATD authoritative. Missing TOS coverage remains
+    missing and is never converted to a numeric zero.
+    """
+    window_months = set(_months_between(start, end))
+    imports = db.query(HistoricalReportImport).filter(
+        HistoricalReportImport.reporting_unit_id == unit_id,
+        HistoricalReportImport.status.in_(ACTIVE_HISTORICAL_STATUSES),
+    ).all()
+    active_ids = {item.id for item in imports}
+    berth_imports = [item for item in imports
+                      if item.source_kind == "tos_berth_call" and item.reporting_period in window_months]
+    cargo_imports = [item for item in imports
+                     if item.source_kind == "tos_cargo_detail" and item.reporting_period in window_months]
+    berth_months = {item.reporting_period for item in berth_imports}
+    cargo_months = {item.reporting_period for item in cargo_imports}
+    reported_months = {
+        item.reporting_period for item in imports
+        if item.source_kind == "reported_pl03" and item.reporting_period in window_months
+    }
+    if not active_ids:
+        return {
+            "values": {"trips": None, "tons": None, "teu": None, "pax": None},
+            "available": {"trips": False, "tons": False, "teu": False, "pax": False},
+            "trend": [0] * len(labels), "months": {}, "coverageMonths": [],
+            "reportedMonths": sorted(reported_months), "hasCoverage": bool(reported_months),
+            "hasReview": False,
+        }
+
+    calls = db.query(HistoricalPortCall).filter(
+        HistoricalPortCall.reporting_unit_id == unit_id,
+        HistoricalPortCall.import_id.in_(active_ids),
+        HistoricalPortCall.validation_status == "VALID",
+        HistoricalPortCall.actual_berthing_at >= start.isoformat(),
+        HistoricalPortCall.actual_berthing_at < (end + timedelta(days=1)).isoformat(),
+    ).all()
+    call_ids = [item.id for item in calls]
+    cargo_rows = []
+    if call_ids:
+        cargo_rows = db.query(HistoricalCargoRow).filter(
+            HistoricalCargoRow.reporting_unit_id == unit_id,
+            HistoricalCargoRow.import_id.in_(active_ids),
+            HistoricalCargoRow.port_call_id.in_(call_ids),
+            HistoricalCargoRow.match_status == "MATCHED",
+            HistoricalCargoRow.validation_status == "VALID",
+        ).all()
+
+    trend = [0] * len(labels)
+    months: dict[str, dict[str, int]] = {}
+    for call in calls:
+        operating_date = _date_from_value(call.actual_berthing_at)
+        if operating_date is None:
+            continue
+        month = _month_key(operating_date)
+        months.setdefault(month, {"calls": 0, "cargoRows": 0})["calls"] += 1
+        index = bucket(operating_date, start)
+        if 0 <= index < len(trend):
+            trend[index] += 1
+    call_month_by_id = {call.id: call.reporting_month for call in calls}
+    for row in cargo_rows:
+        month = call_month_by_id.get(row.port_call_id)
+        if month:
+            months.setdefault(month, {"calls": 0, "cargoRows": 0})["cargoRows"] += 1
+            cargo_months.add(month)
+
+    berth_complete = bool(berth_months) and all(
+        item.status == "COMMITTED" and item.review_count == 0 for item in berth_imports
+    )
+    cargo_complete = bool(cargo_months) and all(
+        item.status == "COMMITTED" and item.review_count == 0 for item in cargo_imports
+    )
+    has_review = any(
+        item.status == "REVIEW" or item.review_count > 0 for item in berth_imports + cargo_imports
+    )
+    return {
+        "values": {
+            "trips": float(len(calls)) if berth_complete else None,
+            "tons": float(sum(row.weight_tonnes or 0 for row in cargo_rows)) if cargo_complete else None,
+            "teu": float(sum(row.teu_factor or 0 for row in cargo_rows)) if cargo_complete else None,
+            "pax": None,
+        },
+        "available": {
+            "trips": berth_complete, "tons": cargo_complete,
+            "teu": cargo_complete, "pax": False,
+        },
+        "trend": trend if berth_complete else [0] * len(labels), "months": months,
+        "coverageMonths": sorted(berth_months | cargo_months | reported_months),
+        "reportedMonths": sorted(reported_months),
+        "hasCoverage": bool(berth_months or cargo_months or reported_months),
+        "hasReview": has_review,
+    }
+
+
+def _analytics_payload(
+    db: Session, scope: Scope, period: str, anchor: date, source: str = "live",
+) -> dict[str, Any]:
     config = _analytics_period(period, anchor)
     query = db.query(Declaration).filter(Declaration.workflow_status == "APPROVED")
     if scope.is_customer:
@@ -2739,40 +2855,138 @@ def _analytics_payload(db: Session, scope: Scope, period: str, anchor: date) -> 
         org_ids = scope.member_org_ids
         query = query.filter(Declaration.organization_id.in_(org_ids)) if org_ids else query.filter(sql_false())
     declarations = query.all()
-    totals = {
+    live_totals = {
         "cur": {key: 0.0 for key in ("trips", "tons", "teu", "pax")},
         "prev": {key: 0.0 for key in ("trips", "tons", "teu", "pax")},
     }
-    trend_current = [0] * len(config["labels"])
-    trend_previous = [0] * len(config["labels"])
+    live_trend_current = [0] * len(config["labels"])
+    live_trend_previous = [0] * len(config["labels"])
+    live_months: dict[str, int] = {}
     for declaration in declarations:
         operating_date = _declaration_operating_date(declaration)
         if not operating_date:
             continue
         if config["current_start"] <= operating_date <= config["current_end"]:
             group = "cur"
-            trend = trend_current
+            trend = live_trend_current
             start = config["current_start"]
         elif config["previous_start"] <= operating_date <= config["previous_end"]:
             group = "prev"
-            trend = trend_previous
+            trend = live_trend_previous
             start = config["previous_start"]
         else:
             continue
         for key, value in _declaration_metrics(declaration).items():
-            totals[group][key] += value
+            live_totals[group][key] += value
+        month = _month_key(operating_date)
+        live_months[month] = live_months.get(month, 0) + 1
         index = config["bucket"](operating_date, start)
         if 0 <= index < len(trend):
             trend[index] += 1
+    historical = None
+    overlap_months: list[str] = []
+    warnings: list[str] = []
+    if source in {"historical", "combined"}:
+        if not scope.is_port:
+            raise HTTPException(
+                status_code=403,
+                detail="Dữ liệu lịch sử/TOS chỉ dành cho Nhân viên Cảng trong đúng đơn vị báo cáo.",
+            )
+        historical = {
+            "cur": _historical_window(
+                db, scope.reporting_unit_id, config["current_start"], config["current_end"],
+                config["labels"], config["bucket"],
+            ),
+            "prev": _historical_window(
+                db, scope.reporting_unit_id, config["previous_start"], config["previous_end"],
+                config["labels"], config["bucket"],
+            ),
+        }
+        historical_months = (
+            set(historical["cur"]["coverageMonths"]) | set(historical["prev"]["coverageMonths"])
+        )
+        overlap_months = sorted(set(live_months) & historical_months)
+        if overlap_months:
+            warnings.append(
+                "Có kỳ đồng thời chứa dữ liệu LIVE và LỊCH SỬ; tổng KẾT HỢP bị khóa cho đến khi đối soát nguồn."
+            )
+        if historical["cur"]["reportedMonths"] or historical["prev"]["reportedMonths"]:
+            warnings.append(
+                "PL.03 cũ chỉ được giữ làm dấu vết báo cáo; thống kê thời gian dùng ATB/ATD từ TOS."
+            )
+        if historical["cur"]["hasReview"] or historical["prev"]["hasReview"]:
+            warnings.append(
+                "Một hoặc nhiều lượt import còn dòng cần kiểm tra; chỉ tiêu liên quan không được hiển thị như tổng hoàn chỉnh."
+            )
+
+    combined_blocked = source == "combined" and bool(overlap_months)
+    kpis: dict[str, dict[str, float | None]] = {}
+    if source == "live":
+        kpis = {key: {"cur": live_totals["cur"][key], "prev": live_totals["prev"][key]}
+                for key in live_totals["cur"]}
+        trend_current, trend_previous = live_trend_current, live_trend_previous
+    elif source == "historical":
+        kpis = {key: {"cur": historical["cur"]["values"][key],
+                       "prev": historical["prev"]["values"][key]}
+                for key in live_totals["cur"]}
+        trend_current, trend_previous = historical["cur"]["trend"], historical["prev"]["trend"]
+    elif combined_blocked:
+        kpis = {key: {"cur": None, "prev": None} for key in live_totals["cur"]}
+        trend_current = trend_previous = [0] * len(config["labels"])
+    else:
+        for key in live_totals["cur"]:
+            values: dict[str, float | None] = {}
+            for group in ("cur", "prev"):
+                hist_value = historical[group]["values"][key]
+                # Never turn absent/incomplete historical coverage into zero.
+                # Passenger counts are absent from TOS, and any other metric is
+                # withheld while its relevant import still needs review.
+                if (historical[group]["hasCoverage"]
+                        and not historical[group]["available"][key]):
+                    values[group] = None
+                else:
+                    values[group] = live_totals[group][key] + (hist_value or 0)
+            kpis[key] = values
+        trend_current = [a + b for a, b in zip(live_trend_current, historical["cur"]["trend"])]
+        trend_previous = [a + b for a, b in zip(live_trend_previous, historical["prev"]["trend"])]
+
+    coverage_periods = []
+    all_months = _months_between(config["previous_start"], config["previous_end"])
+    all_months += [month for month in _months_between(config["current_start"], config["current_end"])
+                   if month not in all_months]
+    for month in all_months:
+        hist_month = None
+        if historical:
+            hist_month = historical["cur"]["months"].get(month) or historical["prev"]["months"].get(month)
+        coverage_periods.append({
+            "month": month, "liveApproved": live_months.get(month, 0),
+            "historicalCalls": (hist_month or {}).get("calls", 0),
+            "historicalCargoRows": (hist_month or {}).get("cargoRows", 0),
+            "overlap": month in overlap_months,
+        })
+    if combined_blocked:
+        coverage_status = "BLOCKED"
+    elif source == "live":
+        coverage_status = "COMPLETE"
+    elif historical and all(historical["cur"]["available"][key] for key in ("trips", "tons", "teu")):
+        coverage_status = "COMPLETE"
+    elif historical and historical["cur"]["hasCoverage"]:
+        coverage_status = "PARTIAL"
+    else:
+        coverage_status = "MISSING"
+
     return {
         "period": period,
         "asOf": anchor.isoformat(),
-        "dataSource": "DEMO" if is_demo_data_active(db) else "OPERATIONAL",
-        "kpis": {
-            key: {"cur": totals["cur"][key], "prev": totals["prev"][key]}
-            for key in totals["cur"]
-        },
+        "source": source,
+        "dataSource": "DEMO" if source == "live" and is_demo_data_active(db) else source.upper(),
+        "combinedAllowed": not combined_blocked,
+        "kpis": kpis,
         "trend": {"labels": config["labels"], "cur": trend_current, "prev": trend_previous},
+        "coverage": {
+            "status": coverage_status, "periods": coverage_periods,
+            "overlapPeriods": overlap_months, "warnings": warnings,
+        },
         "meta": {
             "analyticsTitle": config["title"],
             "trendTitle": config["trend_title"],
@@ -2785,32 +2999,42 @@ def _analytics_payload(db: Session, scope: Scope, period: str, anchor: date) -> 
 @app.get("/api/reports/analytics")
 def report_analytics(
     period: str = "month",
+    source: str = "live",
     as_of: Optional[date] = None,
     db: Session = Depends(get_db),
     scope: Scope = Depends(resolve_scope),
 ):
     if period not in ANALYTICS_PERIODS:
         raise HTTPException(status_code=422, detail="Kỳ thống kê phải là week, month, quarter hoặc year.")
-    return _analytics_payload(db, scope, period, as_of or date.today())
+    if source not in ANALYTICS_SOURCES:
+        raise HTTPException(status_code=422, detail="Nguồn thống kê phải là live, historical hoặc combined.")
+    return _analytics_payload(db, scope, period, as_of or date.today(), source)
 
 
 @app.get("/api/reports/analytics/export")
 def export_analytics(
     period: str = "month",
+    source: str = "live",
     as_of: Optional[date] = None,
     db: Session = Depends(get_db),
     scope: Scope = Depends(resolve_scope),
 ):
     if period not in ANALYTICS_PERIODS:
         raise HTTPException(status_code=422, detail="Kỳ thống kê không hợp lệ.")
-    payload = _analytics_payload(db, scope, period, as_of or date.today())
+    if source not in ANALYTICS_SOURCES:
+        raise HTTPException(status_code=422, detail="Nguồn thống kê không hợp lệ.")
+    payload = _analytics_payload(db, scope, period, as_of or date.today(), source)
+    if not payload["combinedAllowed"]:
+        raise HTTPException(status_code=409, detail="Không thể xuất tổng kết hợp khi kỳ dữ liệu còn chồng lấn chưa đối soát.")
     labels = {"trips": "Lượt tàu", "tons": "Khối lượng (tấn)", "teu": "TEU", "pax": "Hành khách"}
-    rows = [[labels[key], values["cur"], values["prev"], values["cur"] - values["prev"]] for key, values in payload["kpis"].items()]
+    rows = [[labels[key], values["cur"], values["prev"],
+             None if values["cur"] is None or values["prev"] is None else values["cur"] - values["prev"]]
+            for key, values in payload["kpis"].items()]
     content = make_xlsx(payload["meta"]["analyticsTitle"], ["Chỉ tiêu", "Kỳ này", "Kỳ trước", "Chênh lệch"], rows)
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="analytics_{period}_{payload["asOf"]}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="analytics_{source}_{period}_{payload["asOf"]}.xlsx"'},
     )
 
 

@@ -108,6 +108,23 @@ def test_historical_import_is_visually_and_semantically_separate_from_live_impor
     assert "@media (max-width: 760px)" in styles_css
 
 
+def test_report_dashboard_makes_source_coverage_and_overlap_explicit():
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'role="group" aria-label="Nguồn số liệu thống kê"' in index_html
+    assert 'data-source="live" class="active"' in index_html
+    assert 'data-source="historical"' in index_html
+    assert 'data-source="combined"' in index_html
+    assert 'id="analytics-coverage" class="analytics-coverage" aria-live="polite"' in index_html
+    assert 'id="analytics-combined-blocked"' in index_html
+    assert "const allowedSource = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes" in app_js
+    assert "data.combinedAllowed === false" in app_js
+    assert "Chưa đủ độ phủ để tính" in app_js
+    assert ".coverage-period.overlap" in styles_css
+
+
 def test_wizard_step_order_customer_friendly():
     app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 

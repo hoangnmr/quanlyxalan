@@ -1722,3 +1722,36 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
 - No workbook/database/backup is included in Git; no deployment and no push.
 - Next move: H4B source-aware historical/live/combined dashboard and overlap
   coverage indicators. PL.01/PL.02 remain owner-deferred pending real samples.
+
+---
+
+## Historical TOS H4B — source-aware reporting dashboard — 2026-07-18
+
+- **Status**: IMPLEMENTED / VERIFIED locally. H4 owner UAT remains open.
+- **Phase/Risk**: BUILD / R2. No deployment or production-readiness claim.
+
+### Delivered
+
+- Extended the existing analytics API and UI with explicit `LIVE`, `LỊCH SỬ`
+  and `KẾT HỢP` modes. Live-approved remains the default and the only mode
+  available to CUSTOMER; internal modes require a tenant-resolved port scope.
+- Historical call counts use active validated Berth rows by TOS ATB. Tonnes and
+  TEU use active, validated, matched Detail rows. PL.03 ETA-era times are not
+  used to reconstruct the trend.
+- API and UI expose monthly coverage, source badges, warning text and
+  completeness. Review-pending or absent facts return `null` and render as a
+  dash rather than a misleading zero.
+- Combined totals fail closed when a month has both live-approved declarations
+  and active historical coverage. The UI hides totals and export; the server
+  independently rejects combined XLSX with `409`.
+
+### Verification and boundary
+
+- `python -m pytest -q`: **166 passed**, one retained openpyxl warning. Targeted
+  regression covers historical aggregation, empty-container weight,
+  source authorization, partial coverage, combined no-overlap, overlap blocking
+  and export rejection.
+- Python compilation and `git diff --check` pass. Browser visual QA, deployment
+  and owner UAT are not claimed.
+- Raw workbooks remain untracked and untouched; no database/backup is committed
+  and nothing is pushed.

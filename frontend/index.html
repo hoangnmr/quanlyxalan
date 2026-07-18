@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.3.0">
+  <link rel="stylesheet" href="/styles.css?v=1.4.0">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -149,10 +149,13 @@
         </section>
 
         <section class="page" data-page="reports">
-          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><p>Dữ liệu được tổng hợp từ các phiếu đã thực hiện trong kỳ.</p></div></div>
+          <div class="page-heading"><div><p class="eyebrow">BÁO CÁO ĐỊNH KỲ</p><p>Thống kê luôn ghi rõ nguồn LIVE, LỊCH SỬ hoặc KẾT HỢP; các biểu PL.01–PL.03 bên dưới tiếp tục xuất từ phiếu đã duyệt.</p></div></div>
           <section id="analytics-panel" class="panel report-analytics"><div class="panel-header"><div><p class="eyebrow">THỐNG KÊ SẢN LƯỢNG</p><h2 id="analytics-title">Tổng hợp theo tháng</h2></div><div class="panel-actions"><div class="segmented period-switch"><button type="button" data-period="week">Tuần</button><button type="button" data-period="month" class="active">Tháng</button><button type="button" data-period="quarter">Quý</button><button type="button" data-period="year">Năm</button></div><button id="export-analytics" type="button" class="outline-button">Xuất Excel</button></div></div>
+            <div id="analytics-source-controls" class="analytics-source-controls" hidden><div><strong>Nguồn số liệu</strong><span>Chọn rõ nguồn trước khi đọc hoặc xuất tổng.</span></div><div class="segmented analytics-source-switch" role="group" aria-label="Nguồn số liệu thống kê"><button type="button" data-source="live" class="active">LIVE · Phiếu đã duyệt</button><button type="button" data-source="historical">LỊCH SỬ · TOS</button><button type="button" data-source="combined">KẾT HỢP</button></div></div>
+            <section id="analytics-coverage" class="analytics-coverage" aria-live="polite" hidden><div class="analytics-coverage-head"><div><span id="analytics-source-badge" class="table-badge submitted">LIVE</span><strong id="analytics-coverage-title">Độ phủ dữ liệu</strong></div><span id="analytics-coverage-status" class="table-badge submitted">Đầy đủ</span></div><p id="analytics-coverage-message"></p><div id="analytics-coverage-periods" class="coverage-period-list"></div></section>
             <div id="analytics-unavailable" class="feature-notice" role="status" hidden><strong>Thống kê sản lượng chưa khả dụng</strong><p>Hệ thống chưa có API thống kê đã được phê duyệt. Các báo cáo PL.01–PL.03 bên dưới vẫn sử dụng dữ liệu phiếu đã duyệt.</p></div>
             <div id="analytics-demo-notice" class="demo-data-notice" role="status" hidden><strong>Dữ liệu minh họa</strong><span>Số liệu dùng bộ dữ liệu mẫu để xem giao diện. Khi tạo hoặc import dữ liệu thật, bộ mẫu tự được gỡ và báo cáo chuyển sang dữ liệu vận hành.</span></div>
+            <div id="analytics-combined-blocked" class="feature-notice analytics-blocked" role="alert" hidden><strong>Chưa thể cộng dữ liệu</strong><p>Cùng kỳ đang có cả dữ liệu vận hành và dữ liệu lịch sử. Hãy đối soát nguồn trước khi dùng tổng Kết hợp.</p></div>
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="analytics-split">
               <div class="trend-card"><div class="trend-head"><strong id="trend-title">Lượt Salan theo tháng</strong><span class="muted" id="trend-sub">—</span></div><div class="trend-chart" id="trend-chart"></div><div class="trend-legend"><span><i class="dot-cur"></i>Kỳ này</span><span><i class="dot-prev"></i>Cùng kỳ năm trước</span></div></div>
@@ -204,6 +207,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.3.0" defer></script>
+  <script src="/app.js?v=1.4.0" defer></script>
 </body>
 </html>

@@ -492,7 +492,7 @@ Final H3 exit gate (not yet claimed for deferred PL.01/PL.02):
 
 ### H4 — Import UI and historical dashboard
 
-Status: IN PROGRESS — H4A IMPORT WORKSPACE IMPLEMENTED; H4B DASHBOARD PENDING
+Status: BUILD IMPLEMENTATION COMPLETE — H4A/H4B VERIFIED LOCALLY; OWNER UAT PENDING
 Phase: BUILD
 
 Implemented in H4A (2026-07-18):
@@ -517,12 +517,29 @@ H4A verification: `164 passed`, one retained openpyxl warning; HTML contains no
 duplicate ids. No browser QA/deployment was performed because the owner asked
 for local implementation and did not request publishing.
 
-Remaining H4B actions:
+Implemented in H4B (2026-07-18):
 
-- Add historical/live/combined dashboard filters and coverage indicators.
-- Block combined totals when period overlap is unresolved.
-- Make the report source (`Live approved`, `Historical imported`, `Combined`)
-  explicit and accessible; keep current live behavior as the default.
+- The existing analytics panel now has explicit `LIVE`, `LỊCH SỬ` and `KẾT
+  HỢP` sources for port roles; CUSTOMER remains restricted to the unchanged
+  live-approved default.
+- Historical trips use validated active Berth calls and authoritative TOS ATB.
+  Historical tonnes/TEU use validated matched Detail rows, including empty
+  container shell weight as approved. Legacy PL.03 time remains provenance and
+  is not substituted for TOS timing.
+- Coverage is returned and rendered by month with live-approved call count,
+  historical call count, Detail-row count, source badge and completeness state.
+  Missing or review-pending facts render as unavailable (`null`/dash), never as
+  a numeric zero total.
+- A month containing both live-approved and active historical coverage is an
+  unresolved overlap. Combined KPI values are withheld, the UI shows a blocking
+  warning and combined XLSX export returns `409`; no client-side override exists.
+- Asset cache version advanced to 1.4.0. API/UI regression covers the three
+  sources, CUSTOMER denial, partial coverage, overlap blocking and export;
+  full-suite verification is `166 passed` with one retained openpyxl warning.
+
+H4B local verification is recorded in the handoff. The H4 exit gate remains
+open only for owner role/tenant/accessibility UAT; no browser/deployment claim
+is made.
 
 Exit gate:
 

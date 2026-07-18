@@ -262,8 +262,12 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.3.0' in res.text
-    assert '/app.js?v=1.3.0' in res.text
+    assert '/styles.css?v=1.4.0' in res.text
+    assert '/app.js?v=1.4.0' in res.text
+    assert 'id="analytics-source-controls"' in res.text
+    assert 'data-source="historical"' in res.text
+    assert 'id="analytics-coverage"' in res.text
+    assert 'id="analytics-combined-blocked"' in res.text
     assert 'id="reporting-unit-select"' in res.text
     assert 'id="reporting-unit-required"' in res.text
     assert 'data-page="port-register"' in res.text
@@ -290,7 +294,7 @@ def test_static_frontend(client):
     assert "step-error-summary" in app_js
     assert "port_approval" in app_js
     assert "cv_approval" not in app_js
-    assert "loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month')" in app_js
+    assert "loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month', state.analyticsSource)" in app_js
     assert "CUSTOMER:'User'" in app_js
     assert "PORT_STAFF:'Port staff'" in app_js
     assert "PLATFORM_ADMIN:'Platform admin'" in app_js
@@ -1140,6 +1144,146 @@ def test_report_analytics_supports_week_month_quarter_year_and_export(client, cu
             db.commit()
         finally:
             db.close()
+
+
+def test_historical_analytics_exposes_coverage_and_blocks_unresolved_combined_overlap(
+    client, customer_headers, port_staff_headers,
+):
+    db = SessionLocal()
+    import_ids = []
+    declaration_id = None
+    try:
+        actor = db.query(User).filter(User.username == "portstaff").one()
+        berth_import = HistoricalReportImport(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, source_kind="tos_berth_call",
+            appendix_kind="", mapping_version="test-berth-v1", reporting_period="2050-07",
+            source_filename="audit-berth.xlsx", source_checksum=uuid.uuid4().hex,
+            source_size_bytes=100, status="COMMITTED", accepted_count=1,
+            created_by_user_id=actor.id, created_at=now_iso(), updated_at=now_iso(),
+        )
+        cargo_import = HistoricalReportImport(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, source_kind="tos_cargo_detail",
+            appendix_kind="", mapping_version="test-cargo-v1", reporting_period="2050-07",
+            source_filename="audit-cargo.xlsx", source_checksum=uuid.uuid4().hex,
+            source_size_bytes=100, status="COMMITTED", accepted_count=1,
+            created_by_user_id=actor.id, created_at=now_iso(), updated_at=now_iso(),
+        )
+        db.add_all([berth_import, cargo_import])
+        db.flush()
+        import_ids = [berth_import.id, cargo_import.id]
+        call = HistoricalPortCall(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, import_id=berth_import.id,
+            source_sheet="Berth", source_row=2, mapping_version="test-berth-v1",
+            vessel_name_raw="H4B TEST", vessel_name_normalized="H4B TEST",
+            call_year_raw="2050", voyage_number_raw="0001",
+            call_key_normalized="H4B TEST|2050|0001", source_berth_raw="K12",
+            arrival_berth="K12", departure_berth="K12",
+            actual_berthing_at_raw="15/07/2050 08:00", actual_berthing_at="2050-07-15T08:00:00",
+            actual_departure_at_raw="15/07/2050 16:00", actual_departure_at="2050-07-15T16:00:00",
+            reporting_month="2050-07", validation_status="VALID", created_at=now_iso(),
+        )
+        db.add(call)
+        db.flush()
+        db.add(HistoricalCargoRow(
+            reporting_unit_id=TEST_REPORTING_UNIT_ID, import_id=cargo_import.id,
+            source_sheet="Detail", source_row=2, port_call_id=call.id,
+            source_call_key_raw="H4B TEST | 2050 | 0001",
+            call_key_normalized="H4B TEST|2050|0001", container_size_code_raw="40HC",
+            teu_factor=2, full_empty_code_raw="E", trade_scope_raw="Hàng nội",
+            movement_method_raw="Hạ bãi", derived_direction="unload",
+            weight_raw="4.00", weight_tonnes=4.0, weight_state="PRESENT",
+            transform_version="test-v1", match_status="MATCHED",
+            validation_status="VALID", created_at=now_iso(),
+        ))
+        db.commit()
+
+        historical = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=historical",
+            headers=port_staff_headers,
+        )
+        assert historical.status_code == 200, historical.text
+        body = historical.json()
+        assert body["source"] == "historical"
+        assert body["coverage"]["status"] == "COMPLETE"
+        assert body["kpis"]["trips"]["cur"] == 1.0
+        assert body["kpis"]["tons"]["cur"] == 4.0
+        assert body["kpis"]["teu"]["cur"] == 2.0
+        assert body["kpis"]["pax"]["cur"] is None
+        assert body["coverage"]["periods"][-1]["historicalCargoRows"] == 1
+
+        cargo_import.status = "REVIEW"
+        cargo_import.review_count = 1
+        db.commit()
+        partial = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=historical",
+            headers=port_staff_headers,
+        ).json()
+        assert partial["coverage"]["status"] == "PARTIAL"
+        assert partial["kpis"]["tons"]["cur"] is None
+        assert any("cần kiểm tra" in warning for warning in partial["coverage"]["warnings"])
+        cargo_import.status = "COMMITTED"
+        cargo_import.review_count = 0
+        db.commit()
+
+        customer_forbidden = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=historical",
+            headers=customer_headers,
+        )
+        assert customer_forbidden.status_code == 403
+
+        combined = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=combined",
+            headers=port_staff_headers,
+        )
+        assert combined.status_code == 200
+        assert combined.json()["combinedAllowed"] is True
+        assert combined.json()["kpis"]["tons"]["cur"] == 4.0
+
+        created = client.post(
+            "/api/declarations",
+            json=_minimal_declaration(
+                declaration_date="2050-07-15", eta="2050-07-15T09:00",
+                etd="2050-07-15T18:00", unload={"tons": 10, "teu": 1},
+            ),
+            headers=customer_headers,
+        )
+        assert created.status_code == 200
+        declaration_id = created.json()["id"]
+        declaration = db.get(Declaration, declaration_id)
+        db.refresh(declaration)
+        declaration.workflow_status = "APPROVED"
+        declaration.status = "SUBMITTED"
+        db.commit()
+
+        blocked = client.get(
+            "/api/reports/analytics?period=month&as_of=2050-07-15&source=combined",
+            headers=port_staff_headers,
+        )
+        assert blocked.status_code == 200
+        assert blocked.json()["combinedAllowed"] is False
+        assert blocked.json()["coverage"]["status"] == "BLOCKED"
+        assert blocked.json()["coverage"]["overlapPeriods"] == ["2050-07"]
+        assert blocked.json()["kpis"]["trips"]["cur"] is None
+        export = client.get(
+            "/api/reports/analytics/export?period=month&as_of=2050-07-15&source=combined",
+            headers=port_staff_headers,
+        )
+        assert export.status_code == 409
+    finally:
+        if declaration_id:
+            db.query(Declaration).filter(Declaration.id == declaration_id).delete()
+        if import_ids:
+            db.query(HistoricalCargoRow).filter(HistoricalCargoRow.import_id.in_(import_ids)).delete(
+                synchronize_session=False,
+            )
+            db.query(HistoricalPortCall).filter(HistoricalPortCall.import_id.in_(import_ids)).delete(
+                synchronize_session=False,
+            )
+            db.query(HistoricalReportImport).filter(HistoricalReportImport.id.in_(import_ids)).delete(
+                synchronize_session=False,
+            )
+        db.commit()
+        db.close()
 
 
 def test_approved_report_golden_mapping_uses_actual_times_and_cargo_rows(client, customer_headers):

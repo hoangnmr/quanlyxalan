@@ -8,6 +8,7 @@ const state = {
   portRegisterItems: [], portRegisterStats: {}, portRegisterPage: 1, portRegisterPageSize: 15,
   portRegisterSelected: new Set(), vesselSaveContext: 'customer-record',
   dashboardSearchSequence: 0,
+  analyticsSource: 'live',
   reportingUnits: [], activeReportingUnitId: null, reportingUnitOrganizations: [],
 };
 const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó'];
@@ -224,7 +225,7 @@ function route() {
   if (name === 'crew') loadCrew();
   if (name === 'import' && state.importMode === 'historical') loadHistoricalImportHistory();
   if (name === 'reports') {
-    loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month');
+    loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month', state.analyticsSource);
     if (state.currentUser?.role === 'PLATFORM_ADMIN') loadIntegration();
   }
 }
@@ -1651,10 +1652,14 @@ async function loadIntegration() {
 }
 
 const ANALYTICS_KPIS = [['trips', 'Lượt tàu'], ['tons', 'Khối lượng (tấn)'], ['teu', 'TEU'], ['pax', 'Hành khách']];
+const ANALYTICS_SOURCE_LABELS = {live:'LIVE · Phiếu đã duyệt', historical:'LỊCH SỬ · TOS', combined:'KẾT HỢP'};
+const ANALYTICS_COVERAGE_LABELS = {COMPLETE:'Đầy đủ', PARTIAL:'Một phần', MISSING:'Thiếu dữ liệu', BLOCKED:'Đang khóa'};
 
 function renderAnalyticsUnavailable() {
   $('#analytics-title').textContent = 'Thống kê sản lượng';
   $('#analytics-unavailable').hidden = false;
+  $('#analytics-coverage').hidden = true;
+  $('#analytics-combined-blocked').hidden = true;
   $('#kpi-grid').hidden = true;
   $('.analytics-split').hidden = true;
   $$('.period-switch button').forEach(button => {
@@ -1670,18 +1675,48 @@ function analyticsDelta(cur, prev) {
   return { up, txt: `${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(1).replace('.', ',')}%` };
 }
 
-async function loadReportAnalytics(period = 'month') {
+function renderAnalyticsCoverage(data) {
+  const coverage = data.coverage || {status:'MISSING', periods:[], warnings:[]};
+  const internal = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role);
+  $('#analytics-source-controls').hidden = !internal;
+  $$('.analytics-source-switch button').forEach(button => {
+    button.classList.toggle('active', button.dataset.source === data.source);
+    button.setAttribute('aria-pressed', button.dataset.source === data.source ? 'true' : 'false');
+    button.onclick = () => loadReportAnalytics(data.period, button.dataset.source);
+  });
+  const coveragePanel = $('#analytics-coverage');
+  coveragePanel.hidden = data.source === 'live' && !internal;
+  $('#analytics-source-badge').textContent = (ANALYTICS_SOURCE_LABELS[data.source] || data.source).split(' · ')[0];
+  $('#analytics-source-badge').className = `table-badge ${coverage.status === 'BLOCKED' ? 'draft' : 'submitted'}`;
+  $('#analytics-coverage-status').textContent = ANALYTICS_COVERAGE_LABELS[coverage.status] || coverage.status;
+  $('#analytics-coverage-status').className = `table-badge ${coverage.status === 'COMPLETE' ? 'submitted' : 'draft'}`;
+  $('#analytics-coverage-title').textContent = `Độ phủ · ${ANALYTICS_SOURCE_LABELS[data.source] || data.source}`;
+  const baseMessage = data.source === 'live'
+    ? 'Chỉ tính phiếu đã duyệt trong đơn vị báo cáo đang chọn.'
+    : data.source === 'historical'
+      ? 'Tính từ TOS đã xác nhận; thời gian theo ATB/ATD, không dùng ETA cũ trong PL.03.'
+      : 'Chỉ cộng khi từng tháng không chồng lấn giữa LIVE và LỊCH SỬ.';
+  $('#analytics-coverage-message').textContent = [baseMessage, ...(coverage.warnings || [])].join(' ');
+  $('#analytics-coverage-periods').innerHTML = (coverage.periods || []).map(item => `<article class="coverage-period ${item.overlap ? 'overlap' : ''}"><strong>${esc(item.month)}</strong><span>LIVE: ${number(item.liveApproved).toLocaleString('vi-VN')}</span><span>TOS: ${number(item.historicalCalls).toLocaleString('vi-VN')} lượt</span><span>Chi tiết: ${number(item.historicalCargoRows).toLocaleString('vi-VN')} dòng</span>${item.overlap ? '<b>CẦN ĐỐI SOÁT</b>' : ''}</article>`).join('');
+}
+
+async function loadReportAnalytics(period = 'month', source = state.analyticsSource) {
   try {
-    const data = await api(`/api/reports/analytics?period=${period}`);
+    const allowedSource = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role) ? source : 'live';
+    const data = await api(`/api/reports/analytics?period=${period}&source=${allowedSource}`);
+    state.analyticsSource = data.source;
     $('#analytics-unavailable').hidden = true;
     $('#analytics-demo-notice').hidden = data.dataSource !== 'DEMO';
-    $('#kpi-grid').hidden = false;
-    $('.analytics-split').hidden = false;
-    $('#export-analytics').disabled = false;
+    renderAnalyticsCoverage(data);
+    const blocked = data.combinedAllowed === false;
+    $('#analytics-combined-blocked').hidden = !blocked;
+    $('#kpi-grid').hidden = blocked;
+    $('.analytics-split').hidden = blocked;
+    $('#export-analytics').disabled = blocked;
     const fmt = value => number(value).toLocaleString('vi-VN');
     $$('.period-switch button').forEach(button => {
       button.classList.toggle('active', button.dataset.period === data.period);
-      button.onclick = () => loadReportAnalytics(button.dataset.period);
+      button.onclick = () => loadReportAnalytics(button.dataset.period, state.analyticsSource);
     });
     const meta = data.meta || {};
     $('#analytics-title').textContent = meta.analyticsTitle || '';
@@ -1690,14 +1725,21 @@ async function loadReportAnalytics(period = 'month') {
     $('#compare-sub').textContent = meta.compareSub || '';
     $('#kpi-grid').innerHTML = ANALYTICS_KPIS.map(([key, label]) => {
       const kpi = data.kpis[key] || { cur: 0, prev: 0 };
+      if (kpi.cur === null || kpi.cur === undefined) {
+        return `<article class="kpi-card incomplete"><p>${label.toUpperCase()}</p><div class="kpi-value"><strong>—</strong></div><small>Chưa đủ độ phủ để tính</small></article>`;
+      }
       const delta = analyticsDelta(kpi.cur, kpi.prev);
-      return `<article class="kpi-card"><p>${label.toUpperCase()}</p><div class="kpi-value"><strong>${fmt(kpi.cur)}</strong><span class="kpi-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</span></div><small>Cùng kỳ: ${fmt(kpi.prev)}</small></article>`;
+      const prior = kpi.prev === null || kpi.prev === undefined ? 'Chưa đủ dữ liệu' : fmt(kpi.prev);
+      return `<article class="kpi-card"><p>${label.toUpperCase()}</p><div class="kpi-value"><strong>${fmt(kpi.cur)}</strong>${kpi.prev === null || kpi.prev === undefined ? '' : `<span class="kpi-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</span>`}</div><small>Cùng kỳ: ${prior}</small></article>`;
     }).join('');
     const trend = data.trend || { labels: [], cur: [], prev: [] };
     const max = Math.max(...trend.cur, ...trend.prev, 1);
     $('#trend-chart').innerHTML = trend.labels.map((label, i) => `<div class="trend-col"><div class="trend-bars"><span class="trend-bar cur" style="height:${Math.round((trend.cur[i] || 0) / max * 100)}%"></span><span class="trend-bar prev" style="height:${Math.round((trend.prev[i] || 0) / max * 100)}%"></span></div><small>${esc(label)}</small></div>`).join('');
     $('#compare-body').innerHTML = ANALYTICS_KPIS.map(([key, label]) => {
       const kpi = data.kpis[key] || { cur: 0, prev: 0 };
+      if (kpi.cur === null || kpi.prev === null || kpi.cur === undefined || kpi.prev === undefined) {
+        return `<tr><td>${label}</td><td>${kpi.cur == null ? '—' : fmt(kpi.cur)}</td><td>${kpi.prev == null ? '—' : fmt(kpi.prev)}</td><td class="muted">Chưa đủ dữ liệu</td></tr>`;
+      }
       const delta = analyticsDelta(kpi.cur, kpi.prev);
       return `<tr><td>${label}</td><td>${fmt(kpi.cur)}</td><td>${fmt(kpi.prev)}</td><td class="compare-delta ${delta.up ? 'up' : 'down'}">${delta.txt}</td></tr>`;
     }).join('');
@@ -1710,7 +1752,7 @@ async function loadReportAnalytics(period = 'month') {
 
 function exportAnalyticsReport() {
   const period = $('.period-switch button.active')?.dataset.period || 'month';
-  downloadFile(`/api/reports/analytics/export?period=${period}`, `bao_cao_tong_hop_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  downloadFile(`/api/reports/analytics/export?period=${period}&source=${state.analyticsSource}`, `bao_cao_tong_hop_${state.analyticsSource}_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`)
     .catch(error => toast(error.message, true));
 }
 

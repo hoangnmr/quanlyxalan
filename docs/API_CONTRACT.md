@@ -171,8 +171,8 @@ legacy PL.03 time is stored only as reported provenance.
 | GET | `/api/reports/appendix1` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 | GET | `/api/reports/appendix2` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
 | GET | `/api/reports/appendix3` | CUSTOMER, PORT_STAFF, ADMIN | date range | XLSX download |
-| GET | `/api/reports/analytics` | CUSTOMER, PORT_STAFF, ADMIN | `period=week\|month\|quarter\|year`, optional `as_of` | `{period, dataSource, kpis, trend, meta}` |
-| GET | `/api/reports/analytics/export` | CUSTOMER, PORT_STAFF, ADMIN | same as analytics | XLSX download |
+| GET | `/api/reports/analytics` | CUSTOMER (`source=live` only), PORT_STAFF, PLATFORM_ADMIN with explicit unit context | `period=week\|month\|quarter\|year`, `source=live\|historical\|combined` (default `live`), optional `as_of` | `{period, source, dataSource, combinedAllowed, kpis, trend, coverage, meta}`; combined KPI values are `null` while source overlap is unresolved |
+| GET | `/api/reports/analytics/export` | Same as analytics | Same query as analytics | XLSX download; returns `409` instead of exporting an unresolved combined total |
 
 *   **Tenant Constraint**: CUSTOMER receives only records from its own organization; reviewers and ADMIN receive the operational scope allowed by their role.
 *   Analytics includes only declarations in `APPROVED` and compares the selected period with the same period of the previous year. `dataSource=DEMO` is a display marker only; it is not governance evidence.

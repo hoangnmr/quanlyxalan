@@ -78,7 +78,7 @@ def test_reporting_unit_picker_is_compact_and_kept_out_of_topbar():
     topbar_start = index_html.index('<header class="topbar"')
     topbar_end = index_html.index('</header>', topbar_start)
     assert 'id="reporting-unit-trigger"' in index_html[sidebar_start:sidebar_end]
-    assert 'Chọn đơn vị báo cáo' in index_html[sidebar_start:sidebar_end]
+    assert 'Chọn đơn vị báo cáo' not in index_html[sidebar_start:sidebar_end]
     assert 'id="reporting-unit-trigger"' not in index_html[topbar_start:topbar_end]
     assert 'id="reporting-unit-select"' not in index_html
     assert 'role="menuitemradio"' in app_js
@@ -88,6 +88,9 @@ def test_reporting_unit_picker_is_compact_and_kept_out_of_topbar():
     assert '.reporting-unit-menu button.selected' in styles_css
     assert 'id="reporting-unit-dialog"' in index_html
     assert '+ Tạo đơn vị mới' in app_js
+    assert 'Dành cho Platform Admin' not in app_js
+    active_section = app_js[app_js.index("const active = state.reportingUnits.find"):app_js.index("if (!active)")]
+    assert 'active.code' not in active_section
     assert "state.currentUser.role === 'PLATFORM_ADMIN'" in app_js
     assert "method: 'POST'" in app_js[app_js.index('async function saveReportingUnit'):app_js.index('async function loadReportingUnitContext')]
 

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.4.2">
+  <link rel="stylesheet" href="/styles.css?v=1.4.3">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -35,7 +35,7 @@
       <section id="sidebar-unit-context" class="sidebar-unit-context" hidden>
         <button id="reporting-unit-trigger" class="reporting-unit-trigger" type="button" aria-expanded="false" aria-controls="reporting-unit-menu">
           <span class="reporting-unit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M6 20V9l6-5 6 5v11"></path><path d="M9 20v-6h6v6"></path></svg></span>
-          <span class="reporting-unit-copy"><small>Chọn đơn vị báo cáo</small><strong id="active-reporting-unit">Chưa chọn</strong></span>
+          <span class="reporting-unit-copy"><strong id="active-reporting-unit">Chưa chọn</strong></span>
           <span class="reporting-unit-chevron" aria-hidden="true">⌄</span>
         </button>
         <div id="reporting-unit-menu" class="reporting-unit-menu" role="menu" aria-label="Các đơn vị báo cáo" hidden></div>
@@ -65,7 +65,7 @@
         <section id="reporting-unit-required" class="panel tenant-context-notice" role="status" hidden>
           <p class="eyebrow">PHẠM VI VẬN HÀNH</p>
           <h2>Chọn cảng trước khi làm việc</h2>
-          <p>Bấm “Chọn đơn vị báo cáo” trong menu bên trái để mở dữ liệu vận hành.</p>
+          <p>Chưa có đơn vị đang thao tác.</p>
         </section>
         <section class="page active" data-page="dashboard">
           <div class="page-heading"><div><p class="eyebrow">TÌNH HÌNH HÔM NAY</p><p>Trạng thái hồ sơ phương tiện và các lượt Salan dự kiến.</p></div></div>
@@ -114,7 +114,7 @@
             <button id="historical-import-tab" type="button" role="tab" aria-selected="false" aria-controls="historical-import-panel">Lịch sử / TOS</button>
           </div>
           <section id="operational-import-panel" role="tabpanel" aria-labelledby="operational-import-tab">
-            <div class="import-boundary-note"><strong>Dùng cho công việc hiện tại</strong><span>Nhập hồ sơ phương tiện, thuyền viên hoặc phiếu khai báo khách hàng gửi. Có thể cập nhật dữ liệu vận hành theo quyền được cấp.</span></div>
+            <div class="import-boundary-note"><strong>Dùng cho công việc hiện tại</strong><span>Nhập hồ sơ phương tiện, thuyền viên hoặc phiếu khai báo khách hàng gửi.</span></div>
             <div class="import-grid">
               <section class="panel upload-card" id="import-vessels-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14l8 4.4a2 2 0 0 0 2 0L21 14"></path><path d="M5 12V6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5V12"></path><path d="M12 5V2.5"></path></svg></span><h2>Hồ sơ phương tiện khách hàng gửi</h2><p>Dữ liệu phục vụ khai báo của khách hàng, không tự đưa vào Sổ theo dõi nội bộ của Cảng.</p><label class="file-button">Chọn file khách hàng<input type="file" id="import-vessels" accept=".xlsx"></label></section>
               <section class="panel upload-card" id="import-crew-card"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.3a3 3 0 0 1 0 5.4"></path><path d="M17 13.5a5.5 5.5 0 0 1 3.5 5.1"></path></svg></span><h2>Thông tin thuyền viên</h2><p>Cập nhật danh sách và chứng chỉ từ file khách hàng gửi trong đúng phạm vi Cảng.</p><label class="file-button">Chọn file<input type="file" id="import-crew" accept=".xlsx"></label></section>
@@ -124,7 +124,7 @@
           </section>
 
           <section id="historical-import-panel" role="tabpanel" aria-labelledby="historical-import-tab" hidden>
-            <div class="import-boundary-note historical"><strong>Dùng để dựng lại báo cáo lịch sử</strong><span>Tạo nguồn dữ liệu lịch sử riêng theo Cảng. Không sửa phiếu khai báo gốc, hồ sơ phương tiện, thuyền viên hoặc dữ liệu vận hành hiện tại.</span></div>
+            <div class="import-boundary-note historical"><strong>Báo cáo lịch sử</strong><span>Tạo nguồn dữ liệu lịch sử riêng theo Cảng. Không sửa phiếu khai báo gốc, hồ sơ phương tiện, thuyền viên hoặc dữ liệu vận hành hiện tại.</span></div>
             <ol class="historical-import-steps" aria-label="Quy trình import lịch sử">
               <li class="active"><span>1</span><div><strong>Chọn file</strong><small>Berth, chi tiết xếp dỡ hoặc PL.03 cũ</small></div></li>
               <li><span>2</span><div><strong>Kiểm tra</strong><small>Loại nguồn, kỳ ATB và từng dòng</small></div></li>
@@ -211,6 +211,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="/app.js?v=1.4.2" defer></script>
+  <script src="/app.js?v=1.4.3" defer></script>
 </body>
 </html>

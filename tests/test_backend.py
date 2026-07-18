@@ -262,8 +262,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.4.2' in res.text
-    assert '/app.js?v=1.4.2' in res.text
+    assert '/styles.css?v=1.4.3' in res.text
+    assert '/app.js?v=1.4.3' in res.text
     assert 'id="analytics-source-controls"' in res.text
     assert 'data-source="historical"' in res.text
     assert 'id="analytics-coverage"' in res.text

@@ -1752,6 +1752,9 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
   server endpoint validates and normalizes a unique name/code, creates an empty
   active ReportingUnit and selects it after reload. PORT_STAFF/CUSTOMER are
   denied and no memberships, organizations or tenant data are copied.
+- The picker was then reduced to task labels only: active unit name, selectable
+  unit names and `+ Tạo đơn vị mới`. Unit code and explanatory role captions
+  are hidden from this menu; control/row sizing now matches the main sidebar.
 
 ### Verification and boundary
 

@@ -208,10 +208,10 @@ async function loadReportingUnitContext() {
     location.reload();
   };
   const unitItems = state.reportingUnits.length
-    ? state.reportingUnits.map(unit => `<button type="button" role="menuitemradio" aria-checked="${unit.id === state.activeReportingUnitId}" data-reporting-unit-id="${unit.id}" class="${unit.id === state.activeReportingUnitId ? 'selected' : ''}"><span><strong>${esc(unit.name)}</strong>${unit.code ? `<small>${esc(unit.code)}</small>` : ''}</span><b aria-hidden="true">${unit.id === state.activeReportingUnitId ? '✓' : ''}</b></button>`).join('')
+    ? state.reportingUnits.map(unit => `<button type="button" role="menuitemradio" aria-checked="${unit.id === state.activeReportingUnitId}" data-reporting-unit-id="${unit.id}" class="${unit.id === state.activeReportingUnitId ? 'selected' : ''}"><span><strong>${esc(unit.name)}</strong></span><b aria-hidden="true">${unit.id === state.activeReportingUnitId ? '✓' : ''}</b></button>`).join('')
     : '<p>Chưa có đơn vị được cấp.</p>';
   const createAction = state.currentUser.role === 'PLATFORM_ADMIN'
-    ? '<div class="reporting-unit-create-action"><button id="create-reporting-unit" type="button" role="menuitem"><span><strong>+ Tạo đơn vị mới</strong><small>Dành cho Platform Admin</small></span></button></div>'
+    ? '<div class="reporting-unit-create-action"><button id="create-reporting-unit" type="button" role="menuitem"><span><strong>+ Tạo đơn vị mới</strong></span></button></div>'
     : '';
   menu.innerHTML = unitItems + createAction;
   $$('[data-reporting-unit-id]', menu).forEach(button => {
@@ -272,13 +272,13 @@ async function loadReportingUnitContext() {
   const active = state.reportingUnits.find(unit => unit.id === state.activeReportingUnitId);
   $('#active-reporting-unit').textContent = active ? active.name : 'Chưa chọn';
   trigger.title = active
-    ? `Đơn vị đang chọn: ${active.name}${active.code ? ` (${active.code})` : ''}`
-    : 'Chọn đơn vị báo cáo';
+    ? `Đơn vị đang chọn: ${active.name}`
+    : 'Đơn vị báo cáo';
   trigger.disabled = state.reportingUnits.length === 0 && state.currentUser.role !== 'PLATFORM_ADMIN';
   if (!active) {
     notice.hidden = false;
     notice.querySelector('p:last-child').textContent = state.reportingUnits.length
-      ? 'Bấm “Chọn đơn vị báo cáo” trong menu bên trái để mở dữ liệu. Hệ thống không có chế độ xem gộp nhiều cảng.'
+      ? 'Chưa có đơn vị đang thao tác. Hệ thống không có chế độ xem gộp nhiều cảng.'
       : 'Tài khoản chưa có đơn vị báo cáo hoạt động. Liên hệ Platform Admin để cấp membership.';
     document.body.classList.add('tenant-context-blocked');
     $('#api-state').className = 'state-badge pending';

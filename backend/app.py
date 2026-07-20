@@ -305,6 +305,7 @@ class VesselSaveRequest(BaseModel):
     registration_no: str
     registry_or_imo: str = ""
     vessel_type: str
+    vessel_category: Optional[str] = None
     vessel_class: str
     shell_material: str = ""
     build_year: Optional[int] = None
@@ -386,13 +387,19 @@ class CrewSaveRequest(BaseModel):
     certificate_expiry_date: Optional[str] = None
     notes: str = ""
 
-    @field_validator("full_name", "professional_certificate_type", "professional_certificate_no")
+    @field_validator("full_name", "phone")
     @classmethod
     def required_crew_text(cls, value: str) -> str:
         value = value.strip()
         if not value:
             raise ValueError("Trường này là bắt buộc.")
         return value
+
+    @field_validator("professional_certificate_type", "professional_certificate_no")
+    @classmethod
+    def optional_crew_text(cls, value: str) -> str:
+        # Chứng chỉ chuyên môn có thể bổ sung sau; chỉ Họ tên và Số điện thoại là bắt buộc.
+        return value.strip()
 
     @field_validator("crew_role")
     @classmethod
@@ -526,11 +533,20 @@ class ReportAdjustmentRequest(BaseModel):
 
 
 # ── Catalog constants ──────────────────────────────────────────────────────────
-VESSEL_TYPES = [
+# Gợi ý cho ô Công dụng/Loại phương tiện — trường này ghi nguyên văn theo GCN
+# (nhập tự do), danh sách dưới đây chỉ để gợi ý autocomplete, không ràng buộc.
+VESSEL_TYPE_SUGGESTIONS = [
+    "Chở hàng khô", "Chở hàng khô hoặc container", "Chở container", "Chở nước",
+]
+# Phân loại phương tiện — trường nội bộ, không bắt buộc, không xuất hiện trong
+# Phụ lục nào; tách khỏi vessel_type (Công dụng) vì không có căn cứ trên GCN.
+VESSEL_CATEGORIES = [
     "Tàu hàng khô", "Tàu container", "Tàu hàng lỏng/dầu", "Tàu khách",
     "Tàu kéo/đẩy", "Sà lan tự hành", "Sà lan", "Khác",
 ]
-VESSEL_CLASSES = ["VR-SI", "VR-SII", "VR-SIII", "Khác"]
+# "VR-SI / VR-SII" là cấp ghép, ghi theo đúng GCN của phương tiện được cấp cả
+# hai vùng hoạt động; VR-SIII theo đúng Phụ lục 2 dù dữ liệu hiện chưa có.
+VESSEL_CLASSES = ["VR-SI", "VR-SII", "VR-SIII", "VR-SI / VR-SII", "Khác"]
 SHELL_MATERIALS = ["Thép", "Gỗ", "Composite/GRP", "Xi măng lưới thép", "Nhôm", "Khác"]
 CARGO_TYPES = ["Container", "Hàng khô", "Hàng lỏng"]
 UNLOAD_MOVEMENTS = [
@@ -684,7 +700,8 @@ def readiness_check():
 @app.get("/api/catalogs")
 def get_catalogs():
     return {
-        "vesselTypes": VESSEL_TYPES,
+        "vesselTypeSuggestions": VESSEL_TYPE_SUGGESTIONS,
+        "vesselCategories": VESSEL_CATEGORIES,
         "vesselClasses": VESSEL_CLASSES,
         "shellMaterials": SHELL_MATERIALS,
         "cargoTypes": CARGO_TYPES,

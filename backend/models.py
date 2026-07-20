@@ -55,7 +55,8 @@ class Vessel(Base):
     name = Column(String, nullable=False)
     registration_no = Column(String, nullable=False, unique=True)
     registry_or_imo = Column(String, nullable=False, default="")
-    vessel_type = Column(String, nullable=False)
+    vessel_type = Column(String, nullable=False)  # Công dụng, nguyên văn theo GCN
+    vessel_category = Column(String, nullable=True)  # phân loại nội bộ, không bắt buộc
     vessel_class = Column(String, nullable=False)
     shell_material = Column(String, nullable=False, default="")
     build_year = Column(Integer)

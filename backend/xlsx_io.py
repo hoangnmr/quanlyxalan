@@ -42,6 +42,12 @@ def import_match_key(value: Any) -> str:
     return re.sub(r"[^A-Z0-9]+", "", text.upper())
 
 
+# vessel_type ghi lại nguyên văn Công dụng theo GCN đăng ký/đăng kiểm (ví dụ
+# "Chở hàng khô hoặc container") — trường tự do, KHÔNG map vào một danh mục cố
+# định. Bộ này chỉ chuẩn hóa chính tả cho các cách viết "container" hay gặp
+# trong chứng từ/workbook ("công te nơ", "côngtenơ"…), giữ nguyên quy ước viết
+# hoa chung của import (normalize_import_text .upper()) và ngữ nghĩa "Chở..."
+# của chứng từ gốc — không dịch sang danh mục "Tàu hàng khô/Tàu container".
 VESSEL_TYPE_CANONICAL = {
     import_match_key("SÀ LAN"): "SÀ LAN",
     import_match_key("SALAN"): "SÀ LAN",
@@ -49,8 +55,10 @@ VESSEL_TYPE_CANONICAL = {
     import_match_key("CONTAINER"): "CONTAINER",
     import_match_key("CÔNG TE NƠ"): "CONTAINER",
     import_match_key("CÔNG-TÊ-NƠ"): "CONTAINER",
+    import_match_key("CÔNGTENƠ"): "CONTAINER",
     import_match_key("CHỞ HÀNG KHÔ HOẶC CONTAINER"): "CHỞ HÀNG KHÔ HOẶC CONTAINER",
     import_match_key("CHỞ HÀNG KHÔ HOẶC CÔNG TE NƠ"): "CHỞ HÀNG KHÔ HOẶC CONTAINER",
+    import_match_key("CHỞ HÀNG KHÔ HOẶC CÔNGTENƠ"): "CHỞ HÀNG KHÔ HOẶC CONTAINER",
 }
 
 

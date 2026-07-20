@@ -278,8 +278,8 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.6.3' in res.text
-    assert '/app.js?v=1.6.3' in res.text
+    assert '/styles.css?v=1.6.9' in res.text
+    assert '/app.js?v=1.6.9' in res.text
     assert 'id="analytics-source-controls"' in res.text
     assert 'data-source="historical"' in res.text
     assert 'id="analytics-coverage"' in res.text
@@ -516,7 +516,8 @@ def test_catalogs_public(client):
     res = client.get("/api/catalogs")
     assert res.status_code == 200
     data = res.json()
-    assert "vesselTypes" in data
+    assert "vesselTypeSuggestions" in data
+    assert "vesselCategories" in data
     assert "vesselClasses" in data
 
 
@@ -1800,7 +1801,11 @@ def test_port_tracking_import_preserves_dual_operating_profiles_and_exports_them
     preview = client.post("/api/import/port-vessel-register?preview=true", content=workbook, headers=headers)
     assert preview.status_code == 200, preview.text
     row = preview.json()["rows"][0]
+    # vessel_type ghi nguyên văn Công dụng theo chứng từ (không map vào danh
+    # mục cố định); chỉ đổi hoa/thường theo quy ước import chung nên không có
+    # cảnh báo chuẩn hóa.
     assert row["mappingWarnings"] == []
+    assert row["vessel_type"] == "CHỞ HÀNG KHÔ HOẶC CONTAINER"
     assert row["operating_profiles"] == [
         {"sequence": 1, "activity_area": "VR-SI", "deadweight_tons": 2723.79, "cargo_capacity_tons": 2698.79},
         {"sequence": 2, "activity_area": "VR-SII", "deadweight_tons": 2912.57, "cargo_capacity_tons": 2887.57},

@@ -87,10 +87,12 @@ def main() -> None:
         ])
 
         vessels = [
-            Vessel(organization_id=demo.id, name="Sà lan SG-168", registration_no="SG-DEMO-168", vessel_type="Sà lan", vessel_class="VR-SII", deadweight_tons=850, cargo_capacity_tons=780, min_crew=4, safety_certificate_no="ATKT-DEMO-168", certificate_expiry_date="2026-08-05", created_at=now, updated_at=now),
-            Vessel(organization_id=demo.id, name="Tàu container Tân Thuận 01", registration_no="SG-DEMO-001", vessel_type="Tàu container", vessel_class="VR-SI", deadweight_tons=1200, container_capacity_teu=96, min_crew=6, safety_certificate_no="ATKT-DEMO-001", certificate_expiry_date="2026-12-31", created_at=now, updated_at=now),
-            Vessel(organization_id=demo.id, name="Tàu hàng Nam Sài Gòn", registration_no="SG-DEMO-215", vessel_type="Tàu hàng khô", vessel_class="VR-SII", deadweight_tons=640, cargo_capacity_tons=610, min_crew=5, safety_certificate_no="ATKT-DEMO-215", certificate_expiry_date="2026-07-20", created_at=now, updated_at=now),
-            Vessel(organization_id=demo.id, name="Tàu kéo Bạch Đằng", registration_no="SG-DEMO-088", vessel_type="Tàu kéo/đẩy", vessel_class="VR-SIII", deadweight_tons=210, min_crew=3, safety_certificate_no="ATKT-DEMO-088", certificate_expiry_date="2027-03-15", created_at=now, updated_at=now),
+            # vessel_type = Công dụng nguyên văn theo GCN; vessel_category = phân loại
+            # nội bộ tùy chọn, tách biệt (không có căn cứ trên chứng từ).
+            Vessel(organization_id=demo.id, name="Sà lan SG-168", registration_no="SG-DEMO-168", vessel_type="Chở hàng khô", vessel_category="Sà lan", vessel_class="VR-SII", deadweight_tons=850, cargo_capacity_tons=780, min_crew=4, safety_certificate_no="ATKT-DEMO-168", certificate_expiry_date="2026-08-05", created_at=now, updated_at=now),
+            Vessel(organization_id=demo.id, name="Tàu container Tân Thuận 01", registration_no="SG-DEMO-001", vessel_type="Chở container", vessel_category="Tàu container", vessel_class="VR-SI", deadweight_tons=1200, container_capacity_teu=96, min_crew=6, safety_certificate_no="ATKT-DEMO-001", certificate_expiry_date="2026-12-31", created_at=now, updated_at=now),
+            Vessel(organization_id=demo.id, name="Tàu hàng Nam Sài Gòn", registration_no="SG-DEMO-215", vessel_type="Chở hàng khô", vessel_category="Tàu hàng khô", vessel_class="VR-SII", deadweight_tons=640, cargo_capacity_tons=610, min_crew=5, safety_certificate_no="ATKT-DEMO-215", certificate_expiry_date="2026-07-20", created_at=now, updated_at=now),
+            Vessel(organization_id=demo.id, name="Tàu kéo Bạch Đằng", registration_no="SG-DEMO-088", vessel_type="Chở hàng khô", vessel_category="Tàu kéo/đẩy", vessel_class="VR-SIII", deadweight_tons=210, min_crew=3, safety_certificate_no="ATKT-DEMO-088", certificate_expiry_date="2027-03-15", created_at=now, updated_at=now),
         ]
         db.add_all(vessels)
         db.flush()

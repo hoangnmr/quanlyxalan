@@ -383,3 +383,14 @@ nav a span svg {
   .historical-upload-panel, .historical-export-panel { display: flex; }
   .historical-file-button, .historical-export-actions .primary-button { width: 100%; }
 }
+
+/* Bước 1 — nguồn hồ sơ phương tiện: radio phải nhỏ gọn, không ăn theo
+   quy tắc chung `input { width:100%; min-height:38px }` khiến nút bị phình to. */
+.vessel-mode-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 10px 12px; border: 1px solid var(--cvf-border); border-radius: 9px; background: var(--cvf-surface-elevated); }
+.vessel-mode-toggle label { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--cvf-text-primary); font-size: 12px; font-weight: 600; cursor: pointer; }
+.vessel-mode-toggle input[type="radio"] { flex: none; width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; padding: 0; accent-color: var(--cvf-accent); cursor: pointer; }
+
+/* Bước 4 — khối Thuyền trưởng cho phép sửa tay khi hồ sơ tự điền chưa đúng. */
+.captain-edit-block { display: grid; gap: 10px; padding: 12px 13px; border: 1px solid var(--cvf-border); border-radius: 9px; background: var(--cvf-surface-elevated); }
+.captain-edit-block > strong { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--cvf-text-secondary); }
+.captain-edit-block > small { color: var(--cvf-text-muted); font-size: 10px; line-height: 1.5; }

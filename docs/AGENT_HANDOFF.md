@@ -1844,7 +1844,7 @@ unload E 682/1,189/2,415.78 t; unload F 81/142/2,143.28 t.
 - Reporting UI was reduced to operational labels, selectors, compact coverage,
   KPI and charts. Persistent instructional copy moved out of the working view;
   only action-blocking states remain visible.
-- Frontend cache version is `1.6.3`. Full regression: 173 passed with one
+- Frontend cache version is `1.6.9`. Full regression: 173 passed with one
   retained openpyxl warning. Raw TOS workbooks remain ignored and outside Git.
 - CI follow-up: `test_fail_fast_outside_test_mode` now removes and restores both
   `TEST_DATABASE_URL` and the workflow-provided `SECRET_KEY`, so it exercises

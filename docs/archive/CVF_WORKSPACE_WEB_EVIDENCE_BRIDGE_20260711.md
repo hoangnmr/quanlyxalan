@@ -1,7 +1,7 @@
 ﻿# CVF Workspace-To-Web Evidence Bridge
 
 > Date: 2026-07-11
-> Record ID: W114-CP6-BRIDGE-20260711-Khai-bao-Cang-vu
+> Record ID: W114-CP6-BRIDGE-20260711-Quan-Ly-Xalan
 > Status: PASS
 > Project: d:\UNG DUNG AI\TOOL AI 2026\CVF-Workspace\Khai-bao-Cang-vu
 > CVF Core: D:\UNG DUNG AI\TOOL AI 2026\CVF-Workspace\.Controlled-Vibe-Framework-CVF

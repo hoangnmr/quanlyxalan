@@ -6,7 +6,7 @@ Audit execution date: 2026-07-18
 
 Requested artifact date: 2026-07-17
 
-Project: `Khai-bao-Cang-vu-recovery-ux`
+Project: `Quan-Ly-Xalan-recovery-ux`
 
 Phase: INTAKE
 

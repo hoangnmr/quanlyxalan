@@ -6,7 +6,7 @@
 - Status: CLOSED — Gate 5 PASS with full six-step wizard browser evidence
 - Branch: `recovery/frontend-baseline-20260712`
 - Baseline: `929a8c487c572b7bcad859e237b17da1d494a1db`
-- Worktree: `Khai-bao-Cang-vu-recovery-ux`
+- Worktree: `Quan-Ly-Xalan-recovery-ux`
 
 ## Controlled scope
 

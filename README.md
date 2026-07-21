@@ -1,4 +1,4 @@
-# Khai-bao-Cang-vu / Port Declaration System
+# Quan-Ly-Xalan / Port Declaration System
 
 Ứng dụng web quản lý khai báo phương tiện thủy, hồ sơ phương tiện, thuyền viên,
 sổ theo dõi của Cảng và báo cáo PL.01–PL.03. Hệ thống hỗ trợ nhiều cảng/đơn vị
@@ -28,33 +28,52 @@ báo cáo trên cùng một nền tảng và tách biệt dữ liệu theo đơn
 
 ## Yêu cầu
 
-- Python 3.13+
+- Python 3.12+
+- PostgreSQL 14+ (đang kiểm chứng trên PostgreSQL 17)
 - `pip`
 
 ## Cài đặt
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt
+.venv/bin/python -m pip install -r backend/requirements-dev.txt
 ```
+
+Tạo cơ sở dữ liệu:
+
+```bash
+createdb cangvu
+```
+
+## Cấu hình
+
+Sao chép `.env.example` thành `.env`, rồi đặt `SECRET_KEY` và `DATABASE_URL`:
+
+```bash
+cp .env.example .env
+python3 -c "import secrets; print(secrets.token_hex(32))"   # dán vào SECRET_KEY
+```
+
+`DATABASE_URL` mặc định là `postgresql+psycopg://localhost/cangvu`. Ứng dụng chỉ
+chấp nhận URL PostgreSQL và sẽ báo lỗi khi khởi động nếu nhận URL khác.
 
 ## Chạy kiểm thử
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+```bash
+SECRET_KEY=<khoa-bat-ky-cho-test> .venv/bin/python -m pytest -q
 ```
+
+Bộ kiểm thử tự tạo và xoá một PostgreSQL database riêng cho từng module, dùng
+`TEST_ADMIN_DATABASE_URL` (mặc định `postgresql+psycopg://localhost/postgres`)
+làm kết nối quản trị.
 
 Mọi kiểm thử phải pass trước khi merge hoặc triển khai.
 
 ## Chạy local
 
-Tạo khóa bí mật cho môi trường local và không ghi khóa vào Git:
-
-```powershell
-python -c "import secrets; print(secrets.token_hex(32))"
-$env:SECRET_KEY="replace-with-generated-secret"
-powershell -ExecutionPolicy Bypass -File .\scripts\run-dev.ps1
+```bash
+./scripts/run-dev.sh
 ```
 
 Script sẽ áp Alembic migrations trước khi khởi động. Mở
@@ -62,12 +81,19 @@ Script sẽ áp Alembic migrations trước khi khởi động. Mở
 
 Có thể chạy trực tiếp:
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8080 --reload
+```bash
+.venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8080 --reload
 ```
 
-Môi trường local dùng SQLite tại `data/cang_vu.db`. Thư mục `data/`, workbook
-nguồn và file backup không được đưa vào Git.
+Sao lưu định kỳ hằng ngày (launchd trên macOS):
+
+```bash
+./scripts/register-local-backup-task.sh 02:00
+```
+
+Backup dùng `pg_dump` định dạng custom kèm manifest SHA-256, ghi vào
+`data/backups/`. Thư mục `data/`, workbook nguồn và file backup không được đưa
+vào Git.
 
 ## Ranh giới production
 

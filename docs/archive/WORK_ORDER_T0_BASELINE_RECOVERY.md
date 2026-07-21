@@ -7,7 +7,7 @@
 - CVF phase on assignment: BUILD (only after human approval)
 - Risk classification: R2
 - Priority: P0 / blocking
-- Target repository: `Khai-bao-Cang-vu`
+- Target repository: `Quan-Ly-Xalan`
 - Primary reference: `docs/EA_EVALUATION_ROADMAP.md`
 - Production data/external API: OUT OF SCOPE
 - CVF governance claim: OUT OF SCOPE; mocks may not be used for such claims

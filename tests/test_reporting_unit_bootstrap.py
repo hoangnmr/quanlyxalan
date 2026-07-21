@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.database import now_iso
@@ -17,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "bootstrap_reporting_unit.py"
 
 
-def _run(database: Path, *, apply: bool = False) -> dict:
+def _run(url: str, *, apply: bool = False) -> dict:
     command = [
         sys.executable, str(SCRIPT),
-        "--database", str(database),
+        "--url", url,
         "--unit-name", "Test Port",
         "--unit-code", "TEST-PORT",
         "--staff-username", "portstaff",
@@ -34,9 +33,8 @@ def _run(database: Path, *, apply: bool = False) -> dict:
     return json.loads(result.stdout)
 
 
-def test_bootstrap_reporting_unit_is_dry_run_safe_and_idempotent(tmp_path):
-    database = tmp_path / "bootstrap.db"
-    engine = create_engine(f"sqlite:///{database}")
+def test_bootstrap_reporting_unit_is_dry_run_safe_and_idempotent(pg_url):
+    engine = create_engine(pg_url)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     with Session() as session:
@@ -53,24 +51,23 @@ def test_bootstrap_reporting_unit_is_dry_run_safe_and_idempotent(tmp_path):
             ),
         ])
         session.commit()
-    engine.dispose()
-    with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR NOT NULL)")
-        connection.execute("INSERT INTO alembic_version VALUES ('n13f0f000013')")
-        connection.commit()
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('n13f0f000013')"))
 
-    preview = _run(database)
+    preview = _run(pg_url)
     assert preview["mode"] == "DRY_RUN"
     assert preview["after"]["unit_register_vessels"] == 1
-    with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT count(*) FROM reporting_units").fetchone()[0] == 0
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM reporting_units")).scalar() == 0
 
-    applied = _run(database, apply=True)
+    applied = _run(pg_url, apply=True)
     assert applied["mode"] == "APPLY"
     assert applied["after"]["unit_register_vessels"] == 1
-    repeated = _run(database, apply=True)
+    repeated = _run(pg_url, apply=True)
     assert repeated["unit"]["created"] is False
     assert repeated["after"]["units"] == 1
     assert repeated["after"]["memberships"] == 1
     assert repeated["after"]["organization_links"] == 1
     assert repeated["after"]["register_links"] == 1
+    engine.dispose()

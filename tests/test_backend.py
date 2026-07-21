@@ -3,7 +3,7 @@ tests/test_backend.py — T0 Baseline Recovery test suite
 WO-KBCV-T0-20260711
 
 Uses pytest + httpx TestClient against the FastAPI app.
-Test database is SQLite in a temporary directory — completely isolated from data/cang_vu.db.
+Test database is a throwaway PostgreSQL database — completely isolated from the app database.
 
 IMPORTANT: os.environ["TEST_DATABASE_URL"] is set BEFORE any backend imports so that
            database.py picks up the test URL at module init time.
@@ -20,9 +20,10 @@ import zipfile
 from pathlib import Path
 
 # ── Set test DB FIRST, before any backend import ──────────────────────────────
-_tmp_dir = tempfile.mkdtemp()
-_test_db_path = Path(_tmp_dir) / "test.db"
-os.environ["TEST_DATABASE_URL"] = f"sqlite:///{_test_db_path}"
+from tests import _pgdb
+
+_TEST_DB_URL = _pgdb.create_database("kbcv_backend")
+os.environ["TEST_DATABASE_URL"] = _TEST_DB_URL
 
 # ── Now import backend (picks up TEST_DATABASE_URL) ───────────────────────────
 import pytest

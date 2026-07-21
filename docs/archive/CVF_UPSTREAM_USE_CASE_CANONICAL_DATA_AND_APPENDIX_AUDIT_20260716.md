@@ -2,7 +2,7 @@
 
 Status: PROPOSED FOR UPSTREAM REVIEW
 Date: 2026-07-16
-Downstream project: Khai-bao-Cang-vu-recovery-ux
+Downstream project: Quan-Ly-Xalan-recovery-ux
 Proposed public-core target: `D:\UNG DUNG AI\TOOL AI 2026\Controlled-Vibe-Framework-CVF`
 Target remote: `https://github.com/Blackbird081/Controlled-Vibe-Framework-CVF.git`
 

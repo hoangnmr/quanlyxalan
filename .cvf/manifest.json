@@ -1,9 +1,9 @@
 ﻿{
-    "cvfCorePath":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\.Controlled-Vibe-Framework-CVF",
+    "cvfCorePath":  "../.Controlled-Vibe-Framework-CVF",
     "cvfCoreCommit":  "9f39111",
-    "workspaceRoot":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace",
-    "workspaceRulesPath":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\WORKSPACE_RULES.md",
-    "projectPath":  "D:\\UNG DUNG AI\\TOOL AI 2026\\CVF-Workspace\\Khai-bao-Cang-vu",
+    "workspaceRoot":  "..",
+    "workspaceRulesPath":  "../WORKSPACE_RULES.md",
+    "projectPath":  ".",
     "phaseModel":  [
                        "INTAKE",
                        "DESIGN",
@@ -16,8 +16,8 @@
     "requiredDocs":  [
                          ".cvf/manifest.json",
                          ".cvf/policy.json",
-                         "..\\WORKSPACE_RULES.md",
-                         "docs/CVF_BOOTSTRAP_LOG_20260711.md"
+                         "../WORKSPACE_RULES.md",
+                         "docs/archive/CVF_BOOTSTRAP_LOG_20260711.md"
                      ],
     "bootstrapDate":  "2026-07-11",
     "enforcementVersion":  "1.0",

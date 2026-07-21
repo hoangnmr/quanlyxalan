@@ -43,7 +43,7 @@ def _fk_columns(connection, table: str, name: str) -> list[str]:
 def upgrade() -> None:
     connection = op.get_bind()
     if "uq_hist_call_tenant_identity" not in _unique_names(connection, "historical_port_calls"):
-        with op.batch_alter_table("historical_port_calls", recreate="always") as batch:
+        with op.batch_alter_table("historical_port_calls") as batch:
             batch.create_unique_constraint(
                 "uq_hist_call_tenant_identity", ["id", "reporting_unit_id"]
             )
@@ -51,7 +51,7 @@ def upgrade() -> None:
     cargo_columns = _columns(connection, "historical_cargo_rows")
     cargo_fk = _fk_columns(connection, "historical_cargo_rows", "fk_hist_cargo_call")
     if "call_key_normalized" not in cargo_columns or cargo_fk != ["port_call_id", "reporting_unit_id"]:
-        with op.batch_alter_table("historical_cargo_rows", recreate="always") as batch:
+        with op.batch_alter_table("historical_cargo_rows") as batch:
             if "call_key_normalized" not in cargo_columns:
                 batch.add_column(sa.Column(
                     "call_key_normalized", sa.String(), nullable=False, server_default=""
@@ -66,7 +66,7 @@ def upgrade() -> None:
 
     link_fk = _fk_columns(connection, "historical_vessel_links", "fk_hist_link_call")
     if link_fk != ["port_call_id", "reporting_unit_id"]:
-        with op.batch_alter_table("historical_vessel_links", recreate="always") as batch:
+        with op.batch_alter_table("historical_vessel_links") as batch:
             if link_fk:
                 batch.drop_constraint("fk_hist_link_call", type_="foreignkey")
             batch.create_foreign_key(
@@ -95,7 +95,7 @@ def downgrade() -> None:
             "Refusing o14 downgrade: n13 cannot represent existing cross-import "
             f"TOS links (cargo={cross_import_cargo}, vessel_links={cross_import_links})."
         )
-    with op.batch_alter_table("historical_vessel_links", recreate="always") as batch:
+    with op.batch_alter_table("historical_vessel_links") as batch:
         batch.drop_constraint("fk_hist_link_call", type_="foreignkey")
         batch.create_foreign_key(
             "fk_hist_link_call", "historical_port_calls",
@@ -103,7 +103,7 @@ def downgrade() -> None:
             ["id", "import_id", "reporting_unit_id"], ondelete="CASCADE",
         )
 
-    with op.batch_alter_table("historical_cargo_rows", recreate="always") as batch:
+    with op.batch_alter_table("historical_cargo_rows") as batch:
         batch.drop_constraint("fk_hist_cargo_call", type_="foreignkey")
         batch.create_foreign_key(
             "fk_hist_cargo_call", "historical_port_calls",
@@ -112,5 +112,5 @@ def downgrade() -> None:
         )
         batch.drop_column("call_key_normalized")
 
-    with op.batch_alter_table("historical_port_calls", recreate="always") as batch:
+    with op.batch_alter_table("historical_port_calls") as batch:
         batch.drop_constraint("uq_hist_call_tenant_identity", type_="unique")

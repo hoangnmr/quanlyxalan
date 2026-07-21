@@ -1,6 +1,6 @@
 # Báo cáo Browser Evidence — Tranche Data, Reporting and Sidebar (2026-07-14)
 
-Tài liệu này ghi nhận kết quả kiểm thử giao diện và hành vi trên trình duyệt của ứng dụng **Khai-bao-Cang-vu** tại branch `recovery` cho các chức năng liên quan đến dữ liệu định kỳ, báo cáo thống kê sản lượng (Analytics), bố cục sidebar và import Excel thông minh (Smart Excel Import).
+Tài liệu này ghi nhận kết quả kiểm thử giao diện và hành vi trên trình duyệt của ứng dụng **Quan-Ly-Xalan** tại branch `recovery` cho các chức năng liên quan đến dữ liệu định kỳ, báo cáo thống kê sản lượng (Analytics), bố cục sidebar và import Excel thông minh (Smart Excel Import).
 
 ---
 

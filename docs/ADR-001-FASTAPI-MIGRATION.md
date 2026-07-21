@@ -7,7 +7,7 @@
 
 ## Decision
 
-FastAPI with SQLAlchemy ORM is the confirmed target backend architecture for Khai-bao-Cang-vu.
+FastAPI with SQLAlchemy ORM is the confirmed target backend architecture for Quan-Ly-Xalan.
 The previous Python stdlib (`http.server`) backend at commit `29ef124` is superseded.
 
 ## Rationale

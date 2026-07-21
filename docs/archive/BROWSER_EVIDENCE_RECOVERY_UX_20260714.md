@@ -1,6 +1,6 @@
 # Báo cáo Browser Evidence — Recovery UX (2026-07-14)
 
-Tài liệu này ghi nhận kết quả kiểm thử trực tiếp giao diện và hành vi trên trình duyệt của ứng dụng **Khai-bao-Cang-vu** tại branch `recovery` cho vai trò CUSTOMER và các bước của Wizard.
+Tài liệu này ghi nhận kết quả kiểm thử trực tiếp giao diện và hành vi trên trình duyệt của ứng dụng **Quan-Ly-Xalan** tại branch `recovery` cho vai trò CUSTOMER và các bước của Wizard.
 
 ---
 

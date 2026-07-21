@@ -1,5 +1,5 @@
 """
-Khai-bao-Cang-vu FastAPI backend — T0 Baseline Recovery
+Quản Lý Xalan FastAPI backend — T0 Baseline Recovery
 WO-KBCV-T0-20260711
 
 Entry point: python -m uvicorn backend.app:app --host 127.0.0.1 --port 8080
@@ -37,7 +37,9 @@ from .tenant import (
     scope_allows_vessel, require_vessel_in_scope,
 )
 from .storage import ScannerNotConfigured, get_attachment_storage
-from .database import DB_PATH, SessionLocal, audit, cargo, correlation_id, engine, now_iso
+from .database import (
+    SQLALCHEMY_DATABASE_URL, SessionLocal, audit, cargo, correlation_id, engine, now_iso,
+)
 from .models import (
     Attachment, AuditEvent, Base, CrewMember, Declaration,
     DeclarationCrew, DeclarationEvent, ImportJob, IntegrationConnector, Organization,
@@ -50,7 +52,12 @@ from .xlsx_io import (
     make_xlsx, read_workbook, vessel_rows,
 )
 from .historical_api import router as historical_import_router
-from scripts.backup_local import backup as create_local_backup, prune as prune_local_backups
+from scripts.backup_local import (
+    BACKUP_GLOB,
+    BACKUP_SUFFIX,
+    backup as create_local_backup,
+    prune as prune_local_backups,
+)
 
 IMPORT_MAPPING_VERSION = "KBCV-IMPORT-1.5"
 DEMO_ORGANIZATION_TAX_CODE = "DEMO-TANTHUAN-2026"
@@ -66,7 +73,7 @@ attachment_storage = get_attachment_storage(ATTACHMENT_DIR / "quarantine")
 attachment_scanner = ScannerNotConfigured()
 
 # ── App ────────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Khai-bao-Cang-vu API", version="1.0.0")
+app = FastAPI(title="Quản Lý Xalan API", version="1.0.0")
 app.include_router(historical_import_router)
 
 
@@ -689,7 +696,7 @@ def update_notification_preferences(
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "database": "sqlite-sqlalchemy", "storage": attachment_storage.backend_name, "version": "1.0.0"}
+    return {"status": "ok", "database": "postgresql-sqlalchemy", "storage": attachment_storage.backend_name, "version": "1.0.0"}
 
 
 @app.get("/api/ready")
@@ -752,7 +759,7 @@ def admin_operations_summary(
         1 for vessel in db.query(Vessel).all()
         if certificate_status(vessel.certificate_expiry_date) in {"EXPIRING", "EXPIRED"}
     )
-    backups = list(BACKUP_DIR.glob("*.db")) if BACKUP_DIR.exists() else []
+    backups = list(BACKUP_DIR.glob(BACKUP_GLOB)) if BACKUP_DIR.exists() else []
     latest_backup = max(backups, key=lambda item: item.stat().st_mtime).name if backups else None
     return {
         "period": {"from": year_start, "to": today.isoformat()},
@@ -792,7 +799,7 @@ def list_admin_backups(user: User = Depends(require_roles("PLATFORM_ADMIN"))):
     return [
         _backup_record(path)
         for path in sorted(
-            BACKUP_DIR.glob("cang_vu-*.db"),
+            BACKUP_DIR.glob(BACKUP_GLOB),
             key=lambda item: item.stat().st_mtime,
             reverse=True,
         )
@@ -803,19 +810,15 @@ def list_admin_backups(user: User = Depends(require_roles("PLATFORM_ADMIN"))):
 def create_admin_backup(
     db: Session = Depends(get_db), user: User = Depends(require_roles("PLATFORM_ADMIN")),
 ):
-    database = engine.url.database
-    if engine.url.get_backend_name() != "sqlite" or not database or database == ":memory:":
+    if engine.url.get_backend_name() != "postgresql" or not engine.url.database:
         raise HTTPException(
             status_code=503,
-            detail="Sao lưu trực tiếp chỉ khả dụng với cấu hình SQLite cục bộ.",
+            detail="Sao lưu trực tiếp chỉ khả dụng với cấu hình PostgreSQL.",
         )
-    source = Path(database)
-    if not source.exists():
-        raise HTTPException(status_code=503, detail="Không tìm thấy cơ sở dữ liệu để sao lưu.")
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    destination = BACKUP_DIR / f"cang_vu-{stamp}.db"
+    destination = BACKUP_DIR / f"cang_vu-{stamp}{BACKUP_SUFFIX}"
     try:
-        create_local_backup(source, destination)
+        create_local_backup(SQLALCHEMY_DATABASE_URL, destination)
         removed = prune_local_backups(BACKUP_DIR)
     except Exception as exc:
         access_logger.exception("Local backup failed")

@@ -86,7 +86,7 @@ Test categories covered:
 5. CORS allowlist per environment
 6. Rate limit login, password policy, audit login events
 
-Work order issued: `docs/WORK_ORDER_T1_IDENTITY_RBAC_TENANT_ISOLATION.md`
+Work order issued: `docs/archive/WORK_ORDER_T1_IDENTITY_RBAC_TENANT_ISOLATION.md`
 (`WO-KBCV-T1-20260711`, READY FOR ASSIGNMENT).
 
 ### Human review closure record
@@ -159,11 +159,11 @@ BLOCKED until official external authority prerequisites are available.
 
 Issued work orders:
 
-- `docs/WORK_ORDER_T2_DOMAIN_INTEGRITY_PERSISTENCE.md`
-- `docs/WORK_ORDER_T3_FILES_IMPORTS_REPORTS.md`
-- `docs/WORK_ORDER_T4_OPERABILITY_PRODUCTION_FOUNDATION.md`
-- `docs/WORK_ORDER_T5_PRODUCT_PROFESSIONALIZATION.md`
-- `docs/WORK_ORDER_T6_EXTERNAL_AUTHORITY_INTEGRATIONS.md`
+- `docs/archive/WORK_ORDER_T2_DOMAIN_INTEGRITY_PERSISTENCE.md`
+- `docs/archive/WORK_ORDER_T3_FILES_IMPORTS_REPORTS.md`
+- `docs/archive/WORK_ORDER_T4_OPERABILITY_PRODUCTION_FOUNDATION.md`
+- `docs/archive/WORK_ORDER_T5_PRODUCT_PROFESSIONALIZATION.md`
+- `docs/archive/WORK_ORDER_T6_EXTERNAL_AUTHORITY_INTEGRATIONS.md`
 
 ### Human review closure record
 
@@ -310,7 +310,7 @@ adapter-ready; external activation remains blocked.
   it displays only statuses visible to that role and never grants an action.
 - Standardized write-form busy/recovery states and assertive API-error
   announcements to avoid duplicate submissions and inaccessible failures.
-- Added `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` for controlled UAT,
+- Added `docs/archive/T5_GATE5_EVIDENCE_PROTOCOL.md` for controlled UAT,
   accessibility, responsive and performance evidence collection.
 - CVF public core reconciled at `141031c`; Workspace Doctor: PASS 17/17.
 - Added audited, user-controlled in-app certificate-reminder preferences;
@@ -327,7 +327,7 @@ adapter-ready; external activation remains blocked.
 Representative-user task study, browser-assisted accessibility audit,
 responsive viewport matrix and reference-dataset performance measurements are
 not yet available. Gate 5 is not closed. Reopen T5 only when the product owner
-schedules `docs/T5_GATE5_EVIDENCE_PROTOCOL.md`, supplies the agreed reference
+schedules `docs/archive/T5_GATE5_EVIDENCE_PROTOCOL.md`, supplies the agreed reference
 conditions/results, or authorizes a UX change that affects authority/workflow
 meaning. T6 remains manual-scaffold complete and reopens only on receipt of the
 official authority prerequisites recorded in its work order.
@@ -373,9 +373,9 @@ remains outside this closure.
 - **Status**: CLOSED — all browser findings and full six-step wizard UAT passed.
 - **Gate 5 Status**: CLOSED (PASS)
 - **Canonical session handoff**:
-  `docs/SESSION_HANDOFF_RECOVERY_UX_20260713.md`
+  `docs/archive/SESSION_HANDOFF_RECOVERY_UX_20260713.md`
 - **UX issue ledger**:
-  `docs/UX_REEVALUATION_RECOVERY_BRANCH_20260713.md`
+  `docs/archive/UX_REEVALUATION_RECOVERY_BRANCH_20260713.md`
 
 Tất cả các bước UAT Wizard 1-6 đã hoàn thành. Bằng chứng kiểm thử visual được
 lưu tại `docs/evidence/recovery-ux-20260714/`. Analytics và production/staging
@@ -409,7 +409,7 @@ Evidence available:
 - `git diff --check`: PASS.
 - Browser/UAT evidence (2026-07-14): ALL PASSED. Đã kiểm thử và chụp ảnh đầy đủ UAT cho cả 3 role (CUSTOMER, PORT_STAFF, ADMIN) và 3 viewport (Desktop, Tablet, Mobile) cũng như cả 2 theme (Dark, Light).
 - Retest corrective commit `a9946cb`: preview hiển thị dòng 15/TN-0963 và badge chuẩn hóa; import lần đầu đạt 39/0, không lộ SQL; re-import hiển thị trạng thái duplicate-safe riêng.
-- Báo cáo chi tiết: [docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
+- Báo cáo chi tiết: [docs/archive/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md](file:///D:/UNG%20DUNG%20AI/TOOL%20AI%202026/CVF-Workspace/Khai-bao-Cang-vu-recovery-ux/docs/archive/BROWSER_EVIDENCE_DATA_REPORTING_SIDEBAR_20260714.md).
 - Targeted evidence đã đủ: network response lần hai có `idempotent=true`; database giữ 39 phương tiện và 1 import job; TN-0963 có giá trị chuẩn hóa cùng notes nguồn. Biên nhận nằm trong `docs/evidence/data-reporting-sidebar-20260714/`.
 - Tranche **Recovery Data, Reporting and Sidebar** được đóng **CLOSED / PASS** trong phạm vi local/pilot. Không suy diễn kết luận này thành production readiness hoặc bằng chứng governance AI.
 
@@ -668,12 +668,12 @@ Decision:
 
 Evidence now available:
 
-- `docs/APPENDIX_TEMPLATE_AUDIT_20260716.md` — static template/code audit.
-- `docs/APPENDIX_EXPORT_VERIFICATION_20260716.md` — generated-workbook and
+- `docs/archive/APPENDIX_TEMPLATE_AUDIT_20260716.md` — static template/code audit.
+- `docs/archive/APPENDIX_EXPORT_VERIFICATION_20260716.md` — generated-workbook and
   visual Spreadsheet verification.
-- `docs/CVF_UPSTREAM_USE_CASE_CANONICAL_DATA_AND_APPENDIX_AUDIT_20260716.md` —
+- `docs/archive/CVF_UPSTREAM_USE_CASE_CANONICAL_DATA_AND_APPENDIX_AUDIT_20260716.md` —
   sanitized upstream proposal.
-- `docs/CANONICAL_DATA_AND_APPENDIX_ASSURANCE_ROADMAP_20260716.md` — governed
+- `docs/archive/CANONICAL_DATA_AND_APPENDIX_ASSURANCE_ROADMAP_20260716.md` — governed
   downstream execution order and gates.
 
 Current report conclusion:
@@ -713,7 +713,7 @@ Next governed move:
 
 New evidence:
 
-- Section 11 of `docs/APPENDIX_EXPORT_VERIFICATION_20260716.md` now maps all
+- Section 11 of `docs/archive/APPENDIX_EXPORT_VERIFICATION_20260716.md` now maps all
   67 columns: PL.01 16, PL.02 16 and PL.03 35.
 - Each mapping identifies static/activity/aggregate class, canonical source,
   fallback, read time, report condition, blank/conflict rule and concrete
@@ -838,7 +838,7 @@ Artifacts updated:
   confirmations and APPX-01–04/MAP-01–05 business decisions.
 - `docs/REPORT_MAPPING_SPEC.md` is advanced to `KBCV-REPORT-MAP-1.1`, status
   `BUSINESS RULES APPROVED; DESIGN DETAILS PENDING`.
-- `docs/CANONICAL_DATA_AND_APPENDIX_ASSURANCE_ROADMAP_20260716.md` closes T0
+- `docs/archive/CANONICAL_DATA_AND_APPENDIX_ASSURANCE_ROADMAP_20260716.md` closes T0
   and starts T1 DESIGN.
 
 T1 must still define before BUILD:
@@ -888,7 +888,7 @@ Evidence:
 Open gate:
 
 - Browser interaction QA is blocked because the managed browser policy rejects localhost; only static frontend and API regression checks are complete.
-- Run `docs/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_20260717.md` in Codex Desktop. Do not close APPX/MAP implementation items until its artifact-tool renders pass.
+- Run `docs/archive/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_20260717.md` in Codex Desktop. Do not close APPX/MAP implementation items until its artifact-tool renders pass.
 - BUILD foundation was committed locally as `5db6022`; it has not been pushed.
 
 ### Owner clarification — canonical Salan row skeleton
@@ -921,7 +921,7 @@ declarations must not remove the 47 known Salan rows from PL.01/PL.03.
 - Regenerated workbooks are in `outputs/appendix-positive-fixture-20260717/`
   and `outputs/appendix-operational-review-20260717/`.
 - Run
-  `docs/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_20260717.md`.
+  `docs/archive/WORK_ORDER_CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_20260717.md`.
   Keep the Spreadsheet release gate OPEN until the focused artifact-tool render
   confirms `AG10:AH10` is fully legible and no PL.03 layout regression exists.
 - Live business data evidence remains NOT PROVABLE because the operational DB
@@ -945,7 +945,7 @@ declarations must not remove the 47 known Salan rows from PL.01/PL.03.
   Salan rows are valid; blank activity is expected. Live business data remains
   NOT PROVABLE until a real approved sample is reconciled.
 - Evidence:
-  `docs/CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_RESULT_20260717.md` and
+  `docs/archive/CODEX_DESKTOP_SPREADSHEET_REGRESSION_RECHECK_RESULT_20260717.md` and
   `outputs/codex-desktop-spreadsheet-regression-recheck-20260717/`.
 - No CVF-core change is authorized. T5 stays deferred to a separate session in
   the CVF repository.
@@ -1130,7 +1130,7 @@ Next governed move:
   Not committed; not closed; H3/H4 not started.
 - **Phase**: BUILD. REVIEW and FREEZE gates remain ahead.
 - **Risk Level**: R2.
-- **Order**: executed `docs/CLAUDE_H2_CORRECTION_ORDER_20260718.md` (H2 REJECTED).
+- **Order**: executed `docs/archive/CLAUDE_H2_CORRECTION_ORDER_20260718.md` (H2 REJECTED).
 
 ### Withdrawn claim
 
@@ -1252,7 +1252,7 @@ vessels, 0 declarations). No backup database was modified.
   Not committed; not closed; H3/H4 not started.
 - **Phase**: BUILD. REVIEW and FREEZE gates remain ahead.
 - **Risk Level**: R2.
-- **Order**: executed `docs/CLAUDE_H2_CORRECTION_ORDER_R2_20260718.md`
+- **Order**: executed `docs/archive/CLAUDE_H2_CORRECTION_ORDER_R2_20260718.md`
   (H2 REJECTED AFTER REVIEW ROUND 2). The round-1 passing baseline
   (distinct `ReportingUnit`, historical composite FKs, SQLite FK enforcement,
   DB cascade, migration up/down/re-up) was preserved and not regressed.
@@ -1375,7 +1375,7 @@ is gitignored, was not staged, and is not operational evidence.
   Not committed; not closed; H3/H4 not started.
 - **Phase**: BUILD. REVIEW and FREEZE gates remain ahead.
 - **Risk Level**: R2.
-- **Order**: executed `docs/CLAUDE_H2_CORRECTION_ORDER_R3_20260718.md`
+- **Order**: executed `docs/archive/CLAUDE_H2_CORRECTION_ORDER_R3_20260718.md`
   (H2 REJECTED AFTER REVIEW ROUND 3). Two service-layer authorization defects
   only. The R2 schema, membership tables, composite foreign keys, tenant-scoped
   audit, migration and schema-drift verification are unchanged and not regressed.

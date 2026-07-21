@@ -28,10 +28,10 @@ source DOCX.
 
 The answers were compared with:
 
-- `docs/APPENDIX_EXPORT_VERIFICATION_20260716.md`;
-- `docs/APPENDIX_TEMPLATE_AUDIT_20260716.md`;
+- `docs/archive/APPENDIX_EXPORT_VERIFICATION_20260716.md`;
+- `docs/archive/APPENDIX_TEMPLATE_AUDIT_20260716.md`;
 - `docs/REPORT_MAPPING_SPEC.md` (`KBCV-REPORT-MAP-1.0`);
-- `docs/CANONICAL_DATA_AND_APPENDIX_ASSURANCE_ROADMAP_20260716.md`;
+- `docs/archive/CANONICAL_DATA_AND_APPENDIX_ASSURANCE_ROADMAP_20260716.md`;
 - `docs/AGENT_HANDOFF.md`.
 
 ## 2. Faithful summary of the owner's answers

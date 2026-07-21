@@ -1,4 +1,4 @@
-# EA Remediation Roadmap — Khai-bao-Cang-vu
+# EA Remediation Roadmap — Quan-Ly-Xalan
 
 > Baseline review: 2026-07-11  
 > Scope: working tree hiện tại  
@@ -224,7 +224,7 @@ scope. They must not be silently treated as backlog defects or as passed gates.
 | Deferred gate | What is waiting | Objective reopen condition |
 |---|---|---|
 | Production part of T4 | Hosting/domain/TLS/staging, MinIO endpoint, alert delivery, owner-led restore drill | Named owners provide the environment and secrets out of band; staging migration/smoke/rollback and restore evidence can be run. |
-| Evidence part of T5 | Representative users, accessibility reviewer, agreed browser/device and reference dataset | Product owner schedules the protocol in `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` and provides results/approval. |
+| Evidence part of T5 | Representative users, accessibility reviewer, agreed browser/device and reference dataset | Product owner schedules the protocol in `docs/archive/T5_GATE5_EVIDENCE_PROTOCOL.md` and provides results/approval. |
 | Activation part of T6 | Authority/registry API | Official versioned contract, sandbox endpoint/test identities, credential process, privacy/data-field approval, rate/support rules and R2/R3 approval are available. |
 
 ## 6. Priority and dependency
@@ -273,7 +273,7 @@ trong danh sách ưu tiên dưới đây.
 | 3 | Session security: JWT đang được lưu trong `localStorage`; chưa có cơ chế thu hồi token phía server | OPEN — local/pilot còn chấp nhận được, production chưa đạt | P0: đánh giá secure cookie/BFF hoặc token revocation; bổ sung negative/security tests |
 | 4 | Upload boundary: endpoint đọc toàn bộ request body trước khi xử lý; cần request-size limit và bảo vệ ở reverse proxy | OPEN | P0: giới hạn kích thước ở proxy và ứng dụng; kiểm thử file lớn, timeout và memory pressure |
 | 5 | Maintainability: `backend/app.py` và `frontend/app.js` quá lớn, tăng rủi ro regression khi mở rộng | OPEN | P1: tách module theo domain/route, giữ contract test và không thay đổi semantics workflow |
-| 6 | UX Gate 5: chưa có user study, accessibility audit, responsive matrix và performance traces | OPEN — bằng chứng chưa thu thập | P1 sau các hardening P0; thực hiện theo `docs/T5_GATE5_EVIDENCE_PROTOCOL.md` |
+| 6 | UX Gate 5: chưa có user study, accessibility audit, responsive matrix và performance traces | OPEN — bằng chứng chưa thu thập | P1 sau các hardening P0; thực hiện theo `docs/archive/T5_GATE5_EVIDENCE_PROTOCOL.md` |
 
 ### Execution order
 

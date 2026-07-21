@@ -1,7 +1,7 @@
 ﻿# CVF Project Bootstrap Log
 
 ## 1. Record Metadata
-- Record ID: BOOTSTRAP-20260711-Khai-bao-Cang-vu
+- Record ID: BOOTSTRAP-20260711-Quan-Ly-Xalan
 - Date: 2026-07-11
 - Prepared By:
 - Reviewed By:

@@ -1,4 +1,4 @@
-# API Contract — Khai-bao-Cang-vu
+# API Contract — Quan-Ly-Xalan
 
 > Generated: 2026-07-11
 > Tranche: T1 Identity, RBAC & Tenant Isolation (WO-KBCV-T1-20260711)

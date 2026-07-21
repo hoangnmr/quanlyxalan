@@ -3,7 +3,7 @@
 Status: BUILD — H2 CLOSED/ACCEPTED (2026-07-18); H3 READY, NOT STARTED
 Date: 2026-07-17
 Updated: 2026-07-18
-Project: Khai-bao-Cang-vu-recovery-ux
+Project: Quan-Ly-Xalan-recovery-ux
 Workstream: Historical PL.01/PL.02/PL.03 and TOS operational import/reporting
 Risk level: R2
 

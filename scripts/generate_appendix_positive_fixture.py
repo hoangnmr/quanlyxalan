@@ -1,6 +1,7 @@
 """Generate isolated positive appendix workbooks through the application exporter.
 
-The script uses an in-memory database and never reads or changes data/cang_vu.db.
+The script provisions a throwaway PostgreSQL database and never reads or
+changes the application database.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tests import _pgdb
 from backend.app import _appendix1_rows, _appendix2_rows, _appendix3_rows
 from backend.database import cargo
 from backend.models import Base, Declaration, Organization, Vessel, VesselOperatingProfile
@@ -59,7 +61,8 @@ def declaration(**values) -> Declaration:
 
 
 def main() -> None:
-    engine = create_engine("sqlite:///:memory:")
+    url = _pgdb.create_database("kbcv_fixture")
+    engine = create_engine(url)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     db = Session()
@@ -126,10 +129,12 @@ def main() -> None:
     ))
     (OUTPUT_DIR / "README.txt").write_text(
         "Synthetic positive QA fixture generated through the application exporter.\n"
-        "It uses an in-memory database and does not contain operational/customer data.\n",
+        "It uses a throwaway database and does not contain operational/customer data.\n",
         encoding="utf-8",
     )
     db.close()
+    engine.dispose()
+    _pgdb.drop_database(url)
     print(OUTPUT_DIR)
 
 

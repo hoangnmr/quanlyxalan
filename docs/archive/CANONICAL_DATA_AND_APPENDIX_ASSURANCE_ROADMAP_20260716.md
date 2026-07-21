@@ -3,7 +3,7 @@
 Status: T0–T4 IMPLEMENTATION CLOSED — LIVE BUSINESS VALIDATION REMAINS
 Date: 2026-07-16
 Updated: 2026-07-17 — incorporated the 67-column mapping and owner decision register
-Project: Khai-bao-Cang-vu-recovery-ux
+Project: Quan-Ly-Xalan-recovery-ux
 Current phase: REVIEW
 Next phase: downstream live-data acceptance or separate T5 upstream proposal
 Risk level: R2

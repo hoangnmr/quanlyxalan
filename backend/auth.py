@@ -19,7 +19,7 @@ if "pytest" not in sys.modules:
     ROOT = Path(__file__).resolve().parents[1]
     load_dotenv(dotenv_path=ROOT / ".env")
 
-DEFAULT_SECRET = "khai-bao-cang-vu-secret-key-2026"
+DEFAULT_SECRET = "quan-ly-xalan-secret-key-2026"
 SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET)
 
 # Fail-fast check for production readiness

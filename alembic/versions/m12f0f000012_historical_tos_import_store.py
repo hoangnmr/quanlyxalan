@@ -25,8 +25,8 @@ and organizations get no memberships and are never backfilled to a specific port
 
 Tenant consistency for the historical store is enforced with COMPOSITE foreign
 keys so a child carrying reporting unit B cannot reference a parent owned by
-reporting unit A. SQLite foreign-key enforcement is enabled per connection in
-``backend.database``, so these constraints and ON DELETE CASCADE are real.
+reporting unit A. PostgreSQL enforces declared foreign keys unconditionally, so
+these constraints and ON DELETE CASCADE are real.
 
 Guarded creation and drift detection: the ``b01`` baseline migration builds the
 current model metadata with ``Base.metadata.create_all``, so on a fresh database
@@ -100,10 +100,8 @@ def _has_simple_fk(inspector, table: str, column: str, referred_table: str) -> b
     return False
 
 
-def _table_sql(connection, table: str) -> str:
-    return connection.execute(
-        sa.text("SELECT sql FROM sqlite_master WHERE type='table' AND name=:n"), {"n": table}
-    ).scalar() or ""
+def _check_names(inspector, table: str) -> set:
+    return {cc["name"] for cc in inspector.get_check_constraints(table) if cc.get("name")}
 
 
 def _verify_tenant_schema(connection) -> None:
@@ -191,14 +189,14 @@ def _verify_tenant_schema(connection) -> None:
     _require(link_cols["import_id"]["nullable"] is False,
              "historical_vessel_links.import_id must be NOT NULL")
 
-    # Critical CHECK constraints (reflected from the table SQL on SQLite).
-    imports_sql = _table_sql(connection, "historical_report_imports")
-    _require("ck_hist_import_status" in imports_sql, "historical_report_imports missing CHECK 'ck_hist_import_status'")
-    metrics_sql = _table_sql(connection, "historical_report_metrics")
-    _require("ck_hist_metric_value_state" in metrics_sql, "historical_report_metrics missing CHECK 'ck_hist_metric_value_state'")
-    _require("ck_hist_metric_blank_null" in metrics_sql, "historical_report_metrics missing CHECK 'ck_hist_metric_blank_null'")
-    cargo_sql = _table_sql(connection, "historical_cargo_rows")
-    _require("ck_hist_cargo_weight_state" in cargo_sql, "historical_cargo_rows missing CHECK 'ck_hist_cargo_weight_state'")
+    # Critical CHECK constraints, reflected by name via the dialect inspector.
+    imports_checks = _check_names(inspector, "historical_report_imports")
+    _require("ck_hist_import_status" in imports_checks, "historical_report_imports missing CHECK 'ck_hist_import_status'")
+    metrics_checks = _check_names(inspector, "historical_report_metrics")
+    _require("ck_hist_metric_value_state" in metrics_checks, "historical_report_metrics missing CHECK 'ck_hist_metric_value_state'")
+    _require("ck_hist_metric_blank_null" in metrics_checks, "historical_report_metrics missing CHECK 'ck_hist_metric_blank_null'")
+    cargo_checks = _check_names(inspector, "historical_cargo_rows")
+    _require("ck_hist_cargo_weight_state" in cargo_checks, "historical_cargo_rows missing CHECK 'ck_hist_cargo_weight_state'")
 
     # Audit tenant scope.
     _require("reporting_unit_id" in _columns(connection, "audit_events"),
@@ -246,7 +244,7 @@ def upgrade() -> None:
         )
 
     # Tenant-scoped audit column (nullable FK; NULL-defaulting REFERENCES is
-    # accepted by SQLite ADD COLUMN and leaves existing audit rows valid).
+    # a nullable ADD COLUMN, which leaves existing audit rows valid).
     if "reporting_unit_id" not in _columns(connection, "audit_events"):
         op.execute("ALTER TABLE audit_events ADD COLUMN reporting_unit_id INTEGER REFERENCES reporting_units (id)")
 
@@ -524,8 +522,7 @@ def downgrade() -> None:
     for table in ("reporting_unit_organizations", "reporting_unit_users"):
         if _has_table(connection, table):
             op.drop_table(table)
-    # Remove the audit tenant column. It is a foreign-key column, which SQLite
-    # cannot DROP in place, so rebuild the (unreferenced) audit_events table.
+    # Remove the audit tenant column along with its foreign-key constraint.
     if "reporting_unit_id" in _columns(connection, "audit_events"):
         with op.batch_alter_table("audit_events") as batch:
             batch.drop_column("reporting_unit_id")

@@ -1,4 +1,4 @@
-# Security Boundary — Khai-bao-Cang-vu
+# Security Boundary — Quan-Ly-Xalan
 
 This document details the security constraints, architecture, and threat mitigation measures implemented in the system as of **WO-KBCV-T1-20260711**.
 

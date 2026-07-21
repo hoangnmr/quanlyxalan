@@ -1,4 +1,4 @@
-# User Setup & Bootstrap Instructions — Khai-bao-Cang-vu
+# User Setup & Bootstrap Instructions — Quan-Ly-Xalan
 
 This document details the configuration requirements, database migrations, and administrative user bootstrapping for the system.
 

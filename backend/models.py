@@ -22,7 +22,7 @@ class User(Base):
     # (``reporting_unit_users``), not a soft column, so it cannot hold an
     # invalid/nonexistent unit id. A user may belong to more than one port; a
     # platform administrator may have no membership at all. See ReportingUnitUser.
-    is_active = Column(Integer, nullable=False, default=1)  # Using Integer (0 or 1) as SQLite boolean
+    is_active = Column(Integer, nullable=False, default=1)  # 0/1 integer flag (legacy boolean encoding)
     notification_preferences_json = Column(Text, nullable=False, default='{"in_app_certificate_reminders": true}')
     created_at = Column(String, default=now_iso)
 
@@ -314,8 +314,8 @@ class ImportJob(Base):
 #     reporting unit A: (import_id, reporting_unit_id) must match a real
 #     historical_report_imports(id, reporting_unit_id) pair, and likewise for
 #     rows, port calls and revision lineage.
-#   - SQLite foreign-key enforcement is turned on for every connection (see
-#     backend.database), so these constraints and ON DELETE CASCADE are real.
+#   - PostgreSQL enforces declared foreign keys unconditionally, so these
+#     constraints and ON DELETE CASCADE are real.
 #
 # Candidate-vessel tenancy is a multi-hop rule (link -> vessel -> organization ->
 # reporting_unit) that is not portably expressible as a single database

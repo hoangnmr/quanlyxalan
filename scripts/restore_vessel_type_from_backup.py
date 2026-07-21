@@ -8,8 +8,9 @@ chứng từ nào. vessel_type phải giữ nguyên văn đó; "Tàu hàng khô"
 container"… chuyển sang trường vessel_category (tùy chọn, không liên quan
 chứng từ).
 
-Script đọc giá trị vessel_type gốc từ một bản sao lưu (mặc định là bản chụp
-trước migrate đầu tiên) và ghi đè lại theo id, không đụng tới cột nào khác.
+Script đọc giá trị vessel_type gốc từ một bản sao lưu SQLite lịch sử (bản chụp
+trước migrate đầu tiên, có từ thời hệ thống còn chạy SQLite) và ghi đè lại theo
+id vào CSDL PostgreSQL hiện hành, không đụng tới cột nào khác.
 
     python scripts/restore_vessel_type_from_backup.py
     python scripts/restore_vessel_type_from_backup.py --apply
@@ -17,36 +18,47 @@ trước migrate đầu tiên) và ghi đè lại theo id, không đụng tới 
 from __future__ import annotations
 
 import argparse
-import shutil
+import os
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
 
+from sqlalchemy import create_engine, text
+
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "data" / "cang_vu.db"
+sys.path.insert(0, str(ROOT))
 DEFAULT_BACKUP = ROOT / "data" / "backups" / "cang_vu-20260720-200758-pre-vessel-type-vocab.db"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Ghi thay đổi vào CSDL")
-    parser.add_argument("--db", default=str(DB_PATH))
+    parser.add_argument("--url", default=None,
+                        help="PostgreSQL URL đích (mặc định: cấu hình ứng dụng)")
     parser.add_argument("--backup-source", default=str(DEFAULT_BACKUP),
-                         help="Bản sao lưu chứa giá trị vessel_type gốc cần khôi phục")
+                         help="Bản sao lưu SQLite chứa giá trị vessel_type gốc cần khôi phục")
     args = parser.parse_args()
 
-    db_path = Path(args.db)
     source_path = Path(args.backup_source)
-    if not db_path.exists() or not source_path.exists():
-        print(f"Thiếu tệp: {db_path if not db_path.exists() else source_path}")
+    if not source_path.exists():
+        print(f"Thiếu tệp: {source_path}")
         return 1
+
+    if args.url:
+        url = args.url
+    else:
+        from backend.database import SQLALCHEMY_DATABASE_URL
+
+        url = os.environ.get("DATABASE_URL") or SQLALCHEMY_DATABASE_URL
 
     source = sqlite3.connect(source_path)
     original = {row[0]: row[1] for row in source.execute("SELECT id, vessel_type FROM vessels")}
     source.close()
 
-    con = sqlite3.connect(db_path)
-    current = {row[0]: row[1] for row in con.execute("SELECT id, vessel_type FROM vessels")}
+    engine = create_engine(url)
+    con = engine.connect()
+    current = {row[0]: row[1] for row in con.execute(text("SELECT id, vessel_type FROM vessels"))}
 
     planned = [(vid, current[vid], original[vid]) for vid in current
                if vid in original and current[vid] != original[vid]]
@@ -73,17 +85,19 @@ def main() -> int:
         con.close()
         return 0
 
+    from backup_local import backup as create_backup
+
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = db_path.parent / "backups" / f"{db_path.stem}-{stamp}-pre-vessel-type-restore.db"
-    backup.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(db_path, backup)
+    backup = ROOT / "data" / "backups" / f"cang_vu-{stamp}-pre-vessel-type-restore.dump"
+    create_backup(url, backup)
     print(f"\nĐã sao lưu: {backup}")
 
-    con.executemany(
-        "UPDATE vessels SET vessel_type = ?, updated_at = ? WHERE id = ?",
-        [(new, datetime.now().isoformat(timespec="seconds"), vid) for vid, _, new in planned],
-    )
-    con.commit()
+    with con.begin():
+        con.execute(
+            text("UPDATE vessels SET vessel_type = :vessel_type, updated_at = :ts WHERE id = :id"),
+            [{"vessel_type": new, "ts": datetime.now().isoformat(timespec="seconds"), "id": vid}
+             for vid, _, new in planned],
+        )
     print(f"Đã khôi phục {len(planned)} hồ sơ.")
     con.close()
     return 0

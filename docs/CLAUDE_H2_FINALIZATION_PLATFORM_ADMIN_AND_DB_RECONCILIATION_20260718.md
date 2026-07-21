@@ -30,9 +30,9 @@ Read first:
 - `../WORKSPACE_RULES.md`
 - `docs/HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md`
 - `docs/AGENT_HANDOFF.md`
-- `docs/CLAUDE_H2_CORRECTION_ORDER_20260718.md`
-- `docs/CLAUDE_H2_CORRECTION_ORDER_R2_20260718.md`
-- `docs/CLAUDE_H2_CORRECTION_ORDER_R3_20260718.md`
+- `docs/archive/CLAUDE_H2_CORRECTION_ORDER_20260718.md`
+- `docs/archive/CLAUDE_H2_CORRECTION_ORDER_R2_20260718.md`
+- `docs/archive/CLAUDE_H2_CORRECTION_ORDER_R3_20260718.md`
 
 Preserve the H2 implementation accepted by Codex review round 4: ReportingUnit,
 FK-backed memberships, composite tenant FKs, SQLite FK enforcement,

@@ -4,7 +4,7 @@
 > CVF Core: D:\UNG DUNG AI\TOOL AI 2026\CVF-Workspace\.Controlled-Vibe-Framework-CVF
 > CVF Commit: a78b35c
 > Bootstrap Date: 2026-07-11
-> Project: Khai-bao-Cang-vu
+> Project: Quan-Ly-Xalan
 > Enforcement Version: 1.0 (W112-T1)
 
 ## Mandatory Governance Proof

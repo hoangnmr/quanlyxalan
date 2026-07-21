@@ -2,9 +2,8 @@
 """
 One-time administrator bootstrap script.
 Usage:
-    $env:ADMIN_USERNAME="admin"
-    $env:ADMIN_PASSWORD="supersecurepassword"
-    python scripts/bootstrap_admin.py
+    ADMIN_USERNAME=admin ADMIN_PASSWORD=supersecurepassword \
+        .venv/bin/python scripts/bootstrap_admin.py
 """
 import os
 import sys
@@ -26,9 +25,8 @@ def main():
 
     if not username or not password:
         print("ERROR: Both ADMIN_USERNAME and ADMIN_PASSWORD environment variables must be set.", file=sys.stderr)
-        print("Example (PowerShell):", file=sys.stderr)
-        print('  $env:ADMIN_USERNAME="admin"', file=sys.stderr)
-        print('  $env:ADMIN_PASSWORD="securepassword"', file=sys.stderr)
+        print("Example:", file=sys.stderr)
+        print('  ADMIN_USERNAME=admin ADMIN_PASSWORD=... python scripts/bootstrap_admin.py', file=sys.stderr)
         sys.exit(1)
 
     if not inspect(engine).has_table("users"):

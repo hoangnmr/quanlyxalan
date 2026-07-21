@@ -1,4 +1,4 @@
-# Technical Catalog — Khai-bao-Cang-vu
+# Technical Catalog — Quan-Ly-Xalan
 
 > Single entry point for understanding this codebase's architecture and finding
 > the right file fast. Read this first; drill into the linked docs for detail.
@@ -20,7 +20,7 @@ reconstructs PL.03 without mutating live declarations.
 Browser (frontend/, static, no build step)
   -> /api/*  (fetch, JWT bearer)
 backend/app.py            FastAPI app + ~90% of routes
-  -> backend/database.py  SQLAlchemy engine/session, SQLite (data/cang_vu.db)
+  -> backend/database.py  SQLAlchemy engine/session, PostgreSQL (DATABASE_URL)
   -> alembic/              schema migrations (source of truth; app never create_all()s in prod path)
   -> backend/xlsx_io.py    stdlib+openpyxl XLSX import/export (reports, registers)
   -> backend/historical_api.py  APIRouter for the historical/TOS workbook import subsystem
@@ -35,7 +35,7 @@ Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Layer | Choice | Notes |
 |---|---|---|
 | Backend framework | FastAPI | single app in `backend/app.py` |
-| ORM / DB | SQLAlchemy + SQLite (pilot) / PostgreSQL (prod target) | `backend/database.py`, `backend/models.py` |
+| ORM / DB | SQLAlchemy + PostgreSQL (psycopg 3) | `backend/database.py`, `backend/models.py` |
 | Migrations | Alembic | `alembic/versions/` — 15 revisions, T0→T6 progression |
 | Validation | Pydantic v2 | `backend/schemas.py` |
 | Auth | JWT bearer, local session | `backend/auth.py`, [docs/ADR-002-SESSION-DESIGN.md](docs/ADR-002-SESSION-DESIGN.md) |
@@ -58,7 +58,7 @@ Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `templates/` | Reference/blank XLSX and DOCX templates the export logic must match |
 | `knowledge/` | Markdown fed into CVF-governed AI runs (not app runtime knowledge) |
 | `outputs/` | Generated review/audit artifacts from `scripts/generate_appendix_*` runs |
-| `data/` | Runtime SQLite DB, attachments, backups — git-ignored |
+| `data/` | Attachments, backups — git-ignored |
 | `.cvf/` | CVF governance manifest + policy (phase model, risk rules) |
 | `.agents/`, `.codex/` | Other agent-tooling config, not app code |
 
@@ -74,7 +74,7 @@ Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `tenant.py` | 185 | Shared tenant-scope guard (`CUSTOMER` vs `PORT` scope); every route resolving a reporting unit should depend on this instead of re-deriving checks |
 | `historical.py` | 177 | Fail-closed tenant validators specific to historical import (multi-hop checks Alembic FKs can't express alone) |
 | `schemas.py` | 134 | Pydantic request/response models |
-| `database.py` | 110 | Engine/session factory, `get_db()`, SQLite FK-enforcement hook, `audit()` helper, cargo/TEU math, correlation-id context var |
+| `database.py` | 100 | Engine/session factory, `get_db()`, PostgreSQL URL validation, `audit()` helper, cargo/TEU math, correlation-id context var |
 | `auth.py` | 81 | JWT issuance/validation, `get_current_user` dependency |
 | `integrations.py` | 83 | External maritime-authority adapter boundary — `MANUAL` mode only, no network calls until an official contract exists |
 | `storage.py` | 75 | `ObjectStorage` protocol; local-disk and quarantine storage backends |
@@ -268,12 +268,12 @@ pass before committing — this is a hard project rule, not a suggestion.
 
 | Script | Purpose |
 |---|---|
-| `run-dev.ps1` | Applies Alembic migrations, then starts uvicorn |
+| `run-dev.sh` | Applies Alembic migrations, then starts uvicorn |
 | `bootstrap_admin.py` | One-time `PLATFORM_ADMIN` user creation |
 | `bootstrap_reporting_unit.py` | Idempotently bind a legacy single-port DB to one `ReportingUnit`; preview-only unless `--apply` |
 | `seed_demo_data.py` | Seeds disposable demo data (sentinel org `DEMO-TANTHUAN-2026`); refuses to run if real data exists |
-| `backup_local.py` / `restore_local.py` | SQLite backup/restore without copying a live DB file; restore requires explicit confirmation |
-| `register-local-backup-task.ps1` | Registers a scheduled Windows task for backups |
+| `backup_local.py` / `restore_local.py` | PostgreSQL backup/restore via `pg_dump`/`pg_restore` with a SHA-256 manifest; restore requires explicit confirmation |
+| `register-local-backup-task.sh` | Registers a launchd daily backup job (macOS) |
 | `generate_appendix_operational_review.py` | Read-only Appendix export from the live local DB, for review |
 | `generate_appendix_positive_fixture.py` | Generates isolated Appendix workbooks via an in-memory DB (never touches `data/cang_vu.db`) |
 

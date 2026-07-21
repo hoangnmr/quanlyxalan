@@ -1,46 +1,38 @@
 import json
 import os
-import sqlite3
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .models import Base, AuditEvent
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
-
-@event.listens_for(Engine, "connect")
-def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
-    """Enforce foreign keys on every SQLite connection.
-
-    SQLite disables foreign-key enforcement by default, so declared foreign keys
-    and ON DELETE CASCADE are silently ignored. This global connect hook turns
-    enforcement on for the application engine, the Alembic migration engine and
-    any test engine created in this process. It is scoped to SQLite connections
-    only, so a non-SQLite backend is unaffected.
-    """
-    if isinstance(dbapi_connection, sqlite3.Connection):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "data" / "cang_vu.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+if (ROOT / ".env").exists():
+    load_dotenv(dotenv_path=ROOT / ".env")
 
-# Allow test suite to override database URL via environment variable
-# set BEFORE importing this module (e.g. in conftest.py or test file preamble)
-SQLALCHEMY_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", f"sqlite:///{DB_PATH}"
+DEFAULT_DATABASE_URL = "postgresql+psycopg://localhost/cangvu"
+
+# ``TEST_DATABASE_URL`` takes precedence and must be set BEFORE this module is
+# imported (test modules do so in their preamble). ``DATABASE_URL`` is the
+# normal deployment knob; both must point at PostgreSQL.
+SQLALCHEMY_DATABASE_URL = (
+    os.environ.get("TEST_DATABASE_URL")
+    or os.environ.get("DATABASE_URL")
+    or DEFAULT_DATABASE_URL
 )
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
+if not SQLALCHEMY_DATABASE_URL.startswith("postgresql"):
+    raise RuntimeError(
+        "This application requires PostgreSQL. "
+        f"Unsupported database URL: {SQLALCHEMY_DATABASE_URL!r}"
+    )
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():

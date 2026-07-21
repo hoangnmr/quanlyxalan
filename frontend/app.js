@@ -20,6 +20,10 @@ const esc = (value = '') => String(value ?? '').replace(/[&<>"]/g, c => ({'&':'&
 const number = value => Number(value || 0);
 const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', {dateStyle:'short', timeStyle: value.includes('T') ? 'short' : undefined}).format(new Date(value)) : '—';
 
+// Base path the app is mounted under ('' at root, '/quanlyxalan' behind the
+// ttport.vn reverse proxy). Derived from <base href> so the same build works in both.
+const API_BASE = new URL('.', document.baseURI).pathname.replace(/\/$/, '');
+
 async function api(path, options = {}) {
   const token = localStorage.getItem('token');
   if (token) {
@@ -28,7 +32,7 @@ async function api(path, options = {}) {
   if (state.activeReportingUnitId && ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(state.currentUser?.role)) {
     options.headers = { ...options.headers, 'X-Reporting-Unit-ID': String(state.activeReportingUnitId) };
   }
-  const response = await fetch(path, options);
+  const response = await fetch(API_BASE + path, options);
   if (response.status === 401 && path !== '/api/auth/login') {
     showLoginDialog('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
     throw new Error('Vui lòng đăng nhập.');

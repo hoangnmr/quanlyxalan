@@ -17,12 +17,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import (
-    Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status
+    BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import desc, func, or_, text
 from sqlalchemy import false as sql_false
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +31,10 @@ from sqlalchemy.orm import Session
 from .auth import create_access_token, get_current_user, get_password_hash, verify_password
 from .integrations import maritime_authority_adapter, registry_adapter
 from .logging_config import configure_local_logging
+from .mailer import (
+    SMTP_SETTING_KEY, get_smtp_config, mailer_enabled as email_notifications_enabled, send_email,
+)
+from .notifications import notify_declaration_submitted, notify_declaration_workflow
 from .rbac import require_roles
 from .tenant import (
     resolve_scope, require_port_scope, Scope, register_vessel_ids,
@@ -41,7 +45,7 @@ from .database import (
     SQLALCHEMY_DATABASE_URL, SessionLocal, audit, cargo, correlation_id, engine, now_iso,
 )
 from .models import (
-    Attachment, AuditEvent, Base, CrewMember, Declaration,
+    AppSetting, Attachment, AuditEvent, Base, CrewMember, Declaration,
     DeclarationCrew, DeclarationEvent, ImportJob, IntegrationConnector, Organization,
     ReportAdjustment, SyncJob, User, Vessel, VesselOperatingProfile,
     ReportingUnit, ReportingUnitOrganization, ReportingUnitUser, ReportingUnitVessel,
@@ -233,9 +237,24 @@ class LoginRequest(BaseModel):
     password: str
 
 
+def _clean_email(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if "@" not in value or " " in value or len(value) > 200:
+        raise ValueError("Email không hợp lệ.")
+    return value
+
+
 class ReportingUnitCreateRequest(BaseModel):
     name: str
     code: str
+    notify_email: str = ""  # email chung của Cảng để nhận thông báo (tùy chọn)
+
+    @field_validator("notify_email")
+    @classmethod
+    def valid_notify_email(cls, value: str) -> str:
+        return _clean_email(value)
 
     @field_validator("name")
     @classmethod
@@ -256,6 +275,91 @@ class ReportingUnitCreateRequest(BaseModel):
         return value
 
 
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+    full_name: str = ""
+    email: str = ""  # địa chỉ nhận thông báo (tùy chọn)
+    role: str
+    # CUSTOMER accounts must be tied to a customer Organization.
+    organization_id: Optional[int] = None
+    # PORT_STAFF accounts may be granted membership in one or more reporting units.
+    reporting_unit_ids: List[int] = []
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        return _clean_email(value)
+
+    @field_validator("username")
+    @classmethod
+    def valid_username(cls, value: str) -> str:
+        value = value.strip().lower()
+        if len(value) < 3 or len(value) > 50:
+            raise ValueError("Tên đăng nhập phải có từ 3 đến 50 ký tự.")
+        if any(char not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for char in value):
+            raise ValueError("Tên đăng nhập chỉ dùng chữ thường a-z, số, dấu chấm, gạch ngang hoặc gạch dưới.")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def valid_password(cls, value: str) -> str:
+        if len(value) < 8 or len(value) > 128:
+            raise ValueError("Mật khẩu phải có từ 8 đến 128 ký tự.")
+        return value
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_full_name(cls, value: str) -> str:
+        return " ".join((value or "").strip().split())[:150]
+
+    @field_validator("role")
+    @classmethod
+    def valid_role(cls, value: str) -> str:
+        value = (value or "").strip().upper()
+        if value not in {"CUSTOMER", "PORT_STAFF", "PLATFORM_ADMIN"}:
+            raise ValueError("Vai trò không hợp lệ.")
+        return value
+
+
+class OrganizationSaveRequest(BaseModel):
+    name: str
+    tax_code: str = ""
+    address: str = ""
+    contact_name: str = ""
+    contact_role: str = ""
+    phone: str = ""
+    email: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, value: str) -> str:
+        value = " ".join((value or "").strip().split())
+        if len(value) < 2 or len(value) > 200:
+            raise ValueError("Tên tổ chức phải có từ 2 đến 200 ký tự.")
+        return value
+
+    @field_validator("tax_code", "address", "contact_name", "contact_role", "phone", "email")
+    @classmethod
+    def trim_optional(cls, value: str) -> str:
+        return (value or "").strip()[:200]
+
+
+class UserResetPasswordRequest(BaseModel):
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def valid_password(cls, value: str) -> str:
+        if len(value) < 8 or len(value) > 128:
+            raise ValueError("Mật khẩu phải có từ 8 đến 128 ký tự.")
+        return value
+
+
+class UserActiveRequest(BaseModel):
+    is_active: bool
+
+
 class CargoPayload(BaseModel):
     cargo_type: str = ""
     movement_type: str = ""
@@ -264,6 +368,12 @@ class CargoPayload(BaseModel):
     cont20_empty: int = 0
     cont40_full: int = 0
     cont40_empty: int = 0
+    # Số tấn cho MỖI container theo từng loại (đơn giá). Dùng để tự tính Khối
+    # lượng = Σ(số lượng × số tấn); vẫn cho phép sửa tay ``tons``.
+    tons20_full: float = 0.0
+    tons20_empty: float = 0.0
+    tons40_full: float = 0.0
+    tons40_empty: float = 0.0
     tons: float = 0.0
 
     @field_validator("cont20_full", "cont20_empty", "cont40_full", "cont40_empty")
@@ -273,7 +383,7 @@ class CargoPayload(BaseModel):
             raise ValueError("Số lượng container không được âm.")
         return value
 
-    @field_validator("tons")
+    @field_validator("tons20_full", "tons20_empty", "tons40_full", "tons40_empty", "tons")
     @classmethod
     def non_negative_tons(cls, value: float) -> float:
         if value < 0:
@@ -513,6 +623,89 @@ class PrepareSyncRequest(BaseModel):
 
 class NotificationPreferenceRequest(BaseModel):
     in_app_certificate_reminders: bool = True
+    email_workflow_updates: bool = False
+    email_certificate_reminders: bool = False
+
+
+class MyProfileRequest(BaseModel):
+    """Self-service profile update: a user editing their own contact + opt-in."""
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    in_app_certificate_reminders: bool = True
+    email_workflow_updates: bool = False
+    email_certificate_reminders: bool = False
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_full_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return " ".join(value.strip().split())[:150]
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return _clean_email(value)
+
+
+class UserUpdateRequest(BaseModel):
+    """Admin editing another user's contact fields (not username/role/password)."""
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_full_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return " ".join(value.strip().split())[:150]
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return _clean_email(value)
+
+
+class SmtpConfigRequest(BaseModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = 587
+    username: str = ""
+    # Rỗng => giữ mật khẩu đã lưu (không ghi đè). Có giá trị => cập nhật.
+    password: Optional[str] = None
+    from_email: str = Field("", alias="from")
+    use_tls: bool = True
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("from_email")
+    @classmethod
+    def valid_from(cls, value: str) -> str:
+        value = (value or "").strip()
+        if value and "@" not in value:
+            raise ValueError("Email gửi không hợp lệ.")
+        return value[:200]
+
+    @field_validator("host", "username")
+    @classmethod
+    def trim(cls, value: str) -> str:
+        return (value or "").strip()[:200]
+
+
+class SmtpTestRequest(BaseModel):
+    to: str
+
+    @field_validator("to")
+    @classmethod
+    def valid_to(cls, value: str) -> str:
+        value = (value or "").strip()
+        if "@" not in value:
+            raise ValueError("Địa chỉ nhận không hợp lệ.")
+        return value
 
 
 class ReportAdjustmentRequest(BaseModel):
@@ -637,15 +830,19 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
 
 @app.get("/api/auth/me")
-def get_me(user: User = Depends(get_current_user)):
+def get_me(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return {
         "id": user.id,
         "username": user.username,
         "full_name": user.full_name,
+        "email": user.email or "",
         "role": user.role,
         "organization_id": user.organization_id,
         "organization_name": user.organization.name if user.organization else None,
         "notification_preferences": _notification_preferences(user),
+        # Cho biết SMTP đã cấu hình chưa (không lộ thông tin nhạy cảm) để tab
+        # Cài đặt hiển thị trạng thái email.
+        "email_enabled": email_notifications_enabled(db),
     }
 
 
@@ -660,7 +857,12 @@ def _notification_preferences(user: User) -> dict[str, bool]:
         stored = json.loads(user.notification_preferences_json or "{}")
     except (TypeError, ValueError, json.JSONDecodeError):
         stored = {}
-    return {"in_app_certificate_reminders": bool(stored.get("in_app_certificate_reminders", True))}
+    return {
+        "in_app_certificate_reminders": bool(stored.get("in_app_certificate_reminders", True)),
+        # Email opt-in: mặc định TẮT để tránh làm phiền; người dùng tự bật.
+        "email_workflow_updates": bool(stored.get("email_workflow_updates", False)),
+        "email_certificate_reminders": bool(stored.get("email_certificate_reminders", False)),
+    }
 
 
 @app.get("/api/notification-preferences")
@@ -674,7 +876,11 @@ def update_notification_preferences(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    preferences = {"in_app_certificate_reminders": payload.in_app_certificate_reminders}
+    preferences = {
+        "in_app_certificate_reminders": payload.in_app_certificate_reminders,
+        "email_workflow_updates": payload.email_workflow_updates,
+        "email_certificate_reminders": payload.email_certificate_reminders,
+    }
     # `user` is supplied by the authentication dependency and can be bound to
     # a separate request session. Persist through this endpoint's transaction.
     current_user = db.query(User).filter(User.id == user.id).first()
@@ -683,11 +889,149 @@ def update_notification_preferences(
     current_user.notification_preferences_json = json.dumps(preferences, separators=(",", ":"))
     audit(
         db, "USER", current_user.id, "NOTIFICATION_PREFERENCES_UPDATE",
-        f"in_app_certificate_reminders={payload.in_app_certificate_reminders}", actor_user_id=user.id,
-        organization_id=current_user.organization_id,
+        f"in_app={payload.in_app_certificate_reminders},email_workflow={payload.email_workflow_updates},"
+        f"email_cert={payload.email_certificate_reminders}",
+        actor_user_id=user.id, organization_id=current_user.organization_id,
     )
     db.commit()
     return preferences
+
+
+@app.put("/api/me")
+def update_my_profile(
+    payload: MyProfileRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Self-service: a user updates their own email, name and notification opt-ins."""
+    current_user = db.query(User).filter(User.id == user.id).first()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Không thể xác thực thông tin đăng nhập")
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name
+    if payload.email is not None:
+        current_user.email = payload.email
+    current_user.notification_preferences_json = json.dumps({
+        "in_app_certificate_reminders": payload.in_app_certificate_reminders,
+        "email_workflow_updates": payload.email_workflow_updates,
+        "email_certificate_reminders": payload.email_certificate_reminders,
+    }, separators=(",", ":"))
+    audit(
+        db, "USER", current_user.id, "PROFILE_SELF_UPDATE",
+        f"email set={'yes' if payload.email else 'no'}",
+        actor_user_id=user.id, organization_id=current_user.organization_id,
+    )
+    db.commit()
+    db.refresh(current_user)
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "email": current_user.email or "",
+        "role": current_user.role,
+        "organization_id": current_user.organization_id,
+        "organization_name": current_user.organization.name if current_user.organization else None,
+        "notification_preferences": _notification_preferences(current_user),
+        "email_enabled": email_notifications_enabled(db),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EMAIL / SMTP CONFIG (PLATFORM_ADMIN) — cấu hình ngay trên UI, lưu DB, mã hóa
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/smtp")
+def get_smtp_settings(db: Session = Depends(get_db), user: User = Depends(require_roles("PLATFORM_ADMIN"))):
+    """Trả cấu hình SMTP hiện tại — KHÔNG bao giờ trả mật khẩu."""
+    cfg = get_smtp_config(db)
+    return {
+        "enabled": cfg.enabled,
+        "host": cfg.host,
+        "port": cfg.port,
+        "username": cfg.username,
+        "from": cfg.sender,
+        "use_tls": cfg.use_tls,
+        "password_set": bool(cfg.password),
+        "source": cfg.source,  # db | env | none
+        # Khi nguồn là env, không cho sửa trên UI (do dev quản lý qua .env).
+        "editable": cfg.source != "env",
+    }
+
+
+@app.put("/api/admin/smtp")
+def update_smtp_settings(
+    payload: SmtpConfigRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    from .crypto_util import encrypt
+    row = db.query(AppSetting).filter(AppSetting.key == SMTP_SETTING_KEY).first()
+    existing = {}
+    if row and row.value:
+        try:
+            existing = json.loads(row.value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            existing = {}
+    # Mật khẩu: rỗng/None => giữ nguyên bản đã lưu; có giá trị => mã hóa & thay.
+    if payload.password:
+        password_enc = encrypt(payload.password)
+    else:
+        password_enc = existing.get("password_enc", "")
+    data = {
+        "enabled": payload.enabled,
+        "host": payload.host,
+        "port": payload.port,
+        "username": payload.username,
+        "password_enc": password_enc,
+        "from": payload.from_email,
+        "use_tls": payload.use_tls,
+    }
+    if row is None:
+        row = AppSetting(key=SMTP_SETTING_KEY, value="", updated_at=now_iso())
+        db.add(row)
+    row.value = json.dumps(data, separators=(",", ":"))
+    row.updated_at = now_iso()
+    audit(
+        db, "APP_SETTING", 0, "SMTP_CONFIG_UPDATE",
+        f"enabled={payload.enabled},host={payload.host},from={payload.from_email}",
+        actor_user_id=user.id,
+    )
+    db.commit()
+    # Trả trạng thái mới (không có mật khẩu).
+    cfg = get_smtp_config(db)
+    return {
+        "enabled": cfg.enabled, "host": cfg.host, "port": cfg.port,
+        "username": cfg.username, "from": cfg.sender, "use_tls": cfg.use_tls,
+        "password_set": bool(cfg.password), "source": cfg.source, "editable": cfg.source != "env",
+    }
+
+
+@app.post("/api/admin/smtp/test")
+def send_smtp_test(
+    payload: SmtpTestRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    """Gửi 1 email thử tới địa chỉ chỉ định bằng cấu hình hiện tại. Fail-soft."""
+    cfg = get_smtp_config(db)
+    if not cfg.ready:
+        return {"sent": False, "detail": "Chưa bật/cấu hình SMTP. Lưu cấu hình trước khi gửi thử."}
+    subject = "TIEN-TAN THUAN PORT — Email thử cấu hình"
+    body = (
+        "Đây là email thử từ hệ thống Quản lý Salan.\n\n"
+        "Nếu bạn nhận được email này, cấu hình SMTP đã hoạt động đúng.\n"
+    )
+    sent = send_email([payload.to], subject, body, config=cfg)
+    audit(
+        db, "APP_SETTING", 0, "SMTP_TEST",
+        f"to={payload.to},sent={sent}", actor_user_id=user.id,
+    )
+    db.commit()
+    return {
+        "sent": sent,
+        "detail": "Đã gửi email thử. Vui lòng kiểm tra hộp thư." if sent
+        else "Gửi thất bại. Kiểm tra lại host/cổng/tài khoản/mật khẩu.",
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -730,13 +1074,221 @@ def get_catalogs():
 # ORGANIZATIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _serialize_org(o: Organization) -> dict:
+    return {c.name: getattr(o, c.name) for c in o.__table__.columns}
+
+
 @app.get("/api/organizations")
 def get_organizations(db: Session = Depends(get_db), user: User = Depends(require_roles("PLATFORM_ADMIN"))):
     orgs = db.query(Organization).order_by(Organization.name).all()
-    return [
-        {c.name: getattr(o, c.name) for c in o.__table__.columns}
-        for o in orgs
-    ]
+    return [_serialize_org(o) for o in orgs]
+
+
+@app.post("/api/organizations", status_code=201)
+def create_organization(
+    payload: OrganizationSaveRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    duplicate = db.query(Organization).filter(func.lower(Organization.name) == payload.name.lower()).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Đã có tổ chức dùng tên này.")
+    org = Organization(
+        name=payload.name, tax_code=payload.tax_code, address=payload.address,
+        contact_name=payload.contact_name, contact_role=payload.contact_role,
+        phone=payload.phone, email=payload.email,
+        created_at=now_iso(), updated_at=now_iso(),
+    )
+    db.add(org)
+    db.flush()
+    audit(db, "ORGANIZATION", org.id, "CREATE", org.name, actor_user_id=user.id, organization_id=org.id)
+    db.commit()
+    db.refresh(org)
+    return _serialize_org(org)
+
+
+@app.put("/api/organizations/{org_id}")
+def update_organization(
+    org_id: int,
+    payload: OrganizationSaveRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tổ chức.")
+    duplicate = db.query(Organization).filter(
+        func.lower(Organization.name) == payload.name.lower(), Organization.id != org_id
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Đã có tổ chức khác dùng tên này.")
+    org.name = payload.name
+    org.tax_code = payload.tax_code
+    org.address = payload.address
+    org.contact_name = payload.contact_name
+    org.contact_role = payload.contact_role
+    org.phone = payload.phone
+    org.email = payload.email
+    org.updated_at = now_iso()
+    audit(db, "ORGANIZATION", org.id, "UPDATE", org.name, actor_user_id=user.id, organization_id=org.id)
+    db.commit()
+    db.refresh(org)
+    return _serialize_org(org)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# USER MANAGEMENT (PLATFORM_ADMIN)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _serialize_user(db: Session, item: User) -> dict:
+    unit_rows = (
+        db.query(ReportingUnit.id, ReportingUnit.name)
+        .join(ReportingUnitUser, ReportingUnitUser.reporting_unit_id == ReportingUnit.id)
+        .filter(ReportingUnitUser.user_id == item.id)
+        .order_by(ReportingUnit.name)
+        .all()
+    )
+    return {
+        "id": item.id,
+        "username": item.username,
+        "full_name": item.full_name or "",
+        "email": item.email or "",
+        "role": item.role,
+        "is_active": bool(item.is_active),
+        "organization_id": item.organization_id,
+        "organization_name": item.organization.name if item.organization else None,
+        "reporting_units": [{"id": row[0], "name": row[1]} for row in unit_rows],
+        "created_at": item.created_at,
+    }
+
+
+@app.get("/api/admin/users")
+def list_users(
+    db: Session = Depends(get_db), user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    users = db.query(User).order_by(User.role, User.username).all()
+    return {"items": [_serialize_user(db, item) for item in users]}
+
+
+@app.post("/api/admin/users", status_code=201)
+def create_user(
+    payload: UserCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    existing = db.query(User).filter(func.lower(User.username) == payload.username).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Tên đăng nhập đã tồn tại.")
+
+    organization_id = None
+    if payload.role == "CUSTOMER":
+        if payload.organization_id is None:
+            raise HTTPException(status_code=422, detail="Tài khoản khách hàng phải được gắn với một tổ chức.")
+        organization = db.query(Organization).filter(Organization.id == payload.organization_id).first()
+        if not organization:
+            raise HTTPException(status_code=422, detail="Không tìm thấy tổ chức đã chọn.")
+        organization_id = organization.id
+
+    unit_ids: List[int] = []
+    if payload.role == "PORT_STAFF" and payload.reporting_unit_ids:
+        unit_ids = sorted(set(payload.reporting_unit_ids))
+        found = db.query(ReportingUnit.id).filter(ReportingUnit.id.in_(unit_ids)).all()
+        if len(found) != len(unit_ids):
+            raise HTTPException(status_code=422, detail="Một hoặc nhiều đơn vị báo cáo không tồn tại.")
+
+    new_user = User(
+        username=payload.username,
+        password_hash=get_password_hash(payload.password),
+        full_name=payload.full_name,
+        email=payload.email,
+        role=payload.role,
+        organization_id=organization_id,
+        is_active=1,
+        created_at=now_iso(),
+    )
+    db.add(new_user)
+    db.flush()
+
+    for unit_id in unit_ids:
+        db.add(ReportingUnitUser(reporting_unit_id=unit_id, user_id=new_user.id, created_at=now_iso()))
+
+    audit(
+        db, "USER", new_user.id, "CREATE",
+        f"Tạo tài khoản {new_user.username} ({new_user.role})",
+        actor_user_id=user.id, organization_id=organization_id,
+    )
+    db.commit()
+    db.refresh(new_user)
+    return _serialize_user(db, new_user)
+
+
+@app.put("/api/admin/users/{user_id}")
+def update_user(
+    user_id: int,
+    payload: UserUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    """Admin edits a user's contact fields (email, full name). Username, role and
+    password are managed through their own dedicated flows."""
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản.")
+    if payload.full_name is not None:
+        target.full_name = payload.full_name
+    if payload.email is not None:
+        target.email = payload.email
+    audit(
+        db, "USER", target.id, "PROFILE_ADMIN_UPDATE",
+        f"Cập nhật thông tin {target.username}",
+        actor_user_id=user.id, organization_id=target.organization_id,
+    )
+    db.commit()
+    db.refresh(target)
+    return _serialize_user(db, target)
+
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+def reset_user_password(
+    user_id: int,
+    payload: UserResetPasswordRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản.")
+    target.password_hash = get_password_hash(payload.password)
+    audit(
+        db, "USER", target.id, "RESET_PASSWORD",
+        f"Đặt lại mật khẩu cho {target.username}",
+        actor_user_id=user.id, organization_id=target.organization_id,
+    )
+    db.commit()
+    return {"status": "ok", "detail": "Đã đặt lại mật khẩu."}
+
+
+@app.post("/api/admin/users/{user_id}/active")
+def set_user_active(
+    user_id: int,
+    payload: UserActiveRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản.")
+    if target.id == user.id and not payload.is_active:
+        raise HTTPException(status_code=400, detail="Không thể tự vô hiệu hóa tài khoản của chính mình.")
+    target.is_active = 1 if payload.is_active else 0
+    audit(
+        db, "USER", target.id, "SET_ACTIVE",
+        f"{'Kích hoạt' if payload.is_active else 'Vô hiệu hóa'} tài khoản {target.username}",
+        actor_user_id=user.id, organization_id=target.organization_id,
+    )
+    db.commit()
+    db.refresh(target)
+    return _serialize_user(db, target)
 
 
 @app.get("/api/admin/operations-summary")
@@ -863,6 +1415,50 @@ def _resolve_org_for_port_scope(db: Session, scope: Scope, name: Optional[str]) 
     if org.id not in scope.member_org_ids:
         raise HTTPException(status_code=403, detail="Tổ chức không thuộc đơn vị báo cáo hiện tại.")
     return org
+
+
+def _resolve_unit_id_for_reference(db: Session, scope: Scope, org_id: Optional[int]) -> Optional[int]:
+    """Reporting-unit id used to scope a declaration's daily sequence.
+
+    PORT scope already carries the active unit. For a CUSTOMER, the unit is
+    derived from the org's membership — but only when it belongs to exactly one
+    unit; otherwise (multiple or none) we fall back to a shared, unit-agnostic
+    sequence so a code can always be produced.
+    """
+    if scope.is_port and scope.reporting_unit_id:
+        return scope.reporting_unit_id
+    if org_id is None:
+        return None
+    unit_ids = [
+        row[0] for row in db.query(ReportingUnitOrganization.reporting_unit_id)
+        .filter(ReportingUnitOrganization.organization_id == org_id).all()
+    ]
+    return unit_ids[0] if len(unit_ids) == 1 else None
+
+
+def _next_reference_no(db: Session, scope: Scope, org_id: Optional[int]) -> str:
+    """Build a short, readable reference: ``TT-YYMMDD-NNN``.
+
+    The 3-digit sequence resets each day and counts separately per reporting
+    unit (falling back to a shared per-day counter when the unit is unknown).
+    The count-then-increment is guarded by a unique constraint on
+    ``reference_no`` plus a retry loop in the caller, so a race that reuses a
+    number simply retries the next one.
+    """
+    day = datetime.now().strftime("%y%m%d")
+    prefix = f"TT-{day}-"
+    unit_id = _resolve_unit_id_for_reference(db, scope, org_id)
+    query = db.query(func.count(Declaration.id)).filter(Declaration.reference_no.like(f"{prefix}%"))
+    if unit_id is not None:
+        # Restrict the count to declarations of orgs served by this unit.
+        member_org_ids = [
+            row[0] for row in db.query(ReportingUnitOrganization.organization_id)
+            .filter(ReportingUnitOrganization.reporting_unit_id == unit_id).all()
+        ]
+        if member_org_ids:
+            query = query.filter(Declaration.organization_id.in_(member_org_ids))
+    count = query.scalar() or 0
+    return f"{prefix}{count + 1:03d}"
 
 
 def is_demo_data_active(db: Session) -> bool:
@@ -1131,7 +1727,10 @@ def list_reporting_units(
         query = query.filter(ReportingUnit.id.in_(member_ids))
     units = query.order_by(ReportingUnit.name).all()
     return {
-        "items": [{"id": u.id, "name": u.name, "code": u.code} for u in units],
+        "items": [
+            {"id": u.id, "name": u.name, "code": u.code, "notify_email": u.notify_email or ""}
+            for u in units
+        ],
         "role": user.role,
     }
 
@@ -1158,6 +1757,7 @@ def create_reporting_unit(
         raise HTTPException(status_code=409, detail=f"Đã có đơn vị báo cáo dùng {field} này.")
     item = ReportingUnit(
         name=payload.name, code=payload.code, official_header_json="{}",
+        notify_email=payload.notify_email,
         is_active=1, created_at=now_iso(), updated_at=now_iso(),
     )
     db.add(item)
@@ -1168,7 +1768,47 @@ def create_reporting_unit(
     )
     db.commit()
     db.refresh(item)
-    return {"id": item.id, "name": item.name, "code": item.code, "is_active": bool(item.is_active)}
+    return {
+        "id": item.id, "name": item.name, "code": item.code,
+        "notify_email": item.notify_email or "", "is_active": bool(item.is_active),
+    }
+
+
+@app.put("/api/reporting-units/{unit_id}")
+def update_reporting_unit(
+    unit_id: int,
+    payload: ReportingUnitCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    """Update a reporting unit's name/code/notify_email (platform operation)."""
+    item = db.query(ReportingUnit).filter(ReportingUnit.id == unit_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn vị báo cáo.")
+    duplicate = db.query(ReportingUnit).filter(
+        ReportingUnit.id != unit_id,
+        or_(
+            func.lower(ReportingUnit.name) == payload.name.lower(),
+            func.lower(ReportingUnit.code) == payload.code.lower(),
+        ),
+    ).first()
+    if duplicate:
+        field = "tên" if duplicate.name.lower() == payload.name.lower() else "mã"
+        raise HTTPException(status_code=409, detail=f"Đã có đơn vị báo cáo khác dùng {field} này.")
+    item.name = payload.name
+    item.code = payload.code
+    item.notify_email = payload.notify_email
+    item.updated_at = now_iso()
+    audit(
+        db, "REPORTING_UNIT", item.id, "UPDATE", f"{item.name} ({item.code})",
+        actor_user_id=user.id, reporting_unit_id=item.id,
+    )
+    db.commit()
+    db.refresh(item)
+    return {
+        "id": item.id, "name": item.name, "code": item.code,
+        "notify_email": item.notify_email or "", "is_active": bool(item.is_active),
+    }
 
 
 @app.get("/api/reporting-unit/organizations")
@@ -1786,6 +2426,7 @@ def get_declarations(
 @app.post("/api/declarations")
 def save_declaration(
     payload: DeclarationSaveRequest,
+    background: BackgroundTasks,
     submit: bool = False,
     db: Session = Depends(get_db),
     scope: Scope = Depends(resolve_scope),
@@ -1840,7 +2481,12 @@ def save_declaration(
         # Tenant isolation check
         scope.require_org(decl.organization_id)
 
-        if decl.workflow_status not in ("DRAFT", "CHANGES_REQUESTED"):
+        # A submitted/approved declaration is normally locked for editing; the
+        # customer or Cảng must use the REQUEST_CHANGES flow to reopen it.
+        # PLATFORM_ADMIN is exempt: an admin has full authority to correct or
+        # clean up any record, including approved ones. The audit trail below
+        # still records the admin as the actor.
+        if decl.workflow_status not in ("DRAFT", "CHANGES_REQUESTED") and user.role != "PLATFORM_ADMIN":
             raise HTTPException(
                 status_code=409,
                 detail="Không thể chỉnh sửa phiếu đã xác nhận gửi. Dùng luồng REQUEST_CHANGES để điều chỉnh.",
@@ -1866,7 +2512,7 @@ def save_declaration(
         decl.updated_at = now_iso()
         decl.version += 1
     else:
-        ref_no = f"TT-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8].upper()}"
+        ref_no = _next_reference_no(db, scope, org_id)
         decl = Declaration(
             reference_no=ref_no,
             organization_id=org_id,
@@ -1906,8 +2552,23 @@ def save_declaration(
             created_at=now_iso(),
             updated_at=now_iso(),
         )
-        db.add(decl)
-        db.flush()
+        # Insert with a retry: if two declarations of the same unit/day race for
+        # the same TT-YYMMDD-NNN, the unique constraint rejects the duplicate and
+        # we regenerate the next number. A savepoint keeps prior work intact.
+        for attempt in range(25):
+            try:
+                with db.begin_nested():
+                    db.add(decl)
+                    db.flush()
+                break
+            except IntegrityError as exc:
+                if "reference_no" not in str(getattr(exc, "orig", exc)).lower():
+                    raise
+                db.expunge(decl)
+                decl.id = None
+                decl.reference_no = _next_reference_no(db, scope, org_id)
+        else:
+            raise HTTPException(status_code=409, detail="Không tạo được mã phiếu, vui lòng thử lại.")
 
     # Sync crew snapshot
     if payload.crew_ids is not None:
@@ -1923,8 +2584,19 @@ def save_declaration(
                     certificate_expiry_snapshot=member.certificate_expiry_date,
                 ))
 
+    # An admin may edit an already-APPROVED declaration to correct it. Saving
+    # such a correction must NOT demote it back to PENDING_REVIEW — the record
+    # stays approved. So treat a "submit" on an already-approved declaration as a
+    # plain update (no status change, no re-notification).
+    if submit and payload.id and decl.workflow_status == "APPROVED":
+        submit = False
+
+    submit_is_resubmit = False
     if submit:
-        if payload.id and decl.workflow_status == "CHANGES_REQUESTED":
+        # Distinguish a fresh submit from a re-submit after the port asked for
+        # changes — captured BEFORE the status is overwritten below.
+        submit_is_resubmit = bool(payload.id and decl.workflow_status == "CHANGES_REQUESTED")
+        if submit_is_resubmit:
             decl.port_approval = "PENDING"
         decl.workflow_status = "PENDING_REVIEW"
         decl.status = "SUBMITTED"
@@ -1957,6 +2629,13 @@ def save_declaration(
     db.commit()
     db.refresh(decl)
 
+    # Thông báo email (nền, fail-soft) khi khách xác nhận gửi/gửi lại → báo Cảng.
+    if submit:
+        try:
+            notify_declaration_submitted(db, decl, submit_is_resubmit, background=background)
+        except Exception:  # never let notifications break the response
+            access_logger.exception("Bỏ qua lỗi thông báo email khi gửi phiếu %s", decl.reference_no)
+
     result = _declaration_dict(decl)
     result["id"] = decl.id
     result["status"] = decl.status
@@ -1969,12 +2648,11 @@ def delete_declaration(
     db: Session = Depends(get_db),
     scope: Scope = Depends(require_port_scope),
 ):
-    # PLATFORM_ADMIN-only, and only for declarations the Cảng has not yet acted
-    # on (DRAFT / CHANGES_REQUESTED). Once a declaration reaches PENDING_REVIEW
-    # it has been formally submitted and may already be under Cảng review;
-    # APPROVED is a closed record. Both must be kept, not deleted — this
-    # endpoint exists for admin/test cleanup of drafts, not for erasing a real
-    # port-call history.
+    # PLATFORM_ADMIN-only. An admin has full authority over any record and may
+    # delete a declaration at any workflow status, including PENDING_REVIEW and
+    # APPROVED — used both to clean up test data and to remove a genuinely wrong
+    # record. Every delete is written to the audit trail below. Customers and
+    # Cảng staff never reach this endpoint.
     if scope.user.role != "PLATFORM_ADMIN":
         raise HTTPException(
             status_code=403,
@@ -1984,13 +2662,6 @@ def delete_declaration(
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
     scope.require_org(decl.organization_id)
-
-    if decl.workflow_status not in ("DRAFT", "CHANGES_REQUESTED"):
-        raise HTTPException(
-            status_code=409,
-            detail="Chỉ có thể xóa phiếu ở trạng thái Nháp hoặc Yêu cầu bổ sung. "
-                   "Phiếu đã gửi cho Cảng xem xét (hoặc đã duyệt) phải được giữ lại làm hồ sơ.",
-        )
 
     identity = decl.reference_no
     organization_id = decl.organization_id
@@ -2042,6 +2713,7 @@ def get_declaration_events(
 def declaration_workflow(
     declaration_id: int,
     payload: WorkflowActionRequest,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     scope: Scope = Depends(require_port_scope),
 ):
@@ -2079,6 +2751,13 @@ def declaration_workflow(
     )
     db.commit()
     db.refresh(updated)
+
+    # Thông báo email (nền, fail-soft) khi Cảng duyệt / yêu cầu bổ sung → báo khách.
+    try:
+        notify_declaration_workflow(db, updated, payload.action, payload.note or "", background=background)
+    except Exception:  # never let notifications break the response
+        access_logger.exception("Bỏ qua lỗi thông báo email cho workflow %s", updated.reference_no)
+
     return _declaration_dict(updated)
 
 
@@ -2716,7 +3395,9 @@ async def import_declaration(
         }
     row["created_at"] = now_iso()
     row["updated_at"] = now_iso()
-    row["reference_no"] = f"TT-IMP-{datetime.now():%Y%m%d-%H%M%S}-{datetime.now().microsecond:06d}"
+    # Import rows keep the IMP marker and a microsecond tail for uniqueness in
+    # bulk (they are not the per-day human sequence used for manual entry).
+    row["reference_no"] = f"TT-IMP-{datetime.now():%y%m%d}-{datetime.now().microsecond:06d}"
     row["workflow_status"] = "DRAFT"
     row["status"] = "DRAFT"
     row["unload_json"] = json.dumps(cargo(row.pop("unload", {})), ensure_ascii=False)

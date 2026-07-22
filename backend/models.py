@@ -16,6 +16,7 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     full_name = Column(String, default="")
+    email = Column(String, nullable=False, default="")  # địa chỉ nhận thông báo (tùy chọn)
     role = Column(String, default="CUSTOMER")  # PLATFORM_ADMIN, PORT_STAFF, CUSTOMER
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     # Reporting-unit membership is modelled as an FK-backed association
@@ -257,6 +258,17 @@ class IntegrationConnector(Base):
     last_sync_at = Column(String)
     updated_at = Column(String, nullable=False, default=now_iso)
 
+class AppSetting(Base):
+    """Simple key-value store for runtime settings edited from the admin UI.
+
+    Values are JSON strings. Secrets inside a value (e.g. the SMTP password) are
+    encrypted before storage — see backend/crypto_util.py.
+    """
+    __tablename__ = "app_settings"
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=False, default="")
+    updated_at = Column(String, nullable=False, default=now_iso)
+
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -354,6 +366,7 @@ class ReportingUnit(Base):
     name = Column(String, nullable=False, unique=True)
     code = Column(String, nullable=False, default="")
     official_header_json = Column(Text, nullable=False, default="{}")  # tenant-scoped official report header details
+    notify_email = Column(String, nullable=False, default="")  # email chung của Cảng để nhận thông báo
     is_active = Column(Integer, nullable=False, default=1)
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)

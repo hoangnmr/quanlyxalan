@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 data/*.db
 data/*.db-*
+.local_preview.sqlite3
 data/uploads/
 data/attachments/
 data/logs/

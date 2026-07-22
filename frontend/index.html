@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Quản Lý Xalan - TIEN-TAN THUAN PORT">
-  <title>Quản Lý Xalan | TIEN-TAN THUAN PORT</title>
+  <meta name="description" content="Quản lý Salan - TIEN-TAN THUAN PORT">
+  <title>Quản lý Salan | TIEN-TAN THUAN PORT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.8.2">
+  <link rel="stylesheet" href="styles.css?v=1.12.2">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -16,7 +16,7 @@
     <aside class="sidebar" aria-label="Điều hướng chính">
       <a class="brand" href="#dashboard" aria-label="Về tổng quan TIEN-TAN THUAN PORT">
         <span class="brand-logo-frame"><img src="assets/csg-logo.jpg" alt="CSG Saigon Port logo"></span>
-        <span class="brand-copy"><strong>TIEN-TAN THUAN PORT</strong><small>Quản Lý Xalan</small></span>
+        <span class="brand-copy"><strong>TIEN-TAN THUAN PORT</strong><small>Quản lý Salan</small></span>
       </a>
       <div class="workspace-chip"><span class="status-dot"></span><span><small>HỆ THỐNG</small><strong>Đang hoạt động</strong></span></div>
       <nav class="primary-nav">
@@ -31,6 +31,9 @@
         <p class="nav-label">Dữ liệu</p>
         <a href="#import" data-route="import"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v3.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14"></path></svg></span>Import dữ liệu</a>
         <a href="#reports" data-route="reports"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"></path><rect x="5" y="12" width="3.5" height="6" rx="1"></rect><rect x="10.25" y="8" width="3.5" height="10" rx="1"></rect><rect x="15.5" y="4" width="3.5" height="14" rx="1"></rect></svg></span>Báo cáo hoạt động</a>
+        <a href="#organizations" data-route="organizations" hidden><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v14"></path><path d="M13 9h5a1 1 0 0 1 1 1v10"></path><path d="M3 20h18"></path><path d="M7 9h2M7 13h2M16 13h1"></path></svg></span>Thông tin khách hàng</a>
+        <a href="#users" data-route="users" hidden><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M17 4.5v5M14.5 7h5"></path></svg></span>Quản lý người dùng</a>
+        <a href="#settings" data-route="settings"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>Cài đặt</a>
       </nav>
       <section id="sidebar-unit-context" class="sidebar-unit-context" hidden>
         <button id="reporting-unit-trigger" class="reporting-unit-trigger" type="button" aria-expanded="false" aria-controls="reporting-unit-menu">
@@ -47,6 +50,7 @@
         </div>
       </div>
     </aside>
+    <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Đóng menu" tabindex="-1"></button>
 
     <div class="main-column">
       <header class="topbar">
@@ -73,7 +77,6 @@
           <div id="dashboard-search-results" class="search-card-grid"></div>
           <div id="stats" class="stat-grid" aria-live="polite"></div>
           <section id="demo-data-notice" class="demo-data-notice" role="status" hidden><strong>Dữ liệu minh họa</strong><span>Đây là dữ liệu mẫu để kiểm tra giao diện. Hệ thống sẽ tự gỡ toàn bộ dữ liệu này khi bạn tạo hoặc import phương tiện thực tế đầu tiên.</span></section>
-          <section class="panel preference-panel"><div><p class="eyebrow">CÀI ĐẶT CÁ NHÂN</p><h2>Nhắc hạn chứng chỉ</h2><p>Email/Teams chưa được cấu hình.</p></div><label class="toggle-label"><input id="in-app-certificate-reminders" type="checkbox"><span>Nhắc trong ứng dụng</span></label></section>
           <div id="certificate-reminder" class="warning-strip" role="status" aria-live="polite" hidden></div>
           <section id="attention-queue" class="panel attention-queue" hidden><div class="panel-header"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2 id="attention-title">Hàng đợi xử lý</h2></div><button id="attention-open-list" class="soft-button" type="button">Mở danh sách</button></div><div id="attention-content" class="attention-list"></div></section>
           <section id="admin-operations" class="panel" hidden><div class="panel-header"><div><p class="eyebrow">QUẢN TRỊ</p><h2>Tình hình vận hành</h2></div></div><div id="admin-operations-content" class="stat-grid"></div></section>
@@ -176,17 +179,86 @@
           <section id="report-adjustment-panel" class="panel" hidden><div class="panel-header"><div><p class="eyebrow">ĐIỀU CHỈNH</p><h2>Điều chỉnh lượt PL.02</h2></div></div><form id="report-adjustment-form" class="report-adjustment-form"><label>Tháng<input name="report_month" type="month" required></label><label>Chỉ tiêu<select name="metric"><option value="calls">Lượt tàu</option><option value="passenger_calls">Lượt tàu khách</option></select></label><label>Điều chỉnh (+/-)<input name="delta" type="number" step="1" required></label><label class="adjustment-reason">Lý do<input name="reason" type="text" minlength="5" required></label><button class="outline-button" type="submit">Ghi điều chỉnh</button></form><div id="report-adjustment-history" class="muted">Chưa có điều chỉnh trong tháng.</div></section>
           <section id="external-integration-panel" class="panel integration-panel"><div><p class="eyebrow">KẾT NỐI API</p><h2>Tích hợp dữ liệu</h2><div class="integration-readiness"><span><b>Payload</b> Sẵn sàng</span><span><b>Endpoint</b> Chờ</span><span><b>Xác thực</b> Chờ</span></div></div><div id="integration-admin-actions" class="integration-state" hidden><span id="integration-status" class="state-badge pending">Chưa cấu hình</span><button id="prepare-sync" class="primary-button">Chuẩn bị dữ liệu</button></div><div id="sync-jobs" class="table-wrap span-full" hidden></div></section>
         </section>
+
+        <section class="page" data-page="organizations">
+          <div class="page-heading"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><p>Danh sách tổ chức khách hàng.</p></div><button id="add-organization" type="button" class="primary-button">+ Thêm tổ chức</button></div>
+          <section class="panel"><div id="organizations-table" class="table-wrap"></div></section>
+        </section>
+
+        <section class="page" data-page="users">
+          <div class="page-heading"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><p>Cấp tài khoản đăng nhập cho nhân viên Cảng và khách hàng.</p></div><button id="add-user" type="button" class="primary-button">+ Tạo người dùng</button></div>
+          <section class="panel"><div id="users-table" class="table-wrap"></div></section>
+        </section>
+
+        <section class="page" data-page="settings">
+          <div class="page-heading"><div><p class="eyebrow">CÀI ĐẶT</p><p>Cấu hình email và tùy chọn nhận thông báo.</p></div></div>
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">EMAIL</p><h2>Thông tin</h2><p class="muted"> Cá nhân</p></div><span id="settings-email-status" class="state-badge pending" hidden>Email: chưa cấu hình</span></div>
+            <form id="my-profile-form" class="settings-form">
+              <div class="settings-inline">
+                <label>Họ và tên<input name="full_name" type="text" maxlength="150" placeholder="vd: Nguyễn Văn A"></label>
+                <label>Email<input name="email" type="email" maxlength="200" autocomplete="off" placeholder="vd: a@congty.vn"></label>
+              </div>
+              <fieldset class="preference-group">
+                <legend>Gửi email cho tôi khi</legend>
+                <label class="toggle-label"><input id="email-workflow-updates" type="checkbox"><span>Phiếu có cập nhật <small class="muted">(phiếu mới · được duyệt · yêu cầu bổ sung)</small></span></label>
+                <label class="toggle-label"><input id="email-certificate-reminders" type="checkbox"><span>Chứng chỉ thuyền viên sắp hết hạn</span></label>
+              </fieldset>
+              <label class="toggle-label toggle-standalone"><input id="in-app-certificate-reminders" type="checkbox"><span>Nhắc hạn chứng chỉ trong ứng dụng <small class="muted"></small></span></label>
+              <div class="modal-actions"><button type="submit" class="primary-button">Lưu</button></div>
+            </form>
+          </section>
+
+          <section id="settings-port-panel" class="panel" hidden>
+            <div class="panel-header"><div><p class="eyebrow">EMAIL</p><h2 id="settings-port-name">Đơn vị đang chọn</h2><p class="muted">Công ty</p></div></div>
+            <form id="port-email-form" class="settings-form">
+              <label>Email nhận<input name="notify_email" type="email" maxlength="200" placeholder="Tùy chọn — vd: cang@ttport.vn"></label>
+              <div class="modal-actions"><button type="submit" class="primary-button">Lưu email Cảng</button></div>
+            </form>
+          </section>
+
+          <section id="settings-smtp-panel" class="panel" hidden>
+            <div class="panel-header"><div><p class="eyebrow">CẤU HÌNH EMAIL (SMTP)</p><h2>Máy chủ gửi email</h2><p class="muted">Nhập thông tin máy chủ gửi mail để hệ thống gửi thông báo.</p></div></div>
+            <div id="settings-smtp-env-note" class="record-lock-note" hidden><strong>Đang cấu hình qua .env</strong><span>SMTP đang lấy từ file .env (do dev quản lý). Để chỉnh trên giao diện, hãy xóa cấu hình SMTP trong .env.</span></div>
+            <form id="smtp-form" class="settings-form">
+              <label class="toggle-label"><input name="enabled" type="checkbox"><span>Bật gửi email qua SMTP</span></label>
+              <label>Máy chủ SMTP (host)<input name="host" type="text" maxlength="200" placeholder="vd: smtp.gmail.com"></label>
+              <div class="settings-inline">
+                <label>Cổng (port)<input name="port" type="number" min="1" max="65535" value="587"></label>
+                <label class="toggle-label"><input name="use_tls" type="checkbox" checked><span>Dùng TLS</span></label>
+              </div>
+              <label>Tài khoản (username)<input name="username" type="text" maxlength="200" autocomplete="off" placeholder="vd: cahienphuc@gmail.com"></label>
+              <label>Mật khẩu<input name="password" type="password" maxlength="200" autocomplete="new-password" placeholder="Để trống nếu giữ mật khẩu đã lưu"><small id="smtp-password-hint" class="muted"></small></label>
+              <label>Email gửi đi (from)<input name="from" type="email" maxlength="200" placeholder="vd: cahienphuc@gmail.com"></label>
+              <div class="modal-actions"><button type="submit" class="primary-button">Lưu cấu hình SMTP</button></div>
+            </form>
+            <div class="smtp-test">
+              <p class="eyebrow">GỬI EMAIL THỬ</p>
+              <div class="settings-inline"><input id="smtp-test-to" type="email" maxlength="200" placeholder="Địa chỉ nhận thử — vd: cahienphuc@gmail.com"><button id="smtp-test-btn" type="button" class="soft-button">Gửi email thử</button></div>
+            </div>
+          </section>
+
+          <section id="settings-admin-shortcuts" class="settings-admin-links" hidden>
+            <span class="muted">Sửa email của người khác:</span>
+            <button type="button" class="link-button" data-route-link="users">nhân viên Cảng</button>
+            <span class="muted">·</span>
+            <button type="button" class="link-button" data-route-link="organizations">khách hàng</button>
+          </section>
+        </section>
       </main>
     </div>
   </div>
 
   <dialog id="port-import-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">SỔ THEO DÕI NỘI BỘ</p><h2>Kiểm tra file trước khi nhập</h2></div><button type="button" class="icon-button" id="close-port-import" aria-label="Đóng">×</button></div><div id="port-import-result" class="import-dialog-content"></div></dialog>
-  <dialog id="reporting-unit-dialog" class="modal reporting-unit-dialog" aria-labelledby="reporting-unit-dialog-title"><form id="reporting-unit-form"><div class="modal-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2 id="reporting-unit-dialog-title">Tạo đơn vị báo cáo</h2></div><button type="button" class="icon-button" id="close-reporting-unit-dialog" aria-label="Đóng">×</button></div><div class="reporting-unit-form-body"><p>Đơn vị mới được tạo trống, không sao chép nhân viên, doanh nghiệp hoặc dữ liệu từ Cảng đang chọn.</p><label>Tên đơn vị<input name="name" type="text" minlength="2" maxlength="150" required placeholder="Ví dụ: Cảng Nhà Rồng"></label><label>Mã đơn vị<input name="code" type="text" minlength="2" maxlength="30" required pattern="[A-Za-z0-9_-]+" placeholder="Ví dụ: NHA-RONG"><small>Dùng chữ A–Z, số, dấu “-” hoặc “_”.</small></label></div><div class="modal-actions"><button id="cancel-reporting-unit-dialog" type="button" class="ghost-button">Hủy</button><button type="submit" class="primary-button">Tạo đơn vị</button></div></form></dialog>
+  <dialog id="user-dialog" class="modal user-dialog" aria-labelledby="user-dialog-title"><form id="user-form"><div class="modal-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2 id="user-dialog-title">Tạo người dùng</h2></div><button type="button" class="icon-button" data-close-dialog="user-dialog" aria-label="Đóng">×</button></div><div class="user-form-body"><label>Vai trò<select name="role" required><option value="CUSTOMER">Khách hàng</option><option value="PORT_STAFF">Nhân viên Cảng</option><option value="PLATFORM_ADMIN">Platform Admin</option></select></label><label>Tên đăng nhập<input name="username" type="text" minlength="3" maxlength="50" required autocomplete="off" pattern="[A-Za-z0-9._-]+" placeholder="vd: nhanvien.a"><small>Chữ thường a–z, số, dấu chấm, gạch ngang hoặc gạch dưới.</small></label><label>Họ và tên<input name="full_name" type="text" maxlength="150" placeholder="vd: Nguyễn Văn A"></label><label>Email (nhận thông báo)<input name="email" type="email" maxlength="200" autocomplete="off" placeholder="Tùy chọn — vd: a@congty.vn"><small>Dùng để nhận email cập nhật phiếu (nếu bật).</small></label><label>Mật khẩu<input name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"><small>Tối thiểu 8 ký tự. Bàn giao mật khẩu này cho người dùng.</small></label><label id="user-org-field" hidden>Tổ chức (khách hàng)<select name="organization_id"></select></label><div id="user-units-field" hidden><span class="user-units-label">Đơn vị báo cáo (Cảng)</span><div id="user-units-list" class="user-units-list"></div></div></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="user-dialog">Hủy</button><button type="submit" class="primary-button">Tạo người dùng</button></div></form></dialog>
+  <dialog id="organization-dialog" class="modal organization-dialog" aria-labelledby="organization-dialog-title"><form id="organization-form"><div class="modal-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2 id="organization-dialog-title">Thêm tổ chức khách hàng</h2></div><button type="button" class="icon-button" data-close-dialog="organization-dialog" aria-label="Đóng">×</button></div><div class="organization-form-body"><label class="span-full">Tên tổ chức<input name="name" type="text" minlength="2" maxlength="200" required placeholder="Ví dụ: Công ty TNHH Vận tải Sông Sài Gòn"></label><label>Mã số thuế<input name="tax_code" type="text" maxlength="200" placeholder="Tùy chọn"></label><label>Số điện thoại<input name="phone" type="text" maxlength="200" placeholder="Tùy chọn"></label><label class="span-full">Địa chỉ<input name="address" type="text" maxlength="200" placeholder="Tùy chọn"></label><label>Người liên hệ<input name="contact_name" type="text" maxlength="200" placeholder="Tùy chọn"></label><label>Chức vụ liên hệ<input name="contact_role" type="text" maxlength="200" placeholder="Tùy chọn"></label><label class="span-full">Email<input name="email" type="text" maxlength="200" placeholder="Tùy chọn"></label></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="organization-dialog">Hủy</button><button type="submit" class="primary-button" id="save-organization">Lưu tổ chức</button></div></form></dialog>
+  <dialog id="reset-password-dialog" class="modal reset-password-dialog" aria-labelledby="reset-password-title"><form id="reset-password-form"><div class="modal-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2 id="reset-password-title">Đặt lại mật khẩu</h2></div><button type="button" class="icon-button" data-close-dialog="reset-password-dialog" aria-label="Đóng">×</button></div><div class="reset-password-body"><p id="reset-password-target" class="muted"></p><label>Mật khẩu mới<input name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"><small>Tối thiểu 8 ký tự.</small></label></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="reset-password-dialog">Hủy</button><button type="submit" class="primary-button">Đặt lại mật khẩu</button></div></form></dialog>
+  <dialog id="reporting-unit-dialog" class="modal reporting-unit-dialog" aria-labelledby="reporting-unit-dialog-title"><form id="reporting-unit-form"><div class="modal-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2 id="reporting-unit-dialog-title">Tạo đơn vị báo cáo</h2></div><button type="button" class="icon-button" id="close-reporting-unit-dialog" aria-label="Đóng">×</button></div><div class="reporting-unit-form-body"><p>Đơn vị mới được tạo trống, không sao chép nhân viên, doanh nghiệp hoặc dữ liệu từ Cảng đang chọn.</p><label>Tên đơn vị<input name="name" type="text" minlength="2" maxlength="150" required placeholder="Ví dụ: Cảng Nhà Rồng"></label><label>Mã đơn vị<input name="code" type="text" minlength="2" maxlength="30" required pattern="[A-Za-z0-9_-]+" placeholder="Ví dụ: NHA-RONG"><small>Dùng chữ A–Z, số, dấu “-” hoặc “_”.</small></label><label>Email Cảng<input name="notify_email" type="email" maxlength="200" placeholder="Tùy chọn — nhận thông báo phiếu"><small>Nếu để trống, thông báo gửi tới email cá nhân của nhân viên đã bật nhận email.</small></label></div><div class="modal-actions"><button id="cancel-reporting-unit-dialog" type="button" class="ghost-button">Hủy</button><button type="submit" class="primary-button">Tạo đơn vị</button></div></form></dialog>
   <dialog id="vessel-dialog" class="modal"><form id="vessel-form"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ DÙNG LẠI</p><h2>Thông tin phương tiện</h2></div><button type="button" class="icon-button" data-close-dialog="vessel-dialog" aria-label="Đóng">×</button></div><div id="vessel-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="vessel-dialog">Hủy</button><button type="submit" class="primary-button" id="save-vessel">Lưu hồ sơ</button></div></form></dialog>
 
   <dialog id="crew-dialog" class="modal"><form id="crew-form"><div class="modal-header"><div><p class="eyebrow">DANH SÁCH THUYỀN VIÊN</p><h2>Thông tin và chứng chỉ chuyên môn</h2></div><button type="button" class="icon-button" data-close-dialog="crew-dialog" aria-label="Đóng">×</button></div><div id="crew-fields" class="form-grid"></div><div class="modal-actions"><button type="button" class="ghost-button" data-close-dialog="crew-dialog">Hủy</button><button type="submit" class="primary-button">Lưu thuyền viên</button></div></form></dialog>
 
-  <dialog id="declaration-dialog" class="modal wide"><form id="declaration-form"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div id="draft-state" class="draft-state"><span>●</span> Nháp cục bộ · chưa gửi</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div><div id="declaration-fields"></div><div class="review-strip"><div><strong>Kiểm tra trước khi xác nhận</strong><p>Dấu * là bắt buộc. Sau khi gửi, Cảng sẽ xem xét và phản hồi.</p></div><div><button type="submit" class="outline-button" value="draft" id="save-draft">Lưu nháp</button><button type="submit" class="primary-button" value="submit" id="submit-declaration">Xác nhận & gửi</button></div></div></form></dialog>
+  <dialog id="declaration-dialog" class="modal wide"><form id="declaration-form"><div class="modal-header sticky"><div><p class="eyebrow">PHIẾU KHAI BÁO PTTND</p><h2>Tạo lượt đến cảng</h2></div><div id="draft-state" class="draft-state"><span>●</span> Nháp cục bộ · chưa gửi</div><button type="button" class="icon-button" data-close-dialog="declaration-dialog" aria-label="Đóng">×</button></div><div id="declaration-fields"></div><div class="review-strip"><div><strong>Kiểm tra trước khi xác nhận</strong><p>Dấu * là bắt buộc. Sau khi gửi, Cảng sẽ xem xét và phản hồi.</p></div><div><button type="submit" class="outline-button" value="draft" id="save-draft">Lưu nháp</button><button type="submit" class="primary-button" value="submit" id="submit-declaration">Xác nhận</button></div></div></form></dialog>
 
   <dialog id="workflow-dialog" class="modal wide"><div class="modal-header"><div><p class="eyebrow">HỒ SƠ VÀ DẤU VẾT XỬ LÝ</p><h2 id="workflow-title">Chi tiết phiếu</h2></div><button type="button" class="icon-button" data-close-dialog="workflow-dialog" aria-label="Đóng">×</button></div><div id="workflow-summary" class="workflow-summary"></div><div id="workflow-risks" class="risk-panel"></div><div id="workflow-timeline" class="timeline"></div><form id="workflow-form" class="workflow-form"><label>Thao tác<select name="action" required><option value="">Chọn</option><option value="PORT_APPROVE">Xác nhận hoàn tất</option><option value="REQUEST_CHANGES">Yêu cầu bổ sung</option></select></label><label class="span-full">Ghi chú / lý do<textarea name="note" placeholder="Bắt buộc nêu lý do khi yêu cầu bổ sung"></textarea></label><button class="primary-button" type="submit">Ghi nhận thao tác</button></form></dialog>
 
@@ -196,7 +268,7 @@
         <span class="login-logo-frame"><img src="assets/csg-logo.jpg" alt="Cảng Sài Gòn"></span>
         <p class="eyebrow">CỔNG THÔNG TIN VẬN HÀNH</p>
         <h2 id="login-title">Cảng Tân Thuận</h2>
-        <p id="login-description">Đăng nhập để quản lý khai báo, phương tiện và phản hồi của Cảng.</p>
+        <p id="login-description">Quản lý khai báo phương tiện.</p>
       </div>
       <div class="login-form-content">
         <p id="login-feedback" class="login-feedback" role="alert" hidden></p>
@@ -207,12 +279,12 @@
           <input type="password" name="password" required autocomplete="current-password" placeholder="Nhập mật khẩu">
         </label>
         <button type="submit" class="primary-button full login-submit">Đăng nhập vào hệ thống <span aria-hidden="true">→</span></button>
-        <p class="login-security-note">Phiên đăng nhập được bảo vệ và mọi thao tác quan trọng đều được ghi nhận.</p>
+        <p class="login-security-note">Phiên đăng nhập được bảo vệ.</p>
       </div>
     </form>
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="app.js?v=1.8.2" defer></script>
+  <script src="app.js?v=1.12.2" defer></script>
 </body>
 </html>

@@ -117,6 +117,10 @@ class Cargo(BaseModel):
     cont20_empty: int = 0
     cont40_full: int = 0
     cont40_empty: int = 0
+    tons20_full: float = 0.0
+    tons20_empty: float = 0.0
+    tons40_full: float = 0.0
+    tons40_empty: float = 0.0
     tons: float = 0.0
 
 class DeclarationCreate(DeclarationBase):

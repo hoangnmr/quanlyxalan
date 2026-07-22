@@ -11,6 +11,7 @@ const state = {
   dashboardSearchSequence: 0,
   analyticsSource: 'live',
   reportingUnits: [], activeReportingUnitId: null, reportingUnitOrganizations: [],
+  users: [], organizations: [], editingOrganization: null,
 };
 const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó'];
 
@@ -123,7 +124,7 @@ function optionList(items = [], selected = '') {
   return `<option value="">Chọn</option>${extra}${items.map(item => `<option ${item === selected ? 'selected' : ''}>${esc(item)}</option>`).join('')}`;
 }
 
-const LAYOUT_CLASSES = ['wide-field', 'span-2', 'span-3'];
+const LAYOUT_CLASSES = ['wide-field', 'span-2', 'span-3', 'container-only'];
 
 // Grid-column span classes (wide-field/span-2/span-3) must land on the <label>,
 // since it is the actual CSS grid item — placing them on the nested <input>/
@@ -151,12 +152,68 @@ function selectField(name, label, items, value = '', extra = '') {
   return `<label${labelClass}>${required ? '* ' : ''}${label}<select name="${name}" ${inputExtra}>${optionList(items, value)}</select></label>`;
 }
 
+// Cụm chọn ngày + giờ + phút (bước 15') thay cho datetime-local, để chọn giờ/phút
+// bằng dropdown thay vì gõ tay. Giá trị canonical "YYYY-MM-DDTHH:MM" nằm trong một
+// input ẩn cùng name (eta/etd/...) nên phần thu thập & backend không đổi.
+const MINUTE_STEP = 15;
+
+function splitDateTime(value = '') {
+  const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})[T ]?(\d{2}):(\d{2})/);
+  if (!match) return { date: '', hour: '', minute: '' };
+  // Làm tròn phút về bước gần nhất để khớp danh sách dropdown.
+  const minute = String(Math.round(Number(match[3]) / MINUTE_STEP) * MINUTE_STEP % 60).padStart(2, '0');
+  return { date: match[1], hour: match[2], minute };
+}
+
+function dateTimeField(name, label, value = '', extra = '') {
+  const required = extra.includes('required');
+  const { labelClass } = splitFieldExtra(extra);
+  const { date, hour, minute } = splitDateTime(value);
+  const hourOptions = Array.from({ length: 24 }, (_, h) => {
+    const hh = String(h).padStart(2, '0');
+    return `<option value="${hh}" ${hh === hour ? 'selected' : ''}>${hh}</option>`;
+  }).join('');
+  const minuteOptions = Array.from({ length: 60 / MINUTE_STEP }, (_, i) => {
+    const mm = String(i * MINUTE_STEP).padStart(2, '0');
+    return `<option value="${mm}" ${mm === minute ? 'selected' : ''}>${mm}</option>`;
+  }).join('');
+  return `<label${labelClass}>${required ? '* ' : ''}${label}
+    <span class="datetime-field" data-dt-group="${name}">
+      <input type="hidden" name="${name}" value="${esc(value)}">
+      <input type="date" class="datetime-date" data-dt-part="date" data-dt-name="${name}" value="${date}" ${required ? 'required' : ''} aria-label="${esc(label)} — ngày">
+      <select class="datetime-hour" data-dt-part="hour" data-dt-name="${name}" aria-label="${esc(label)} — giờ">${hourOptions}</select>
+      <span class="datetime-sep" aria-hidden="true">:</span>
+      <select class="datetime-minute" data-dt-part="minute" data-dt-name="${name}" aria-label="${esc(label)} — phút">${minuteOptions}</select>
+    </span></label>`;
+}
+
+function syncDateTimeHidden(name, root = document) {
+  const group = $(`.datetime-field[data-dt-group="${name}"]`, root);
+  if (!group) return;
+  const hidden = $('input[type="hidden"]', group);
+  const date = $('[data-dt-part="date"]', group).value;
+  const hour = $('[data-dt-part="hour"]', group).value || '00';
+  const minute = $('[data-dt-part="minute"]', group).value || '00';
+  // Chỉ có giá trị khi đã chọn ngày; giờ/phút mặc định 00:00 nếu bỏ trống.
+  hidden.value = date ? `${date}T${hour}:${minute}` : '';
+}
+
+function bindDateTimeFields(root = document) {
+  $$('.datetime-field', root).forEach(group => {
+    const name = group.dataset.dtGroup;
+    $$('[data-dt-part]', group).forEach(control => {
+      control.addEventListener('change', () => syncDateTimeHidden(name, root));
+      control.addEventListener('input', () => syncDateTimeHidden(name, root));
+    });
+  });
+}
+
 function values(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
 function pageName(route) {
-  return ({dashboard:'Tổng quan khai báo', declarations:'Phiếu khai báo', vessels:'Hồ sơ phương tiện', 'port-register':'Sổ theo dõi Salan', crew:'Danh sách thuyền viên', import:'Import dữ liệu', reports:'Báo cáo hoạt động'})[route] || 'Tổng quan khai báo';
+  return ({dashboard:'Tổng quan khai báo', declarations:'Phiếu khai báo', vessels:'Hồ sơ phương tiện', 'port-register':'Sổ theo dõi Salan', crew:'Danh sách thuyền viên', import:'Import dữ liệu', reports:'Báo cáo hoạt động', organizations:'Thông tin khách hàng', users:'Quản lý người dùng', settings:'Cài đặt'})[route] || 'Tổng quan khai báo';
 }
 
 function roleLabel(role) {
@@ -298,16 +355,21 @@ async function loadReportingUnitContext() {
   return true;
 }
 
+function setSidebarOpen(open) {
+  $('.sidebar').classList.toggle('open', open);
+  $('#sidebar-backdrop').classList.toggle('visible', open);
+}
+
 function route() {
   let name = location.hash.replace('#', '') || 'dashboard';
-  if (state.currentUser?.role === 'CUSTOMER' && !['declarations', 'crew'].includes(name)) {
+  if (state.currentUser?.role === 'CUSTOMER' && !['declarations', 'crew', 'settings'].includes(name)) {
     name = 'declarations';
     if (location.hash !== '#declarations') history.replaceState(null, '', `${location.pathname}${location.search}#declarations`);
   }
   $$('.page').forEach(page => page.classList.toggle('active', page.dataset.page === name));
   $$('nav a').forEach(link => link.classList.toggle('active', link.dataset.route === name));
   $('#page-context').textContent = pageName(name);
-  $('.sidebar').classList.remove('open');
+  setSidebarOpen(false);
   requestAnimationFrame(() => $('#main-content').focus({ preventScroll: true }));
   if (name === 'dashboard') loadDashboard();
   if (name === 'vessels') loadVessels();
@@ -319,6 +381,9 @@ function route() {
     loadReportAnalytics($('.period-switch button.active')?.dataset.period || 'month', state.analyticsSource);
     if (state.currentUser?.role === 'PLATFORM_ADMIN') loadIntegration();
   }
+  if (name === 'organizations' && state.currentUser?.role === 'PLATFORM_ADMIN') loadOrganizations();
+  if (name === 'users' && state.currentUser?.role === 'PLATFORM_ADMIN') loadUsers();
+  if (name === 'settings') loadSettings();
 }
 
 async function loadDashboard(query = '') {
@@ -373,29 +438,160 @@ function renderAttentionQueue(queue) {
 }
 
 function renderNotificationPreferences(certificateWarnings = 0) {
-  const control = $('#in-app-certificate-reminders');
-  control.checked = state.currentUser?.notification_preferences?.in_app_certificate_reminders !== false;
+  // Chỉ xử lý cảnh báo chứng chỉ ở Tổng quan. Các nút opt-in đã chuyển sang tab
+  // Cài đặt (đọc/ghi qua loadSettings/saveMyProfile).
+  const prefs = state.currentUser?.notification_preferences || {};
+  const inAppOn = prefs.in_app_certificate_reminders !== false;
   const reminder = $('#certificate-reminder');
-  const showReminder = control.checked && certificateWarnings > 0;
+  if (!reminder) return;
+  const showReminder = inAppOn && certificateWarnings > 0;
   reminder.hidden = !showReminder;
   reminder.textContent = showReminder ? `Có ${certificateWarnings} phương tiện có chứng chỉ hết hạn hoặc sắp hết hạn trong 30 ngày.` : '';
 }
 
-async function saveNotificationPreferences(event) {
-  const control = event.currentTarget;
-  control.disabled = true;
+// ── Tab Cài đặt ──────────────────────────────────────────────────────────────
+function loadSettings() {
+  const user = state.currentUser;
+  if (!user) return;
+  const prefs = user.notification_preferences || {};
+  // Khối "Thông báo"
+  const form = $('#my-profile-form');
+  form.elements.full_name.value = user.full_name || '';
+  form.elements.email.value = user.email || '';
+  $('#in-app-certificate-reminders').checked = prefs.in_app_certificate_reminders !== false;
+  $('#email-workflow-updates').checked = prefs.email_workflow_updates === true;
+  $('#email-certificate-reminders').checked = prefs.email_certificate_reminders === true;
+  // Trạng thái SMTP (chỉ admin)
+  const status = $('#settings-email-status');
+  if (status) {
+    const isAdmin = user.role === 'PLATFORM_ADMIN';
+    status.hidden = !isAdmin;
+    if (isAdmin) {
+      const on = user.email_enabled === true;
+      status.textContent = on ? 'Email: đã cấu hình' : 'Email: chưa cấu hình';
+      status.className = `state-badge ${on ? 'submitted' : 'pending'}`;
+    }
+  }
+  // Khối "Email chung của Cảng" — cho PORT_STAFF/PLATFORM_ADMIN khi đã chọn đơn vị
+  const portPanel = $('#settings-port-panel');
+  const canPort = ['PORT_STAFF', 'PLATFORM_ADMIN'].includes(user.role) && state.activeReportingUnitId;
+  portPanel.hidden = !canPort;
+  if (canPort) {
+    const unit = state.reportingUnits.find(u => u.id === state.activeReportingUnitId);
+    $('#settings-port-name').textContent = unit ? unit.name : 'Đơn vị đang chọn';
+    $('#port-email-form').elements.notify_email.value = unit?.notify_email || '';
+  }
+  // Cấu hình SMTP + lối tắt quản trị (chỉ admin)
+  const isAdmin = user.role === 'PLATFORM_ADMIN';
+  $('#settings-admin-shortcuts').hidden = !isAdmin;
+  $('#settings-smtp-panel').hidden = !isAdmin;
+  if (isAdmin) loadSmtpSettings();
+}
+
+async function loadSmtpSettings() {
   try {
-    const preferences = await api('/api/notification-preferences', {
-      method: 'PUT', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({in_app_certificate_reminders: control.checked}),
+    const cfg = await api('/api/admin/smtp');
+    const form = $('#smtp-form');
+    form.elements.enabled.checked = cfg.enabled === true;
+    form.elements.host.value = cfg.host || '';
+    form.elements.port.value = cfg.port || 587;
+    form.elements.username.value = cfg.username || '';
+    form.elements.from.value = cfg.from || '';
+    form.elements.use_tls.checked = cfg.use_tls !== false;
+    form.elements.password.value = '';
+    $('#smtp-password-hint').textContent = cfg.password_set ? 'Đã có mật khẩu — để trống nếu không đổi.' : 'Chưa đặt mật khẩu.';
+    // Nếu cấu hình lấy từ .env thì khóa form, hướng dẫn dùng .env.
+    const fromEnv = cfg.source === 'env';
+    $('#settings-smtp-env-note').hidden = !fromEnv;
+    [...form.elements].forEach(el => { el.disabled = fromEnv; });
+    if (!$('#smtp-test-to').value) $('#smtp-test-to').value = state.currentUser?.email || '';
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveSmtp(event) {
+  event.preventDefault();
+  const form = event.target;
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
+  const payload = {
+    enabled: form.elements.enabled.checked,
+    host: form.elements.host.value.trim(),
+    port: Number(form.elements.port.value) || 587,
+    username: form.elements.username.value.trim(),
+    from: form.elements.from.value.trim(),
+    use_tls: form.elements.use_tls.checked,
+  };
+  // Chỉ gửi password khi admin nhập mới (để trống = giữ nguyên).
+  const pw = form.elements.password.value;
+  if (pw) payload.password = pw;
+  try {
+    const cfg = await api('/api/admin/smtp', {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
     });
-    state.currentUser.notification_preferences = preferences;
-    renderNotificationPreferences(state.dashboardCertificateWarnings);
-    toast(preferences.in_app_certificate_reminders ? 'Đã bật nhắc hạn chứng chỉ trong ứng dụng.' : 'Đã tắt nhắc hạn chứng chỉ trong ứng dụng.');
+    toast('Đã lưu cấu hình SMTP.');
+    // Cập nhật badge trạng thái email trên trang.
+    state.currentUser.email_enabled = cfg.enabled && !!cfg.host && !!cfg.from;
+    loadSmtpSettings();
+    const status = $('#settings-email-status');
+    if (status) { const on = state.currentUser.email_enabled; status.hidden = false; status.textContent = on ? 'Email: đã cấu hình' : 'Email: chưa cấu hình'; status.className = `state-badge ${on ? 'submitted' : 'pending'}`; }
   } catch (error) {
-    control.checked = !control.checked;
     toast(error.message, true);
-  } finally { control.disabled = false; }
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
+async function sendSmtpTest() {
+  const to = $('#smtp-test-to').value.trim();
+  if (!to || !to.includes('@')) return toast('Nhập địa chỉ email hợp lệ để gửi thử.', true);
+  const btn = $('#smtp-test-btn');
+  btn.disabled = true; const label = btn.textContent; btn.textContent = 'Đang gửi…';
+  try {
+    const result = await api('/api/admin/smtp/test', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ to }),
+    });
+    toast(result.detail, !result.sent);
+  } catch (error) {
+    toast(error.message, true);
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+async function saveMyProfile(event) {
+  event.preventDefault();
+  const form = event.target;
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
+  const payload = {
+    full_name: form.elements.full_name.value.trim(),
+    email: form.elements.email.value.trim(),
+    in_app_certificate_reminders: $('#in-app-certificate-reminders').checked,
+    email_workflow_updates: $('#email-workflow-updates').checked,
+    email_certificate_reminders: $('#email-certificate-reminders').checked,
+  };
+  try {
+    const profile = await api('/api/me', {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
+    });
+    state.currentUser = { ...state.currentUser, ...profile };
+    renderNotificationPreferences(state.dashboardCertificateWarnings);
+    toast('Đã lưu thông báo của bạn.');
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
+async function savePortEmail(event) {
+  event.preventDefault();
+  const form = event.target;
+  const unit = state.reportingUnits.find(u => u.id === state.activeReportingUnitId);
+  if (!unit) return toast('Chưa chọn đơn vị báo cáo.', true);
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
+  try {
+    const updated = await api(`/api/reporting-units/${unit.id}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name: unit.name, code: unit.code, notify_email: form.elements.notify_email.value.trim() }),
+    });
+    unit.notify_email = updated.notify_email;
+    toast(`Đã lưu email cho ${updated.name}.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
 }
 
 function renderDashboardMatches(items) {
@@ -509,10 +705,13 @@ function renderDeclarationPagination(result) {
 function declarationTable(items = [], editable = false) {
   if (!items.length) return empty('Chưa có phiếu khai báo', 'Tạo phiếu đầu tiên từ một hồ sơ phương tiện.');
   const approvalLegend = '<div class="approval-legend"><strong>Tiến trình duyệt:</strong><span>Xanh = đã xác nhận · Xám = chờ</span></div>';
-  // Xóa phiếu: chỉ Platform admin, chỉ khi còn ở Nháp/Cần bổ sung (chưa được
-  // Cảng xem xét) — để có thể dọn dẹp phiếu test mà không đụng hồ sơ đã duyệt.
-  const canDelete = editable && state.currentUser?.role === 'PLATFORM_ADMIN';
-  return `${approvalLegend}<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Tiến trình</th><th>Trạng thái</th>${editable ? '<th></th>' : ''}</tr></thead><tbody>${items.map(d => `<tr><td data-label="Mã / Loại"><strong>${esc(d.reference_no)}</strong><br><small>${d.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</small></td><td data-label="Phương tiện">${esc(d.vessel_name)}<br><small>${esc(d.registration_no)} · ${esc(d.master_name)}</small></td><td data-label="Hành trình">${esc(d.last_port)} → ${esc(d.working_port)}${d.destination_port ? ` → ${esc(d.destination_port)}` : ''}</td><td data-label="Thời gian">${fmtDate(d.movement_type === 'DEPARTURE' ? d.etd : d.eta)}</td><td data-label="Tiến trình duyệt"><span class="approval-dots">${approvalDot(d.port_approval, 'Cảng')}</span></td><td data-label="Trạng thái"><span class="table-badge ${workflowTone(d.workflow_status)}">${workflowLabel(d.workflow_status)}</span></td>${editable ? `<td data-label="Thao tác">${['DRAFT','CHANGES_REQUESTED'].includes(d.workflow_status) ? `<button data-edit-declaration="${d.id}">Mở phiếu</button> · ` : ''}<button data-workflow="${d.id}">Chi tiết</button>${canDelete && ['DRAFT','CHANGES_REQUESTED'].includes(d.workflow_status) ? ` · <button class="danger-link" data-delete-declaration="${d.id}">Xóa</button>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  // Platform admin có toàn quyền: sửa/xóa phiếu ở MỌI trạng thái, kể cả Đã
+  // duyệt (để sửa sai hoặc dọn dữ liệu). Khách/nhân viên Cảng chỉ thao tác được
+  // khi phiếu còn ở Nháp/Cần bổ sung.
+  const isAdmin = state.currentUser?.role === 'PLATFORM_ADMIN';
+  const canDelete = editable && isAdmin;
+  const canEditRow = d => isAdmin || ['DRAFT','CHANGES_REQUESTED'].includes(d.workflow_status);
+  return `${approvalLegend}<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Tiến trình</th><th>Trạng thái</th>${editable ? '<th></th>' : ''}</tr></thead><tbody>${items.map(d => `<tr><td data-label="Mã / Loại"><strong>${esc(d.reference_no)}</strong><br><small>${d.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</small></td><td data-label="Phương tiện">${esc(d.vessel_name)}<br><small>${esc(d.registration_no)} · ${esc(d.master_name)}</small></td><td data-label="Hành trình">${esc(d.last_port)} → ${esc(d.working_port)}${d.destination_port ? ` → ${esc(d.destination_port)}` : ''}</td><td data-label="Thời gian">${fmtDate(d.movement_type === 'DEPARTURE' ? d.etd : d.eta)}</td><td data-label="Tiến trình duyệt"><span class="approval-dots">${approvalDot(d.port_approval, 'Cảng')}</span></td><td data-label="Trạng thái"><span class="table-badge ${workflowTone(d.workflow_status)}">${workflowLabel(d.workflow_status)}</span></td>${editable ? `<td data-label="Thao tác">${canEditRow(d) ? `<button data-edit-declaration="${d.id}">Mở phiếu</button> · ` : ''}<button data-workflow="${d.id}">Chi tiết</button>${canDelete ? ` · <button class="danger-link" data-delete-declaration="${d.id}">Xóa</button>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
 }
 
 function approvalDot(status, label) {
@@ -686,18 +885,29 @@ async function saveVessel(event) {
   finally { setSubmitting(form, event.submitter, false); }
 }
 
+function containerCountTons(prefix, key, label, current) {
+  // Một ô gộp: số lượng container (thu nhỏ) + số tấn cho mỗi container, để công
+  // thức tự nhân số lượng × số tấn cho Khối lượng.
+  return `<label class="container-count-field container-only">${label}
+    <span class="count-tons">
+      <input name="${prefix}_cont${key}" type="number" min="0" step="1" value="${esc(current[`cont${key}`] ?? '')}" class="count-input" aria-label="${esc(label)} — số lượng" placeholder="SL">
+      <span class="count-tons-mult" aria-hidden="true">×</span>
+      <input name="${prefix}_tons${key}" type="number" min="0" step="0.01" value="${esc(current[`tons${key}`] ?? '')}" class="tons-input" aria-label="${esc(label)} — số tấn mỗi container" placeholder="tấn">
+    </span></label>`;
+}
+
 function cargoFields(prefix, title, current = {}, load = false) {
   return `<section class="form-section"><h3>${title}</h3><div class="section-grid">
     ${selectField(`${prefix}_cargo_type`,'Loại hàng',state.catalogs.cargoTypes,current.cargo_type)}
     ${selectField(`${prefix}_movement_type`,'Loại hình',load ? state.catalogs.loadMovements : state.catalogs.unloadMovements,current.movement_type)}
     ${field(`${prefix}_cargo_name`,'Tên hàng',current.cargo_name,'text','class="wide-field"')}
-    ${field(`${prefix}_cont20_full`,'20 ft có hàng',current.cont20_full,'number','min="0"')}
-    ${field(`${prefix}_cont20_empty`,'20 ft rỗng',current.cont20_empty,'number','min="0"')}
-    ${field(`${prefix}_cont40_full`,'40 ft có hàng',current.cont40_full,'number','min="0"')}
-    ${field(`${prefix}_cont40_empty`,'40 ft rỗng',current.cont40_empty,'number','min="0"')}
-    ${field(`${prefix}_total`,'Tổng container',current.total_containers || 0,'number','readonly class="derived"')}
-    ${field(`${prefix}_teu`,'Quy đổi TEU',current.teu || 0,'number','readonly class="derived"')}
-    ${field(`${prefix}_empty_teu`,'TEU rỗng',current.empty_teu || 0,'number','readonly class="derived"')}
+    ${containerCountTons(prefix,'20_full','20ft có hàng',current)}
+    ${containerCountTons(prefix,'20_empty','20ft rỗng',current)}
+    ${containerCountTons(prefix,'40_full','40ft có hàng',current)}
+    ${containerCountTons(prefix,'40_empty','40ft rỗng',current)}
+    ${field(`${prefix}_total`,'Tổng container',current.total_containers || 0,'number','readonly class="derived container-only"')}
+    ${field(`${prefix}_teu`,'Quy đổi TEU',current.teu || 0,'number','readonly class="derived container-only"')}
+    ${field(`${prefix}_empty_teu`,'TEU rỗng',current.empty_teu || 0,'number','readonly class="derived container-only"')}
     ${field(`${prefix}_tons`,'Khối lượng (tấn)',current.tons,'number','min="0" step="0.01"')}
   </div></section>`;
 }
@@ -992,7 +1202,7 @@ function reviewSummaryHtml(d) {
   </div>
   <p class="muted">${isAdmin
     ? 'Kiểm tra kỹ thông tin trước khi lưu phiếu.'
-    : 'Kiểm tra kỹ thông tin trước khi bấm “Xác nhận & gửi”. Sau khi gửi, thông tin được khóa trong khi Cảng xem xét.'}</p></section>`;
+    : 'Kiểm tra kỹ thông tin trước khi bấm “Xác nhận”. Sau khi gửi, thông tin được khóa trong khi Cảng xem xét.'}</p></section>`;
 }
 
 async function loadPortRegister() {
@@ -1132,10 +1342,10 @@ function renderDeclarationWizard() {
         ${field('working_port','Cảng / cầu bến đến làm hàng',d.working_port,'text','required list="ports-list"')}
         ${field('departure_berth','Cảng / cầu bến rời',d.departure_berth,'text','list="ports-list"')}
         ${field('destination_port','Cảng đích',d.destination_port,'text','list="ports-list"')}
-        ${field('eta','Thời gian dự kiến đến',d.eta,'datetime-local','required')}
-        ${field('etd','Thời gian dự kiến rời',d.etd,'datetime-local','required')}
-        ${field('actual_arrival_at','Thời gian đến thực tế',d.actual_arrival_at,'datetime-local')}
-        ${field('actual_departure_at','Thời gian rời thực tế',d.actual_departure_at,'datetime-local')}
+        ${dateTimeField('eta','Thời gian dự kiến đến',d.eta,'required')}
+        ${dateTimeField('etd','Thời gian dự kiến rời',d.etd,'required')}
+        ${dateTimeField('actual_arrival_at','Thời gian đến thực tế',d.actual_arrival_at)}
+        ${dateTimeField('actual_departure_at','Thời gian rời thực tế',d.actual_departure_at)}
         ${field('agent_ptnd_name','Đại lý PTND',d.agent_ptnd_name,'text','class="wide-field"')}
         <datalist id="ports-list"></datalist>
       </div></section>
@@ -1180,7 +1390,16 @@ function renderDeclarationWizard() {
   const container = $('#declaration-fields');
   const declarationVessel = $('#declaration-vessel');
   if (declarationVessel) declarationVessel.onchange = fillFromVessel;
-  ['unload','load'].forEach(prefix => $$(`[name^="${prefix}_cont"]`, $('#declaration-form')).forEach(input => input.addEventListener('input', () => calculateCargo(prefix))));
+  ['unload','load'].forEach(prefix => {
+    // Đổi số lượng cont, số tấn/cont, hoặc loại hàng đều tính lại tổng. Lưu ý:
+    // ô Khối lượng (_tons) KHÔNG nằm trong danh sách này để người dùng sửa tay
+    // không bị ghi đè — chỉ các ô _tons20_*/_tons40_* mới kích hoạt tính lại.
+    $$(`[name^="${prefix}_cont"], [name="${prefix}_tons20_full"], [name="${prefix}_tons20_empty"], [name="${prefix}_tons40_full"], [name="${prefix}_tons40_empty"]`, $('#declaration-form')).forEach(input => input.addEventListener('input', () => calculateCargo(prefix)));
+    const typeSelect = $('#declaration-form').elements[`${prefix}_cargo_type`];
+    if (typeSelect) typeSelect.addEventListener('change', () => { toggleContainerFields(prefix); calculateCargo(prefix); });
+    toggleContainerFields(prefix);
+  });
+  bindDateTimeFields(container);
   $$('input[name="vessel_mode"]', container).forEach(radio => radio.addEventListener('change', event => {
     captureWizardFormState();
     state.declarationVesselMode = event.target.value;
@@ -1229,12 +1448,33 @@ function renderDeclarationWizard() {
   if (saveDraftButton) saveDraftButton.hidden = !onLastStep;
 }
 
+function toggleContainerFields(prefix) {
+  const form = $('#declaration-form');
+  const typeSelect = form?.elements[`${prefix}_cargo_type`];
+  if (!typeSelect) return;
+  const isContainer = (typeSelect.value || '') === 'Container';
+  // Chỉ hiện các ô liên quan container khi Loại hàng = Container; hàng khô/lỏng
+  // chỉ cần nhập Khối lượng (tấn) trực tiếp.
+  const section = typeSelect.closest('.form-section');
+  if (!section) return;
+  $$('.container-only', section).forEach(el => { el.hidden = !isContainer; });
+}
+
 function calculateCargo(prefix) {
   const form = $('#declaration-form');
   const a = number(form.elements[`${prefix}_cont20_full`].value), b = number(form.elements[`${prefix}_cont20_empty`].value), c = number(form.elements[`${prefix}_cont40_full`].value), d = number(form.elements[`${prefix}_cont40_empty`].value);
   form.elements[`${prefix}_total`].value = a + b + c + d;
   form.elements[`${prefix}_teu`].value = a + b + (c + d) * 2;
   form.elements[`${prefix}_empty_teu`].value = b + d * 2;
+  // Với hàng Container: Khối lượng = Σ(số lượng × số tấn mỗi container). Vẫn cho
+  // sửa tay (hàng khô/lỏng nhập trực tiếp) — chỉ tự tính khi loại = Container.
+  const isContainer = (form.elements[`${prefix}_cargo_type`]?.value || '') === 'Container';
+  if (isContainer) {
+    const t20f = number(form.elements[`${prefix}_tons20_full`].value), t20e = number(form.elements[`${prefix}_tons20_empty`].value);
+    const t40f = number(form.elements[`${prefix}_tons40_full`].value), t40e = number(form.elements[`${prefix}_tons40_empty`].value);
+    const totalTons = a * t20f + b * t20e + c * t40f + d * t40e;
+    form.elements[`${prefix}_tons`].value = Math.round(totalTons * 100) / 100;
+  }
 }
 
 function declarationData() {
@@ -1248,7 +1488,7 @@ function declarationData() {
   delete data.attachments;
   delete data.vessel_mode;
   ['unload','load'].forEach(prefix => {
-    data[prefix] = {cargo_type:data[`${prefix}_cargo_type`],movement_type:data[`${prefix}_movement_type`],cargo_name:data[`${prefix}_cargo_name`],cont20_full:data[`${prefix}_cont20_full`],cont20_empty:data[`${prefix}_cont20_empty`],cont40_full:data[`${prefix}_cont40_full`],cont40_empty:data[`${prefix}_cont40_empty`],tons:data[`${prefix}_tons`]};
+    data[prefix] = {cargo_type:data[`${prefix}_cargo_type`],movement_type:data[`${prefix}_movement_type`],cargo_name:data[`${prefix}_cargo_name`],cont20_full:data[`${prefix}_cont20_full`],cont20_empty:data[`${prefix}_cont20_empty`],cont40_full:data[`${prefix}_cont40_full`],cont40_empty:data[`${prefix}_cont40_empty`],tons20_full:data[`${prefix}_tons20_full`] || 0,tons20_empty:data[`${prefix}_tons20_empty`] || 0,tons40_full:data[`${prefix}_tons40_full`] || 0,tons40_empty:data[`${prefix}_tons40_empty`] || 0,tons:data[`${prefix}_tons`]};
     Object.keys(data).filter(key => key.startsWith(`${prefix}_`)).forEach(key => delete data[key]);
   });
   if (state.editingDeclaration?.id) {
@@ -1401,9 +1641,16 @@ async function saveWorkflow(event) {
   try {
     await api(`/api/declarations/${state.workflowDeclaration.id}/workflow`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     form.reset();
-    toast('Đã ghi nhận thao tác và cập nhật timeline.');
+    // Cả hai thao tác (Duyệt/hoàn tất và Yêu cầu bổ sung) đều đóng dialog sau khi
+    // ghi nhận. Với REQUEST_CHANGES, phiếu chuyển sang CHANGES_REQUESTED nên khách
+    // hàng thấy ngay trong hàng đợi "Cần chú ý" và timeline (kèm lý do) — đó là
+    // kênh thông báo in-app hiện có.
+    toast(data.action === 'REQUEST_CHANGES'
+      ? 'Đã gửi yêu cầu bổ sung. Khách hàng sẽ thấy phiếu trong mục cần xử lý.'
+      : 'Đã xác nhận hoàn tất và cập nhật timeline.');
+    $('#workflow-dialog').close();
+    state.workflowDeclaration = null;
     await loadDeclarations();
-    await openWorkflow(state.workflowDeclaration.id);
     refreshPendingBadge();
   } catch (error) { toast(error.message, true); }
   finally { setSubmitting(form, event.submitter, false); }
@@ -2239,12 +2486,199 @@ async function prepareSync() {
   } catch (error) { toast(error.message, true); }
 }
 
+// ── Thông tin khách hàng / Tổ chức (PLATFORM_ADMIN) ──────────────────────────
+async function loadOrganizations() {
+  const table = $('#organizations-table');
+  $('#main-content').setAttribute('aria-busy', 'true');
+  try {
+    state.organizations = await api('/api/organizations');
+    renderOrganizations();
+  } catch (error) {
+    table.innerHTML = empty('Không tải được danh sách', error.message);
+  } finally { $('#main-content').setAttribute('aria-busy', 'false'); }
+}
+
+function renderOrganizations() {
+  const table = $('#organizations-table');
+  if (!state.organizations.length) { table.innerHTML = empty('Chưa có tổ chức', 'Thêm tổ chức khách hàng đầu tiên để có thể cấp tài khoản Khách hàng.'); return; }
+  table.innerHTML = `<table class="data-table responsive-table"><thead><tr><th>Tổ chức</th><th>Mã số thuế</th><th>Liên hệ</th><th aria-label="Thao tác"></th></tr></thead><tbody>${state.organizations.map(o => `<tr><td data-label="Tổ chức"><strong>${esc(o.name)}</strong>${o.address ? `<br><small>${esc(o.address)}</small>` : ''}</td><td data-label="Mã số thuế">${esc(o.tax_code || '—')}</td><td data-label="Liên hệ">${o.contact_name ? esc(o.contact_name) : '—'}${o.phone ? `<br><small>${esc(o.phone)}</small>` : ''}</td><td data-label="Thao tác" class="user-actions"><button type="button" class="table-link" data-edit-organization="${o.id}">Sửa</button></td></tr>`).join('')}</tbody></table>`;
+  $$('[data-edit-organization]', table).forEach(button => button.onclick = () => openOrganization(Number(button.dataset.editOrganization)));
+}
+
+function openOrganization(orgId = null) {
+  const form = $('#organization-form');
+  form.reset();
+  state.editingOrganization = orgId;
+  const org = orgId ? state.organizations.find(o => o.id === orgId) : null;
+  $('#organization-dialog-title').textContent = org ? 'Sửa tổ chức khách hàng' : 'Thêm tổ chức khách hàng';
+  $('#save-organization').textContent = org ? 'Lưu thay đổi' : 'Lưu tổ chức';
+  if (org) ['name', 'tax_code', 'address', 'contact_name', 'contact_role', 'phone', 'email'].forEach(key => { if (form.elements[key]) form.elements[key].value = org[key] || ''; });
+  $('#organization-dialog').showModal();
+  requestAnimationFrame(() => form.elements.name.focus());
+}
+
+async function submitOrganization(event) {
+  event.preventDefault();
+  const form = event.target;
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
+  const orgId = state.editingOrganization;
+  try {
+    const saved = await api(orgId ? `/api/organizations/${orgId}` : '/api/organizations', {
+      method: orgId ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(values(form)),
+    });
+    $('#organization-dialog').close();
+    toast(orgId ? `Đã cập nhật ${saved.name}.` : `Đã thêm tổ chức ${saved.name}.`);
+    await loadOrganizations();
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
+// ── Quản lý người dùng (PLATFORM_ADMIN) ──────────────────────────────────────
+const USER_ROLE_LABELS = { CUSTOMER: 'Khách hàng', PORT_STAFF: 'Nhân viên Cảng', PLATFORM_ADMIN: 'Platform Admin' };
+
+async function loadUsers() {
+  const table = $('#users-table');
+  $('#main-content').setAttribute('aria-busy', 'true');
+  try {
+    const data = await api('/api/admin/users');
+    state.users = data.items || [];
+    renderUsers();
+  } catch (error) {
+    table.innerHTML = empty('Không tải được danh sách', error.message);
+  } finally { $('#main-content').setAttribute('aria-busy', 'false'); }
+}
+
+function userScopeCell(item) {
+  if (item.role === 'CUSTOMER') return esc(item.organization_name || '—');
+  if (item.role === 'PORT_STAFF') return item.reporting_units.length ? item.reporting_units.map(u => esc(u.name)).join(', ') : '<span class="muted">Chưa cấp đơn vị</span>';
+  return '<span class="muted">Toàn hệ thống</span>';
+}
+
+function renderUsers() {
+  const table = $('#users-table');
+  if (!state.users.length) { table.innerHTML = empty('Chưa có người dùng', 'Tạo tài khoản đầu tiên cho nhân viên hoặc khách hàng.'); return; }
+  table.innerHTML = `<table class="data-table responsive-table"><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Phạm vi</th><th>Trạng thái</th><th aria-label="Thao tác"></th></tr></thead><tbody>${state.users.map(item => `<tr><td data-label="Tài khoản"><strong>${esc(item.username)}</strong><br><small>${esc(item.full_name || '—')}</small></td><td data-label="Vai trò">${esc(USER_ROLE_LABELS[item.role] || item.role)}</td><td data-label="Phạm vi">${userScopeCell(item)}</td><td data-label="Trạng thái"><span class="table-badge ${item.is_active ? 'submitted' : 'draft'}">${item.is_active ? 'Đang hoạt động' : 'Đã khóa'}</span></td><td data-label="Thao tác" class="user-actions"><button type="button" class="table-link" data-reset-user="${item.id}">Đặt lại mật khẩu</button>${item.id === state.currentUser?.id ? '' : ` · <button type="button" class="table-link ${item.is_active ? 'danger-link' : ''}" data-toggle-user="${item.id}">${item.is_active ? 'Khóa' : 'Mở khóa'}</button>`}</td></tr>`).join('')}</tbody></table>`;
+  $$('[data-reset-user]', table).forEach(button => button.onclick = () => openResetPassword(Number(button.dataset.resetUser)));
+  $$('[data-toggle-user]', table).forEach(button => button.onclick = () => toggleUserActive(Number(button.dataset.toggleUser)));
+}
+
+async function toggleUserActive(userId) {
+  const item = state.users.find(u => u.id === userId);
+  if (!item) return;
+  const next = !item.is_active;
+  if (!next && !confirm(`Khóa tài khoản "${item.username}"? Người dùng sẽ không đăng nhập được.`)) return;
+  try {
+    const updated = await api(`/api/admin/users/${userId}/active`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ is_active: next }),
+    });
+    Object.assign(item, updated);
+    renderUsers();
+    toast(next ? `Đã mở khóa ${updated.username}.` : `Đã khóa ${updated.username}.`);
+  } catch (error) { toast(error.message, true); }
+}
+
+function refreshUserFormScope(role) {
+  const orgField = $('#user-org-field');
+  const unitsField = $('#user-units-field');
+  const orgSelect = orgField.querySelector('select');
+  orgField.hidden = role !== 'CUSTOMER';
+  orgSelect.required = role === 'CUSTOMER';
+  unitsField.hidden = role !== 'PORT_STAFF';
+}
+
+async function openCreateUser() {
+  const form = $('#user-form');
+  form.reset();
+  const orgSelect = $('#user-org-field select');
+  const unitsList = $('#user-units-list');
+  orgSelect.innerHTML = '<option value="">Đang tải…</option>';
+  unitsList.innerHTML = '';
+  refreshUserFormScope(form.elements.role.value);
+  $('#user-dialog').showModal();
+  requestAnimationFrame(() => form.elements.role.focus());
+  try {
+    const [orgs, units] = await Promise.all([
+      api('/api/organizations'),
+      api('/api/reporting-units'),
+    ]);
+    orgSelect.innerHTML = orgs.length
+      ? '<option value="">— Chọn tổ chức —</option>' + orgs.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')
+      : '<option value="">— Chưa có tổ chức, thêm ở tab Thông tin khách hàng —</option>';
+    unitsList.innerHTML = (units.items || []).length
+      ? (units.items || []).map(u => `<label class="user-unit-option"><input type="checkbox" name="reporting_unit_ids" value="${u.id}"><span>${esc(u.name)}</span></label>`).join('')
+      : '<p class="muted">Chưa có đơn vị báo cáo nào. Có thể cấp sau.</p>';
+  } catch (error) {
+    orgSelect.innerHTML = '<option value="">Không tải được tổ chức</option>';
+    toast(error.message, true);
+  }
+}
+
+async function submitCreateUser(event) {
+  event.preventDefault();
+  const form = event.target;
+  setSubmitting(form, event.submitter, true, 'Đang tạo…');
+  const fd = new FormData(form);
+  const role = fd.get('role');
+  const payload = {
+    username: (fd.get('username') || '').trim(),
+    password: fd.get('password'),
+    full_name: (fd.get('full_name') || '').trim(),
+    email: (fd.get('email') || '').trim(),
+    role,
+  };
+  if (role === 'CUSTOMER') payload.organization_id = fd.get('organization_id') ? Number(fd.get('organization_id')) : null;
+  if (role === 'PORT_STAFF') payload.reporting_unit_ids = fd.getAll('reporting_unit_ids').map(Number);
+  try {
+    const created = await api('/api/admin/users', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+    });
+    $('#user-dialog').close();
+    toast(`Đã tạo tài khoản ${created.username}.`);
+    await loadUsers();
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
+function openResetPassword(userId) {
+  const item = state.users.find(u => u.id === userId);
+  if (!item) return;
+  const form = $('#reset-password-form');
+  form.reset();
+  form.dataset.userId = String(userId);
+  $('#reset-password-target').textContent = `Tài khoản: ${item.username}${item.full_name ? ` (${item.full_name})` : ''}`;
+  $('#reset-password-dialog').showModal();
+  requestAnimationFrame(() => form.elements.password.focus());
+}
+
+async function submitResetPassword(event) {
+  event.preventDefault();
+  const form = event.target;
+  const userId = Number(form.dataset.userId);
+  setSubmitting(form, event.submitter, true, 'Đang lưu…');
+  try {
+    await api(`/api/admin/users/${userId}/reset-password`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: form.elements.password.value }),
+    });
+    $('#reset-password-dialog').close();
+    toast('Đã đặt lại mật khẩu.');
+  } catch (error) {
+    toast(error.message, true);
+  } finally { setSubmitting(form, event.submitter, false); }
+}
+
 async function init() {
   if (!window.__tanThuanRouteBound) {
     window.addEventListener('hashchange', route);
     window.__tanThuanRouteBound = true;
   }
-  $('#menu-toggle').onclick = () => $('.sidebar').classList.toggle('open');
+  $('#menu-toggle').onclick = () => setSidebarOpen(!$('.sidebar').classList.contains('open'));
+  // Trên mobile, chạm ra ngoài sidebar (kể cả vùng nhập liệu) sẽ đóng drawer.
+  $('#sidebar-backdrop').onclick = () => setSidebarOpen(false);
+  $('#main-content').addEventListener('pointerdown', () => {
+    if ($('.sidebar').classList.contains('open')) setSidebarOpen(false);
+  });
   $('#theme-toggle').onclick = () => { const root = document.documentElement; const next = root.dataset.theme === 'dark' ? 'light' : 'dark'; root.dataset.theme = next; localStorage.setItem('tanthuan-theme', next); };
   document.documentElement.dataset.theme = localStorage.getItem('tanthuan-theme') || 'dark';
   bindLoginForm();
@@ -2278,10 +2712,10 @@ async function init() {
     $('#submit-declaration').hidden = !(isCustomer || isAdmin);
     $('#save-draft').textContent = isAdmin ? 'Lưu phiếu' : 'Lưu nháp';
     const reviewStrip = $('.review-strip');
-    reviewStrip.querySelector('strong').textContent = isAdmin ? 'Kiểm tra trước khi lưu / gửi' : 'Kiểm tra trước khi xác nhận';
+    reviewStrip.querySelector('strong').textContent = isAdmin ? 'Kiểm tra kỹ thông tin' : 'Kiểm tra trước khi xác nhận';
     reviewStrip.querySelector('p').textContent = isAdmin
-      ? 'Dấu * là bắt buộc. Có thể lưu nháp để bổ sung sau, hoặc xác nhận gửi thay mặt khách hàng ngay.'
-      : 'Dấu * là bắt buộc. Sau khi gửi, Cảng sẽ xem xét và phản hồi.';
+      ? 'Dấu * là bắt buộc.'
+      : 'Dấu * là bắt buộc. Nếu phiếu có lỗi, liên hệ nhân viên Cảng để được hỗ trợ.';
     const addVesselBtn = $('#add-vessel');
     if (addVesselBtn) addVesselBtn.hidden = isReviewer || isCustomer;
     const addCrewBtn = $('#add-crew');
@@ -2307,6 +2741,12 @@ async function init() {
 
     const portRegisterNav = $('nav a[href="#port-register"]');
     if (portRegisterNav) portRegisterNav.hidden = !(isReviewer || isAdmin);
+
+    const organizationsNav = $('nav a[href="#organizations"]');
+    if (organizationsNav) organizationsNav.hidden = !isAdmin;
+
+    const usersNav = $('nav a[href="#users"]');
+    if (usersNav) usersNav.hidden = !isAdmin;
 
     $('.data-nav').hidden = isCustomer;
     $('#import-vessels-card').hidden = !(isReviewer || isAdmin);
@@ -2369,7 +2809,10 @@ async function init() {
   $('#crew-form').addEventListener('submit', saveCrew);
   $('#declaration-form').addEventListener('submit', saveDeclaration);
   $('#workflow-form').addEventListener('submit', saveWorkflow);
-  $('#in-app-certificate-reminders').addEventListener('change', saveNotificationPreferences);
+  $('#my-profile-form')?.addEventListener('submit', saveMyProfile);
+  $('#port-email-form')?.addEventListener('submit', savePortEmail);
+  $('#smtp-form')?.addEventListener('submit', saveSmtp);
+  $('#smtp-test-btn')?.addEventListener('click', sendSmtpTest);
   $('#report-adjustment-form').addEventListener('submit', saveReportAdjustment);
   $('#report-month').addEventListener('change', event => {
     $('#report-adjustment-form').elements.report_month.value = event.target.value;
@@ -2377,6 +2820,12 @@ async function init() {
   });
 
   $('#add-crew').onclick = () => openCrew();
+  $('#add-organization').onclick = () => openOrganization();
+  $('#organization-form').addEventListener('submit', submitOrganization);
+  $('#add-user').onclick = () => openCreateUser();
+  $('#user-form').elements.role.addEventListener('change', event => refreshUserFormScope(event.target.value));
+  $('#user-form').addEventListener('submit', submitCreateUser);
+  $('#reset-password-form').addEventListener('submit', submitResetPassword);
   $$('[data-close-dialog]').forEach(button => button.onclick = () => document.getElementById(button.dataset.closeDialog).close());
   let declarationTimer;
   ['declaration-search','master-filter'].forEach(id => $(`#${id}`).addEventListener('input', () => { clearTimeout(declarationTimer); declarationTimer = setTimeout(applyDeclarationFilters, 250); }));

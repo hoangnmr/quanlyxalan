@@ -81,6 +81,12 @@ def cargo(value: Any) -> dict[str, Any]:
         numbers["cont40_full"] + numbers["cont40_empty"]
     )
     empty_teu = numbers["cont20_empty"] + 2 * numbers["cont40_empty"]
+    unit_tons = {}
+    for key in ("tons20_full", "tons20_empty", "tons40_full", "tons40_empty"):
+        try:
+            unit_tons[key] = max(0.0, float(source.get(key) or 0))
+        except (TypeError, ValueError):
+            unit_tons[key] = 0.0
     try:
         tons = max(0.0, float(source.get("tons") or 0))
     except (TypeError, ValueError):
@@ -90,6 +96,7 @@ def cargo(value: Any) -> dict[str, Any]:
         "movement_type": str(source.get("movement_type") or ""),
         "cargo_name": str(source.get("cargo_name") or ""),
         **numbers,
+        **unit_tons,
         "total_containers": total,
         "teu": teu,
         "empty_teu": empty_teu,

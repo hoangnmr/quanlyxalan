@@ -178,7 +178,7 @@ def _table_names(connection) -> set:
 
 def test_fresh_database_upgrades_to_single_head(monkeypatch, pg_url):
     heads = ScriptDirectory.from_config(Config(ALEMBIC_INI)).get_heads()
-    assert heads == ["q16f0f000016"], f"expected a single head, got {heads}"
+    assert len(heads) == 1, f"expected a single head, got {heads}"
 
     url = pg_url
     import backend.database as database

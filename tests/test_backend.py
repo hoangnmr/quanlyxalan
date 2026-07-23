@@ -279,8 +279,10 @@ def test_static_frontend(client):
     assert 'id="certificate-reminder"' in res.text
     assert 'id="demo-data-notice"' in res.text
     assert 'id="login-dialog" class="modal login-dialog"' in res.text
-    assert '/styles.css?v=1.8.2' in res.text
-    assert '/app.js?v=1.8.2' in res.text
+    # Cache-busting query giữ nguyên; số phiên bản thay đổi theo mỗi lần release,
+    # và đường dẫn phải là tương đối để hoạt động khi app chạy dưới subpath.
+    assert 'styles.css?v=' in res.text and '"/styles.css' not in res.text
+    assert 'app.js?v=' in res.text and '"/app.js' not in res.text
     assert 'id="analytics-source-controls"' in res.text
     assert 'data-source="historical"' in res.text
     assert 'id="analytics-coverage"' in res.text
@@ -387,7 +389,10 @@ def test_platform_admin_can_create_empty_reporting_unit(
         assert created.status_code == 201, created.text
         body = created.json()
         unit_id = body["id"]
-        assert body == {"id": unit_id, "name": name, "code": code, "is_active": True}
+        assert body == {
+            "id": unit_id, "name": name, "code": code,
+            "notify_email": "", "is_active": True,
+        }
 
         duplicate_code = client.post(
             "/api/reporting-units", headers=auth_headers,
@@ -480,7 +485,11 @@ def test_notification_preferences_are_user_controlled_and_audited(client, custom
         json={"in_app_certificate_reminders": False},
     )
     assert updated.status_code == 200
-    assert updated.json() == {"in_app_certificate_reminders": False}
+    assert updated.json() == {
+        "in_app_certificate_reminders": False,
+        "email_certificate_reminders": False,
+        "email_workflow_updates": False,
+    }
     assert client.get("/api/notification-preferences", headers=customer_headers).json() == updated.json()
 
     db = SessionLocal()
@@ -823,7 +832,9 @@ def test_port_staff_cannot_delete_declaration(client, auth_headers, port_staff_h
     client.delete(f"/api/declarations/{declaration_id}", headers=auth_headers)  # cleanup
 
 
-def test_platform_admin_cannot_delete_submitted_declaration(client, auth_headers):
+def test_platform_admin_can_delete_submitted_declaration(client, auth_headers):
+    # Quyền của admin là tuyệt đối: xóa được phiếu ở mọi trạng thái workflow
+    # (xem DELETE /api/declarations/{id}). Mọi lần xóa đều ghi audit trail.
     created = client.post(
         "/api/declarations?submit=true",
         json=_minimal_declaration(company_name="KHÁCH HÀNG IMPORT"),
@@ -833,7 +844,8 @@ def test_platform_admin_cannot_delete_submitted_declaration(client, auth_headers
     assert created.json()["workflow_status"] == "PENDING_REVIEW"
 
     res = client.delete(f"/api/declarations/{declaration_id}", headers=auth_headers)
-    assert res.status_code == 409
+    assert res.status_code == 200
+    assert res.json() == {"deleted": declaration_id}
 
 
 def test_platform_admin_sees_its_own_drafts(client, auth_headers):

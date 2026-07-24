@@ -7,9 +7,13 @@ báo cáo trên cùng một nền tảng và tách biệt dữ liệu theo đơn
 ## Tài liệu
 
 - [Hướng dẫn sử dụng](USER_GUIDE.md): thao tác theo từng vai trò, import dữ liệu,
-  xử lý cảnh báo và xuất báo cáo.
+  xử lý cảnh báo, xử lý thực tế tại cảng (Bảo vệ/Giao nhận, hủy phiếu) và xuất
+  báo cáo.
 - [Technical Catalog](CATALOG.md): sơ đồ module, API, dữ liệu, migration và vị trí
   cần sửa theo từng loại công việc.
+- [Roadmap xử lý tại cảng](ROADMAP_PORT_OPERATIONS.md): quyết định nghiệp vụ và
+  chi tiết triển khai cổng Bảo vệ/Giao nhận, tab Kế hoạch làm hàng, hủy phiếu
+  hai cấp.
 - [API Contract](docs/API_CONTRACT.md): hợp đồng request/response chi tiết.
 - [Architecture](docs/ARCHITECTURE.md): kiến trúc và ranh giới triển khai.
 
@@ -26,7 +30,13 @@ báo cáo trên cùng một nền tảng và tách biệt dữ liệu theo đơn
   ATB/ATD, TEU, tấn ưu tiên từ dữ liệu TOS.
 - Dashboard báo cáo theo nguồn LIVE, LỊCH SỬ hoặc KẾT HỢP; xuất Excel PL.01–PL.03.
 - Phân quyền `CUSTOMER`, `PORT_STAFF`, `PLATFORM_ADMIN` với phạm vi đơn vị báo
-  cáo được kiểm soát ở backend.
+  cáo được kiểm soát ở backend; `PORT_STAFF` còn được gán bộ phận Bảo vệ hoặc
+  Giao nhận riêng theo từng đơn vị báo cáo.
+- Xử lý thực tế tại cảng sau khi phiếu đã duyệt: Bảo vệ ghi ATB/ATD và xác nhận
+  thu phí cầu bến, Giao nhận xác nhận dỡ/xếp hàng (chỉ sau khi đã thu phí); tab
+  "Kế hoạch làm hàng" tổng hợp toàn cảnh các lượt đang trong chu trình cập→rời.
+- Hủy phiếu hai cấp: `PLATFORM_ADMIN` hủy trực tiếp, `PORT_STAFF` chỉ gửi yêu
+  cầu hủy để Admin duyệt hoặc từ chối.
 
 ## Yêu cầu
 

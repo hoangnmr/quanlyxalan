@@ -10,6 +10,11 @@ Base = declarative_base()
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+
+def _in_clause(column: str, values) -> str:
+    rendered = ", ".join("'" + str(v).replace("'", "''") + "'" for v in values)
+    return f"{column} IN ({rendered})"
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -107,8 +112,17 @@ class VesselOperatingProfile(Base):
     cargo_capacity_tons = Column(Float)
     vessel = relationship("Vessel", back_populates="operating_profiles")
 
+BERTH_FEE_STATUSES = ("PENDING", "CONFIRMED")
+CARGO_OPS_STATUSES = ("PENDING", "CONFIRMED")
+
+
 class Declaration(Base):
     __tablename__ = "declarations"
+    __table_args__ = (
+        CheckConstraint(_in_clause("berth_fee_status", BERTH_FEE_STATUSES), name="ck_decl_berth_fee_status"),
+        CheckConstraint(_in_clause("unload_status", CARGO_OPS_STATUSES), name="ck_decl_unload_status"),
+        CheckConstraint(_in_clause("load_status", CARGO_OPS_STATUSES), name="ck_decl_load_status"),
+    )
     id = Column(Integer, primary_key=True, autoincrement=True)
     reference_no = Column(String, nullable=False, unique=True)
     status = Column(String, nullable=False, default="DRAFT")
@@ -151,6 +165,21 @@ class Declaration(Base):
     workflow_status = Column(String, nullable=False, default="DRAFT")
     port_approval = Column(String, nullable=False, default="PENDING")
     submitted_at = Column(String)
+    # Bảo vệ: xác nhận thu phí cầu bến — điều kiện tiên quyết cho Giao nhận xác
+    # nhận (xem CARGO_OPS_STATUSES / unload_status / load_status bên dưới).
+    berth_fee_status = Column(String, nullable=False, default="PENDING")
+    berth_fee_confirmed_at = Column(String)
+    berth_fee_confirmed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Giao nhận: 2 chiều độc lập (một lượt có thể vừa dỡ vừa xếp). *_is_adhoc
+    # đánh dấu chiều phát sinh ngoài kế hoạch đã khai, không cần Admin duyệt lại.
+    unload_status = Column(String, nullable=False, default="PENDING")
+    unload_is_adhoc = Column(Integer, nullable=False, default=0)
+    load_status = Column(String, nullable=False, default="PENDING")
+    load_is_adhoc = Column(Integer, nullable=False, default=0)
+    # Yêu cầu hủy hai cấp: nhân viên không phải Admin chỉ ghi yêu cầu ở đây,
+    # KHÔNG đổi workflow_status — chỉ Admin duyệt yêu cầu mới đổi thành CANCELLED.
+    cancel_requested_at = Column(String)
+    cancel_requested_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(String, nullable=False, default=now_iso)
     updated_at = Column(String, nullable=False, default=now_iso)
     version = Column(Integer, nullable=False, default=1)
@@ -354,11 +383,6 @@ HISTORICAL_LINK_METHODS = ("", "EXACT", "NORMALIZED", "MANUAL")
 HISTORICAL_LINK_CONFIDENCES = ("", "HIGH", "MEDIUM", "LOW")
 
 
-def _in_clause(column: str, values) -> str:
-    rendered = ", ".join("'" + str(v).replace("'", "''") + "'" for v in values)
-    return f"{column} IN ({rendered})"
-
-
 class ReportingUnit(Base):
     """A Port/reporting unit that operates the product — the historical tenant.
 
@@ -378,6 +402,9 @@ class ReportingUnit(Base):
     updated_at = Column(String, nullable=False, default=now_iso)
 
 
+STAFF_FUNCTIONS = ("SECURITY", "CARGO_OPS")
+
+
 class ReportingUnitUser(Base):
     """FK-backed membership of a user in a reporting unit (many-to-many).
 
@@ -388,11 +415,22 @@ class ReportingUnitUser(Base):
     no membership at all — and the absence of membership never implies access.
     """
     __tablename__ = "reporting_unit_users"
+    __table_args__ = (
+        CheckConstraint(
+            f"staff_function IS NULL OR {_in_clause('staff_function', STAFF_FUNCTIONS)}",
+            name="ck_ru_user_staff_function",
+        ),
+    )
     reporting_unit_id = Column(
         Integer, ForeignKey("reporting_units.id", ondelete="CASCADE"), primary_key=True
     )
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     membership_role = Column(String, nullable=False, default="")  # optional local scope label
+    # Vai trò nghiệp vụ tại CHÍNH đơn vị báo cáo này (Bảo vệ/Giao nhận) — một
+    # người có thể giữ vai trò khác nhau ở cảng khác nhau nên gắn theo membership,
+    # không gắn theo User. NULL = không thuộc bộ phận Bảo vệ/Giao nhận nào (ví dụ
+    # nhân viên hành chính khác của Cảng).
+    staff_function = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=now_iso)
 
 

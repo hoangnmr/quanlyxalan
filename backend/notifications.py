@@ -93,6 +93,14 @@ def resolve_port_staff_emails(db: Session, organization_id: int | None) -> list[
     return seen
 
 
+def resolve_admin_emails(db: Session) -> list[str]:
+    """Emails for every PLATFORM_ADMIN — platform-wide, unlike the org/unit
+    resolvers above. Used for events an Admin must act on regardless of which
+    Organization or reporting unit is involved (e.g. a cancel request)."""
+    admins = db.query(User).filter(User.role == "PLATFORM_ADMIN", User.is_active == 1).all()
+    return [u.email.strip() for u in admins if (u.email or "").strip() and _wants_workflow_email(u)]
+
+
 def _declaration_link(declaration) -> str:
     return f"{app_base_url()}/#declarations"
 
@@ -145,6 +153,30 @@ def notify_declaration_workflow(db: Session, declaration, action: str, note: str
             f"Lý do: {note or '(không có ghi chú)'}\n\n"
             f"Vui lòng mở phần mềm để bổ sung và gửi lại: {_declaration_link(declaration)}\n"
         )
+    _dispatch(background, recipients, subject, body, cfg)
+
+
+def notify_cancel_requested(db: Session, declaration, requested_by_name: str, background=None) -> None:
+    """Giai đoạn 4: nhân viên không phải Admin yêu cầu hủy → báo mọi Admin.
+
+    Không gắn theo Organization/reporting unit — resolve_admin_emails là
+    platform-wide (xem docstring), vì yêu cầu hủy cần MỌI Admin biết, không chỉ
+    Admin phụ trách đơn vị đã tạo phiếu.
+    """
+    cfg = get_smtp_config(db)
+    if not cfg.ready:
+        return
+    recipients = resolve_admin_emails(db)
+    if not recipients:
+        return
+    subject = f"[Yêu cầu hủy phiếu] {declaration.reference_no} · {declaration.vessel_name}"
+    body = (
+        f"Có yêu cầu hủy phiếu khai báo cần Admin xem xét.\n\n"
+        f"Số phiếu: {declaration.reference_no}\n"
+        f"Phương tiện: {declaration.vessel_name} ({declaration.registration_no})\n"
+        f"Người yêu cầu: {requested_by_name}\n\n"
+        f"Mở phần mềm để duyệt/từ chối: {_declaration_link(declaration)}\n"
+    )
     _dispatch(background, recipients, subject, body, cfg)
 
 

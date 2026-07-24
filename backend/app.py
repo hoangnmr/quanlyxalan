@@ -34,7 +34,7 @@ from .logging_config import configure_local_logging
 from .mailer import (
     SMTP_SETTING_KEY, get_smtp_config, mailer_enabled as email_notifications_enabled, send_email,
 )
-from .notifications import notify_declaration_submitted, notify_declaration_workflow
+from .notifications import notify_cancel_requested, notify_declaration_submitted, notify_declaration_workflow
 from .rbac import require_roles
 from .tenant import (
     resolve_scope, require_port_scope, Scope, register_vessel_ids,
@@ -202,7 +202,18 @@ def certificate_status(value: Optional[str], warning_days: int = 30) -> str:
 WORKFLOW_TRANSITIONS: dict[str, dict[str, str]] = {
     "PORT_APPROVE":      {"from": "PENDING_REVIEW",  "to": "APPROVED"},
     "REQUEST_CHANGES":   {"from": "PENDING_REVIEW",  "to": "CHANGES_REQUESTED"},
+    # Hủy thật (workflow_status = CANCELLED) — chỉ PLATFORM_ADMIN, từ cả 2
+    # trạng thái nguồn (khách đổi ý trước khi kịp duyệt, hoặc hủy sau khi đã
+    # duyệt). Xem ROADMAP_PORT_OPERATIONS.md Giai đoạn 4 — nhân viên khác dùng
+    # /cancel-request (không đổi workflow_status), không đi qua action này.
+    "CANCEL_FROM_PENDING":  {"from": "PENDING_REVIEW", "to": "CANCELLED"},
+    "CANCEL_FROM_APPROVED": {"from": "APPROVED",        "to": "CANCELLED"},
 }
+
+# require_port_scope (dùng ở endpoint /workflow) cho phép cả PORT_STAFF lẫn
+# PLATFORM_ADMIN gọi — không đủ để giới hạn hủy thật cho riêng Admin, nên kiểm
+# tra role thêm ở đây.
+ADMIN_ONLY_WORKFLOW_ACTIONS = frozenset({"CANCEL_FROM_PENDING", "CANCEL_FROM_APPROVED"})
 
 RETIRED_WORKFLOW_ACTIONS = frozenset({"CV_APPROVE", "QLC_APPROVE", "BP_APPROVE", "ISSUE", "REVOKE"})
 
@@ -214,6 +225,12 @@ def _apply_workflow_transition(
     rule = WORKFLOW_TRANSITIONS.get(action)
     if not rule:
         raise HTTPException(status_code=400, detail=f"Hành động '{action}' không hợp lệ.")
+
+    if action in ADMIN_ONLY_WORKFLOW_ACTIONS and actor_role != "PLATFORM_ADMIN":
+        raise HTTPException(
+            status_code=403,
+            detail="Chỉ Platform admin mới được hủy phiếu trực tiếp. Dùng yêu cầu hủy để gửi Admin duyệt.",
+        )
 
     current = declaration.workflow_status
     required_from = rule["from"]
@@ -232,6 +249,12 @@ def _apply_workflow_transition(
 
     if action == "PORT_APPROVE":
         declaration.port_approval = "APPROVED"
+
+    if action in ADMIN_ONLY_WORKFLOW_ACTIONS:
+        # Hủy thật giải quyết dứt điểm mọi yêu cầu hủy đang chờ (nếu có) — dọn
+        # 2 cột yêu cầu để không còn dữ liệu treo trên một phiếu đã CANCELLED.
+        declaration.cancel_requested_at = None
+        declaration.cancel_requested_by_user_id = None
 
     declaration.updated_at = now_iso()
     declaration.version += 1
@@ -574,7 +597,7 @@ class DeclarationSaveRequest(BaseModel):
     eta: str
     etd: str
     master_name: str
-    master_phone: str
+    master_phone: str = ""
     movement_type: str = "ARRIVAL"
     purpose: str = ""
     cargo_description: str = ""
@@ -1704,7 +1727,7 @@ def get_dashboard(
     # Base queries
     vessels_q = db.query(Vessel)
     drafts_q = db.query(Declaration).filter(Declaration.workflow_status == "DRAFT")
-    submitted_q = db.query(Declaration).filter(Declaration.workflow_status.notin_(["DRAFT", "CHANGES_REQUESTED"]))
+    submitted_q = db.query(Declaration).filter(Declaration.workflow_status.notin_(["DRAFT", "CHANGES_REQUESTED", "CANCELLED"]))
     arriving_q = db.query(Declaration).filter(Declaration.eta.startswith(today_iso))
     warnings_q = db.query(Vessel).filter(Vessel.certificate_expiry_date.isnot(None))
     recent_q = db.query(Declaration)
@@ -1783,6 +1806,9 @@ def get_dashboard(
         "recent": recent,
         "matches": matches,
         "attention": _attention_queue(db, scope),
+        # Nhánh riêng cho PLATFORM_ADMIN — trục lọc khác hẳn _attention_queue
+        # (cancel_requested_at, không phải workflow_status). None cho role khác.
+        "cancel_queue": _cancel_request_queue(db) if scope.user.role == "PLATFORM_ADMIN" else None,
         "demo_mode": is_demo_data_active(db),
     }
 
@@ -1846,17 +1872,22 @@ def list_reporting_units(
     active units and must deliberately choose one before opening tenant data.
     """
     query = db.query(ReportingUnit).filter(ReportingUnit.is_active == 1)
+    staff_functions: dict[int, str | None] = {}
     if user.role == "PORT_STAFF":
-        member_ids = [
-            row[0] for row in db.query(ReportingUnitUser.reporting_unit_id).filter_by(user_id=user.id).all()
-        ]
-        if not member_ids:
+        memberships = db.query(ReportingUnitUser).filter_by(user_id=user.id).all()
+        if not memberships:
             return {"items": [], "role": user.role}
-        query = query.filter(ReportingUnit.id.in_(member_ids))
+        staff_functions = {m.reporting_unit_id: m.staff_function for m in memberships}
+        query = query.filter(ReportingUnit.id.in_(staff_functions.keys()))
     units = query.order_by(ReportingUnit.name).all()
     return {
         "items": [
-            {"id": u.id, "name": u.name, "code": u.code, "notify_email": u.notify_email or ""}
+            {
+                "id": u.id, "name": u.name, "code": u.code, "notify_email": u.notify_email or "",
+                # None cho PLATFORM_ADMIN (không gate theo staff_function — full
+                # authority ở mọi cổng, xem Scope.allows_staff_function).
+                "staff_function": staff_functions.get(u.id) if user.role == "PORT_STAFF" else None,
+            }
             for u in units
         ],
         "role": user.role,
@@ -1993,6 +2024,29 @@ def get_port_vessel_register(
         .order_by(Vessel.name, Vessel.registration_no)
         .all()
     ) if register_ids else []
+
+    # "Lượt gần nhất" — chỉ tham khảo, KHÔNG chuyển record giữa 2 tab (quyết
+    # định nghiệp vụ đã chốt, xem ROADMAP_PORT_OPERATIONS.md Giai đoạn 3). Sổ
+    # theo dõi lưu theo phương tiện (vĩnh viễn); Declaration là theo lượt.
+    latest_calls: dict[int, dict] = {}
+    if register_ids:
+        recent = (
+            db.query(Declaration)
+            .filter(Declaration.vessel_id.in_(register_ids))
+            # updated_at only has second precision — id DESC as tiebreak makes
+            # "most recent" deterministic even when two saves land in the same second.
+            .order_by(Declaration.vessel_id, Declaration.updated_at.desc(), Declaration.id.desc())
+            .all()
+        )
+        for declaration in recent:
+            if declaration.vessel_id not in latest_calls:
+                latest_calls[declaration.vessel_id] = {
+                    "reference_no": declaration.reference_no,
+                    "workflow_status": declaration.workflow_status,
+                    "actual_departure_at": declaration.actual_departure_at,
+                    "updated_at": declaration.updated_at,
+                }
+
     profile_count = sum(len(vessel.operating_profiles) for vessel in vessels)
     multi_area_count = sum(len(vessel.operating_profiles) > 1 for vessel in vessels)
     certificate_warnings = sum(
@@ -2020,8 +2074,14 @@ def get_port_vessel_register(
             continue
         label = " / ".join(areas)
         area_counts[label] = area_counts.get(label, 0) + 1
+    items = []
+    for vessel in vessels:
+        item = _vessel_dict(vessel)
+        item["latest_call"] = latest_calls.get(vessel.id)
+        items.append(item)
+
     return {
-        "items": [_vessel_dict(vessel) for vessel in vessels],
+        "items": items,
         "stats": {
             "vessels": len(vessels),
             "operatingProfiles": profile_count,
@@ -2853,6 +2913,349 @@ def get_declaration_events(
         {col.name: getattr(e, col.name) for col in e.__table__.columns}
         for e in events
     ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PORT OPERATIONS — Bảo vệ (ATB/ATD, phí cầu bến) / Giao nhận (giao/nhận hàng)
+#
+# Trục trạng thái độc lập với workflow_status (thủ tục Admin duyệt) — xem
+# ROADMAP_PORT_OPERATIONS.md Giai đoạn 2. Mọi endpoint dưới đây chỉ tác động khi
+# phiếu đã APPROVED và ghi DeclarationEvent để audit theo quy ước:
+# to_status = from_status (giữ nguyên workflow_status), phân biệt qua `action`.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _require_approved(decl: Declaration) -> None:
+    if decl.workflow_status != "APPROVED":
+        raise HTTPException(
+            status_code=409,
+            detail="Chỉ thao tác được trên phiếu đã được Admin duyệt (APPROVED).",
+        )
+
+
+def _fmt_vn_datetime(value: str) -> str:
+    """"2026-07-23T12:30" (hoặc có giây) -> "23/07/2026 12:30". Chuỗi không đúng
+    định dạng ISO (rỗng, lỗi nhập) được trả nguyên văn thay vì raise."""
+    if not value:
+        return ""
+    try:
+        return datetime.fromisoformat(value).strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return value
+
+
+def _log_port_event(
+    db: Session, declaration: Declaration, action: str, scope: Scope, note: str = ""
+) -> None:
+    """Ghi 1 DeclarationEvent cho thao tác cảng KHÔNG đổi workflow_status.
+
+    to_status = from_status = trạng thái hiện tại — cột NOT NULL nhưng thao tác
+    này không chuyển trạng thái thủ tục; phân biệt loại sự kiện qua `action`.
+    Frontend dùng `action` (không phải `to_status`) để tách timeline "Hoạt động
+    tại cảng" khỏi timeline "Lịch sử duyệt thủ tục".
+    """
+    user = scope.user
+    db.add(DeclarationEvent(
+        declaration_id=declaration.id,
+        action=action,
+        from_status=declaration.workflow_status,
+        to_status=declaration.workflow_status,
+        actor_name=user.full_name or user.username,
+        actor_role=user.role,
+        actor_user_id=user.id,
+        correlation_id=correlation_id.get(),
+        note=note,
+        created_at=now_iso(),
+    ))
+
+
+class AtbAtdRequest(BaseModel):
+    actual_arrival_at: Optional[str] = None
+    actual_departure_at: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _at_least_one(self):
+        if self.actual_arrival_at is None and self.actual_departure_at is None:
+            raise ValueError("Cần cung cấp ít nhất một trong hai: giờ cập cầu hoặc giờ rời cầu.")
+        return self
+
+
+@app.post("/api/declarations/{declaration_id}/atb-atd")
+def set_declaration_atb_atd(
+    declaration_id: int,
+    payload: AtbAtdRequest,
+    db: Session = Depends(get_db),
+    scope: Scope = Depends(require_port_scope),
+):
+    """Bảo vệ/Giao nhận/Admin ghi đè trực tiếp ATB/ATD thực tế.
+
+    Ghi đè tự do, không cảnh báo xung đột (quyết định nghiệp vụ đã chốt) — giá
+    trị cũ/mới được lưu lại trong DeclarationEvent.note để có dấu vết.
+    """
+    if not (scope.allows_staff_function("SECURITY") or scope.allows_staff_function("CARGO_OPS")):
+        raise HTTPException(status_code=403, detail="Bạn không thuộc bộ phận Bảo vệ hoặc Giao nhận tại đơn vị này.")
+    decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
+    if not decl:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
+    _require_approved(decl)
+
+    notes = []
+    if payload.actual_arrival_at is not None:
+        old_display = _fmt_vn_datetime(decl.actual_arrival_at) or "chưa có"
+        new_display = _fmt_vn_datetime(payload.actual_arrival_at)
+        notes.append(f"ATB: {old_display} → {new_display}")
+        decl.actual_arrival_at = payload.actual_arrival_at
+        _log_port_event(db, decl, "ATB_UPDATED", scope, notes[-1])
+    if payload.actual_departure_at is not None:
+        old_display = _fmt_vn_datetime(decl.actual_departure_at) or "chưa có"
+        new_display = _fmt_vn_datetime(payload.actual_departure_at)
+        notes.append(f"ATD: {old_display} → {new_display}")
+        decl.actual_departure_at = payload.actual_departure_at
+        _log_port_event(db, decl, "ATD_UPDATED", scope, notes[-1])
+
+    decl.updated_at = now_iso()
+    decl.version += 1
+    db.commit()
+    db.refresh(decl)
+    return _declaration_dict(decl)
+
+
+@app.post("/api/declarations/{declaration_id}/berth-fee")
+def confirm_berth_fee(
+    declaration_id: int,
+    db: Session = Depends(get_db),
+    scope: Scope = Depends(require_port_scope),
+):
+    """Bảo vệ xác nhận đã thu phí cầu bến — điều kiện tiên quyết cho Giao nhận."""
+    if not scope.allows_staff_function("SECURITY"):
+        raise HTTPException(status_code=403, detail="Chỉ Bảo vệ hoặc Platform admin mới xác nhận được phí cầu bến.")
+    decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
+    if not decl:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
+    _require_approved(decl)
+
+    if decl.berth_fee_status == "CONFIRMED":
+        raise HTTPException(status_code=409, detail="Phí cầu bến đã được xác nhận trước đó.")
+
+    decl.berth_fee_status = "CONFIRMED"
+    decl.berth_fee_confirmed_at = now_iso()
+    decl.berth_fee_confirmed_by_user_id = scope.user.id
+    decl.updated_at = now_iso()
+    decl.version += 1
+    _log_port_event(db, decl, "BERTH_FEE_CONFIRMED", scope)
+    db.commit()
+    db.refresh(decl)
+    return _declaration_dict(decl)
+
+
+class CargoOpsRequest(BaseModel):
+    direction: str  # "unload" | "load"
+    adhoc: bool = False
+
+    @field_validator("direction")
+    @classmethod
+    def valid_direction(cls, value: str) -> str:
+        if value not in ("unload", "load"):
+            raise ValueError("direction phải là 'unload' hoặc 'load'.")
+        return value
+
+
+@app.post("/api/declarations/{declaration_id}/cargo-ops")
+def confirm_cargo_ops(
+    declaration_id: int,
+    payload: CargoOpsRequest,
+    db: Session = Depends(get_db),
+    scope: Scope = Depends(require_port_scope),
+):
+    """Giao nhận xác nhận một chiều giao/nhận hàng thực tế.
+
+    Cổng cứng: chặn nếu phí cầu bến chưa CONFIRMED. `adhoc=True` đánh dấu chiều
+    phát sinh ngoài kế hoạch đã khai — không cần Admin duyệt lại (quyết định
+    nghiệp vụ đã chốt).
+    """
+    if not scope.allows_staff_function("CARGO_OPS"):
+        raise HTTPException(status_code=403, detail="Chỉ Giao nhận hoặc Platform admin mới xác nhận được giao/nhận hàng.")
+    decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
+    if not decl:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
+    _require_approved(decl)
+
+    if decl.berth_fee_status != "CONFIRMED":
+        raise HTTPException(
+            status_code=409,
+            detail="Bảo vệ chưa xác nhận thu phí cầu bến — chưa thể xác nhận giao/nhận hàng.",
+        )
+
+    status_field = f"{payload.direction}_status"
+    adhoc_field = f"{payload.direction}_is_adhoc"
+    if getattr(decl, status_field) == "CONFIRMED":
+        raise HTTPException(status_code=409, detail="Chiều này đã được xác nhận trước đó.")
+
+    setattr(decl, status_field, "CONFIRMED")
+    setattr(decl, adhoc_field, 1 if payload.adhoc else 0)
+    decl.updated_at = now_iso()
+    decl.version += 1
+    action = "CARGO_UNLOAD_CONFIRMED" if payload.direction == "unload" else "CARGO_LOAD_CONFIRMED"
+    note = "Chiều phát sinh ngoài kế hoạch." if payload.adhoc else ""
+    _log_port_event(db, decl, action, scope, note)
+    db.commit()
+    db.refresh(decl)
+    return _declaration_dict(decl)
+
+
+@app.get("/api/work-schedule")
+def get_work_schedule(
+    db: Session = Depends(get_db),
+    scope: Scope = Depends(require_port_scope),
+):
+    """Toàn cảnh quy trình cho nhân viên Cảng (Bảo vệ + Giao nhận).
+
+    Không phải công cụ tìm kiếm hồ sơ như "Phiếu khai báo" — chỉ liệt kê các
+    lượt còn đang trong chu trình. Không gate theo staff_function (khác với
+    3 endpoint xác nhận cảng ở trên) — mọi PORT_STAFF xem được toàn cảnh.
+    Điều kiện lọc: mọi workflow_status trừ CANCELLED, và chưa ghi nhận ATD
+    (actual_departure_at IS NULL) — loại trừ hủy tường minh để không kẹt vĩnh
+    viễn trên tab; ATD đánh dấu hoàn tất chu trình (quyết định nghiệp vụ đã chốt).
+    """
+    query = db.query(Declaration).filter(
+        Declaration.workflow_status != "CANCELLED",
+        Declaration.actual_departure_at.is_(None),
+    )
+    org_ids = scope.member_org_ids
+    query = query.filter(Declaration.organization_id.in_(org_ids)) if org_ids else query.filter(sql_false())
+    declarations = query.order_by(Declaration.updated_at.desc()).all()
+    return {
+        "items": [
+            {
+                "id": d.id,
+                "reference_no": d.reference_no,
+                "vessel_name": d.vessel_name,
+                "registration_no": d.registration_no,
+                "movement_type": d.movement_type,
+                "workflow_status": d.workflow_status,
+                "berth_fee_status": d.berth_fee_status,
+                "unload_status": d.unload_status,
+                "load_status": d.load_status,
+                "actual_arrival_at": d.actual_arrival_at,
+                "actual_departure_at": d.actual_departure_at,
+                "eta": d.eta,
+                "etd": d.etd,
+                "updated_at": d.updated_at,
+            }
+            for d in declarations
+        ],
+    }
+
+
+@app.post("/api/declarations/{declaration_id}/cancel-request")
+def request_declaration_cancel(
+    declaration_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    scope: Scope = Depends(require_port_scope),
+):
+    """Hủy hai cấp — bước 1: nhân viên KHÔNG PHẢI Admin yêu cầu hủy.
+
+    Chỉ ghi yêu cầu (2 cột cancel_requested_*) và sự kiện audit — KHÔNG đổi
+    workflow_status (chỉ Admin hủy thật, xem CANCEL_FROM_PENDING/APPROVED ở
+    WORKFLOW_TRANSITIONS). Ẩn dòng cục bộ là việc của frontend (localStorage
+    theo username), backend không biết ai đã ẩn. Gửi email mọi Admin qua
+    notifications.notify_cancel_requested — tái dùng pipeline sẵn có.
+    """
+    user = scope.user
+    if user.role == "PLATFORM_ADMIN":
+        raise HTTPException(
+            status_code=400,
+            detail="Admin hủy trực tiếp qua thao tác 'Hủy phiếu' (workflow), không cần gửi yêu cầu.",
+        )
+    decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
+    if not decl:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
+    if decl.workflow_status not in ("PENDING_REVIEW", "APPROVED"):
+        raise HTTPException(
+            status_code=409,
+            detail="Chỉ yêu cầu hủy được từ phiếu đang chờ xử lý hoặc đã duyệt.",
+        )
+    if decl.cancel_requested_at is not None:
+        raise HTTPException(status_code=409, detail="Đã có yêu cầu hủy đang chờ Admin xử lý.")
+
+    decl.cancel_requested_at = now_iso()
+    decl.cancel_requested_by_user_id = user.id
+    decl.updated_at = now_iso()
+    decl.version += 1
+    _log_port_event(db, decl, "CANCEL_REQUESTED", scope)
+    db.commit()
+    db.refresh(decl)
+
+    try:
+        notify_cancel_requested(db, decl, user.full_name or user.username, background=background)
+    except Exception:
+        access_logger.exception("Bỏ qua lỗi thông báo email yêu cầu hủy %s", decl.reference_no)
+
+    return _declaration_dict(decl)
+
+
+@app.post("/api/declarations/{declaration_id}/cancel-request/reject")
+def reject_declaration_cancel(
+    declaration_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    """Hủy hai cấp — Admin từ chối yêu cầu: xóa yêu cầu, phiếu trở lại bình
+    thường cho mọi người (quyết định nghiệp vụ đã chốt: tự động hiện lại,
+    không chỉ ở phía người yêu cầu — frontend xóa state ẩn cục bộ khi thấy
+    cancel_requested_at đã về None)."""
+    decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
+    if not decl:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
+    if decl.cancel_requested_at is None:
+        raise HTTPException(status_code=409, detail="Phiếu không có yêu cầu hủy đang chờ.")
+
+    decl.cancel_requested_at = None
+    decl.cancel_requested_by_user_id = None
+    decl.updated_at = now_iso()
+    decl.version += 1
+    db.add(DeclarationEvent(
+        declaration_id=decl.id,
+        action="CANCEL_REJECTED",
+        from_status=decl.workflow_status,
+        to_status=decl.workflow_status,
+        actor_name=user.full_name or user.username,
+        actor_role=user.role,
+        actor_user_id=user.id,
+        correlation_id=correlation_id.get(),
+        note="",
+        created_at=now_iso(),
+    ))
+    db.commit()
+    db.refresh(decl)
+    return _declaration_dict(decl)
+
+
+def _cancel_request_queue(db: Session) -> dict[str, Any]:
+    """Hàng đợi Admin duyệt hủy — trục lọc cancel_requested_at, KHÁC hẳn
+    _attention_queue (lọc workflow_status). Không tái dùng thẳng được, xem
+    ROADMAP_PORT_OPERATIONS.md Giai đoạn 4."""
+    query = (
+        db.query(Declaration)
+        .filter(Declaration.cancel_requested_at.isnot(None))
+        .order_by(Declaration.cancel_requested_at.asc())
+    )
+    declarations = query.limit(5).all()
+    items = [
+        {
+            "id": d.id,
+            "reference_no": d.reference_no,
+            "vessel_name": d.vessel_name,
+            "workflow_status": d.workflow_status,
+            "cancel_requested_at": d.cancel_requested_at,
+        }
+        for d in declarations
+    ]
+    return {"label": "Yêu cầu hủy chờ Admin duyệt", "count": query.count(), "items": items}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -2,17 +2,25 @@
 
 > Single entry point for understanding this codebase's architecture and finding
 > the right file fast. Read this first; drill into the linked docs for detail.
-> Snapshot date: 2026-07-18. Line numbers are anchors, not contracts — if a
-> grep doesn't match, the file moved; trust the code over this document.
+> Snapshot date: 2026-07-25 (port operations section added; other sections not
+> re-audited beyond what port operations touched). Line numbers are anchors,
+> not contracts — if a grep doesn't match, the file moved; trust the code over
+> this document.
 
 ## 1. What this system is
 
 A FastAPI + vanilla-JS web app for multiple ports/reporting units. Customers
-submit vessel arrival/departure declarations; port staff either request changes
-or approve them and produce the periodic Appendix 1/2/3 reports required by
-the Maritime Administration (Cảng vụ). The same platform also imports audited
-historical TOS workbooks, reconciles Berth/cargo/legacy PL.03 sources and
-reconstructs PL.03 without mutating live declarations.
+submit vessel declarations (a single declaration records both the ETB/ATB
+arrival leg and the ETD/ATD departure leg — there is no separate "arrival
+declaration" vs "departure declaration"); port staff either request changes
+or approve them. Once approved, two port-side staff functions take over:
+Bảo vệ (SECURITY) records actual ATB/ATD and confirms berth-fee collection,
+Giao nhận (CARGO_OPS) confirms unload/load — gated so cargo confirmation
+can't happen before the berth fee is confirmed. The platform produces the
+periodic Appendix 1/2/3 reports required by the Maritime Administration
+(Cảng vụ), and also imports audited historical TOS workbooks, reconciles
+Berth/cargo/legacy PL.03 sources and reconstructs PL.03 without mutating live
+declarations.
 
 ## 2. Runtime topology
 
@@ -36,10 +44,10 @@ Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 |---|---|---|
 | Backend framework | FastAPI | single app in `backend/app.py` |
 | ORM / DB | SQLAlchemy + PostgreSQL (psycopg 3) | `backend/database.py`, `backend/models.py` |
-| Migrations | Alembic | `alembic/versions/` — 15 revisions, T0→T6 progression |
+| Migrations | Alembic | `alembic/versions/` — 16 revisions, T0→T6 progression + port operations |
 | Validation | Pydantic v2 | `backend/schemas.py` |
 | Auth | JWT bearer, local session | `backend/auth.py`, [docs/ADR-002-SESSION-DESIGN.md](docs/ADR-002-SESSION-DESIGN.md) |
-| Frontend | Vanilla JS, single file, no framework/build | `frontend/app.js` (2299 lines), [docs/ADR-003-FRONTEND-ARCHITECTURE.md](docs/ADR-003-FRONTEND-ARCHITECTURE.md) |
+| Frontend | Vanilla JS, single file, no framework/build | `frontend/app.js` (3325 lines), [docs/ADR-003-FRONTEND-ARCHITECTURE.md](docs/ADR-003-FRONTEND-ARCHITECTURE.md) |
 | File storage | Local disk or MinIO (env-toggled) | `backend/storage.py` |
 | XLSX import/export | Hand-rolled stdlib + openpyxl, zip-bomb guarded | `backend/xlsx_io.py`, `backend/historical_tos_parser.py` |
 | Tests | pytest + httpx TestClient | `tests/` (4034 lines total) |
@@ -66,8 +74,8 @@ Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | File | Lines | Responsibility |
 |---|---|---|
-| `app.py` | 3656 | FastAPI app instance + nearly all HTTP routes (see §6 for the route index) |
-| `models.py` | 678 | SQLAlchemy ORM models — every table (see §7) |
+| `app.py` | 5041 | FastAPI app instance + nearly all HTTP routes (see §6 for the route index) |
+| `models.py` | 737 | SQLAlchemy ORM models — every table (see §7) |
 | `xlsx_io.py` | 923 | XLSX read/write: vessel/crew/register import, Appendix 1/2/3 export, zip-bomb guards |
 | `historical_api.py` | 912 | `APIRouter` for historical/TOS preview, reconciliation, revision, confirmation, vessel links and synthesized PL.03 export |
 | `historical_tos_parser.py` | 457 | Memory-bounded, filename-independent parser for audited historical TOS workbooks; never mutates source, keeps cell-level provenance |
@@ -110,7 +118,7 @@ whole file top to bottom.
 | Crew | `GET/POST /api/crew` | 1515, 1529 |
 | Declarations | `GET/POST /api/declarations` | 1615, 1685 |
 | Declarations | `GET /api/declarations/{id}/events` | 1860 |
-| Workflow | `POST /api/declarations/{id}/workflow` | 1889 |
+| Workflow | `POST /api/declarations/{id}/workflow` — incl. admin-only `CANCEL_FROM_PENDING`/`CANCEL_FROM_APPROVED` | 1889 |
 | Attachments | `POST /api/declarations/{id}/attachments` | 1937 |
 | Suggestions | `GET /api/suggestions` | 1990 |
 | Import | `POST /api/import/port-vessel-register` `/vessels` | 2081, 2082 |
@@ -119,6 +127,11 @@ whole file top to bottom.
 | Reports | `GET /api/reports/analytics` (+`/export`) | 3057, 3072 |
 | Reports | `GET/POST /api/reports/appendix2/adjustments` | 3399, 3421 |
 | Reports | `GET /api/reports/{kind}` — Appendix 1/2/3 export | 3456 |
+| **Port operations** | `POST /api/declarations/{id}/atb-atd` — Security/Cargo/Admin overwrite ATB/ATD | 2982 |
+| " | `POST /api/declarations/{id}/berth-fee` — Security/Admin confirm berth fee | 3023 |
+| " | `POST /api/declarations/{id}/cargo-ops` — Cargo/Admin confirm unload/load (hard-gated on berth fee) | 3064 |
+| " | `GET /api/work-schedule` — cross-staff overview of in-cycle calls | 3108 |
+| " | `POST /api/declarations/{id}/cancel-request` `/reject` — non-admin cancel request + Admin approve/reject | 3152, 3201 |
 | Integrations | `GET /api/integrations/maritime-authority` | 3567 |
 | Integrations | `POST /api/integrations/prepare-sync` | 3597 |
 | **Historical import** (`backend/historical_api.py`) | `POST /preview` | 377 |
@@ -148,6 +161,16 @@ wins when data conflicts): [docs/DATA_INDEX.md](docs/DATA_INDEX.md),
 [docs/DATA_FIELD_CATALOG.md](docs/DATA_FIELD_CATALOG.md),
 [docs/DATA_INHERITANCE_RULES.md](docs/DATA_INHERITANCE_RULES.md),
 [docs/DATA_PLATFORM_README.md](docs/DATA_PLATFORM_README.md).
+
+**Port operations columns on `declarations`** (added without new tables —
+see [ROADMAP_PORT_OPERATIONS.md](ROADMAP_PORT_OPERATIONS.md)): reuses the
+pre-existing `actual_arrival_at`/`actual_departure_at` columns for ATB/ATD
+(no new time columns); adds `berth_fee_status` + `berth_fee_confirmed_at` +
+`berth_fee_confirmed_by_user_id`, `unload_status`/`load_status` +
+`unload_is_adhoc`/`load_is_adhoc`, and `cancel_requested_at` +
+`cancel_requested_by_user_id`. `reporting_unit_users` gained
+`staff_function` (`SECURITY`/`CARGO_OPS`/`NULL`), scoped per membership row
+so one person can hold different functions at different ports.
 
 ## 8. Auth, RBAC & tenant isolation
 
@@ -203,7 +226,7 @@ touching live operational data:
   [docs/HISTORICAL_TOS_WORKBOOK_AUDIT_20260717.md](docs/HISTORICAL_TOS_WORKBOOK_AUDIT_20260717.md),
   [docs/HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md](docs/HISTORICAL_APPENDIX_IMPORT_AND_REPORTING_ROADMAP_20260717.md).
 
-## 11. Frontend (`frontend/app.js`, single file, 2299 lines)
+## 11. Frontend (`frontend/app.js`, single file, 3325 lines)
 
 No framework, no build step, no modules — one script loaded by
 `index.html`. Navigate by function name (`grep -n "^async function\|^function "`),
@@ -212,13 +235,10 @@ grouped roughly in this order:
 | Section (approx. lines) | Covers |
 |---|---|
 | 1–314 | `api()` wrapper, session helpers, reporting-unit context and `route()` |
-| 315–672 | Dashboard, vessel/declaration/crew lists and shared form helpers |
-| 673–1298 | Declaration wizard, port register and workflow actions |
-| 1299–1432 | Live operational import preview/confirm |
-| 1433–1901 | Historical/TOS import workspace, reconciliation and revision UI |
-| 1915–2084 | Report export and analytics source modes |
-| 2085–2112 | Backup and integration controls |
-| 2113–2299 | App bootstrap and event bindings |
+| 315–672 | Dashboard, vessel/declaration/crew lists and shared form helpers; cancel-request queue widget (`renderCancelQueue`, 493) lives here alongside the dashboard, not with the rest of port-ops |
+| 673–1036 | Declaration wizard, port register, workflow actions, port-ops panel (`renderPortOpsPanel` 909, `savePortOpsAtbAtd`, `confirmPortOpsBerthFee`, `confirmPortOpsCargo`), split workflow/port-ops timelines (`renderWorkflowTimelines`) |
+| ~1500–1600 (approx.) | "Kế hoạch làm hàng" work-schedule tab (`loadWorkSchedule` 1560, `renderWorkSchedule`), plus `requestCancelDeclaration` |
+| further on | Live operational import preview/confirm, historical/TOS import workspace, report export/analytics, backup/integration controls, app bootstrap — line ranges shifted from the old 2299-line snapshot; grep function names rather than trusting line numbers here |
 
 `index.html` — page shell/layout; `styles.css` — all styling; `preview.html`
 — standalone design preview, not served in the real flow. Rationale for
@@ -243,6 +263,12 @@ staying single-file: [docs/ADR-003-FRONTEND-ARCHITECTURE.md](docs/ADR-003-FRONTE
 | `m12f0f000012` | — | Historical TOS import store |
 | `n13f0f000013` | — | Reporting-unit vessels |
 | `o14f0f000014` | — | Cross-import TOS links |
+| `p15f0f000015` | — | Vessel category |
+| `q16f0f000016` | — | Crew onboard count |
+| `r17f0f000017` | — | Email notifications |
+| `s18f0f000018` | — | App settings |
+| `t19f0f000019` | — | Declaration ↔ reporting unit link |
+| `u20f0f000020` | — | Port operations phase 1: berth-fee/cargo-ops/cancel-request columns + `staff_function`. **Not yet run against the real `cangvu` database** — idempotent (`ALTER TABLE IF NOT EXISTS`-style guards) but only exercised on a throwaway test DB so far. Whoever merges this into the branch that owns the real DB must run `alembic upgrade head` against a backup/staging copy first. |
 
 Schema changes go through Alembic only; the app never calls `create_all()`
 against a real database on startup.
@@ -251,13 +277,15 @@ against a real database on startup.
 
 | File | Lines | Covers |
 |---|---|---|
-| `test_backend.py` | 2554 | Broad API surface — the main regression suite |
-| `test_historical_import.py` | 854 | Historical/TOS import flow end-to-end |
-| `test_rbac.py` | 769 | Role checks, tenant isolation, `require_roles` |
+| `test_backend.py` | 2746 | Broad API surface — the main regression suite |
+| `test_historical_import.py` | 862 | Historical/TOS import flow end-to-end |
+| `test_rbac.py` | 768 | Role checks, tenant isolation, `require_roles` |
+| `test_port_operations.py` | 663 | Port operations: ATB/ATD, berth-fee, cargo-ops `staff_function` gating, `CANCEL_FROM_*` admin-only gates, work-schedule filtering, cancel-request queue |
 | `test_frontend_ux.py` | 204 | Frontend structural/UX assertions |
-| `test_reporting_unit_bootstrap.py` | 76 | `scripts/bootstrap_reporting_unit.py` |
+| `test_user_management.py` | 197 | User CRUD, role/membership management |
 | `test_historical_tos_parser.py` | 111 | Parser unit tests |
-| `test_operations.py` | 35 | Ops/admin endpoints |
+| `test_reporting_unit_bootstrap.py` | 73 | `scripts/bootstrap_reporting_unit.py` |
+| `test_operations.py` | 36 | Ops/admin endpoints |
 | `test_integrations.py` | 27 | Integration adapter (manual mode) |
 | `test_storage.py` | 23 | Storage backend protocol |
 
@@ -328,6 +356,7 @@ the current state before relying on it.
 | Fix/extend declaration review (`PENDING_REVIEW → CHANGES_REQUESTED/APPROVED`) | `app.py` workflow route (`app.py:1889`) + `models.DeclarationEvent` |
 | Change an Appendix export | `backend/xlsx_io.py` + `docs/REPORT_MAPPING_SPEC.md` + matching `templates/*.xlsx` |
 | Historical import bug | `backend/historical_api.py` / `historical_tos_parser.py` / `historical.py` + frontend `*Historical*` functions |
+| Port operations (Bảo vệ/Giao nhận, hủy phiếu) | `app.py` §6 "Port operations" routes + `models.py` (declaration columns, `staff_function`) + `tenant.py` (`Scope.staff_function`) + frontend `renderPortOpsPanel`/`renderWorkSchedule`/`renderCancelQueue` in `app.js`; business decisions in [ROADMAP_PORT_OPERATIONS.md](ROADMAP_PORT_OPERATIONS.md) |
 | Frontend page/view behavior | `frontend/app.js` — find via `route()` (~line 292) then the matching `render*`/`load*` function |
 | Attachment storage/scanning | `backend/storage.py` |
 | External maritime-authority sync | `backend/integrations.py` (still `MANUAL`-only by design) |

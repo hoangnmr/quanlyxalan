@@ -51,6 +51,13 @@ class Scope:
     organization_id: int | None = None            # CUSTOMER scope
     reporting_unit_id: int | None = None           # PORT scope
     member_org_ids: tuple[int, ...] = field(default_factory=tuple)  # PORT scope
+    # PORT scope only: staff_function of this user's membership in the resolved
+    # reporting unit (SECURITY / CARGO_OPS / None). Always None for
+    # PLATFORM_ADMIN — an admin is authorized for every port operation
+    # regardless of function, so callers must check ``user.role ==
+    # "PLATFORM_ADMIN"`` explicitly rather than relying on this field to gate
+    # admin access. See ROADMAP_PORT_OPERATIONS.md Giai đoạn 1.
+    staff_function: str | None = None
 
     @property
     def is_port(self) -> bool:
@@ -59,6 +66,17 @@ class Scope:
     @property
     def is_customer(self) -> bool:
         return self.kind == CUSTOMER
+
+    def allows_staff_function(self, function: str) -> bool:
+        """True if this scope may act on the given port function's endpoints.
+
+        PLATFORM_ADMIN always may (full authority, see ``staff_function``
+        docstring). PORT_STAFF may only if their membership in the resolved
+        unit carries that exact function.
+        """
+        if self.user.role == "PLATFORM_ADMIN":
+            return True
+        return self.is_port and self.staff_function == function
 
     def visible_org_ids(self) -> tuple[int, ...]:
         """Organization ids whose customer data this scope may read."""
@@ -139,6 +157,7 @@ def resolve_scope(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy đơn vị báo cáo.")
         if unit.is_active != 1:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Đơn vị báo cáo đang ngừng hoạt động.")
+        staff_function = None
         if user.role == "PORT_STAFF":
             member = (
                 db.query(ReportingUnitUser)
@@ -150,11 +169,15 @@ def resolve_scope(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Bạn không có quyền tại đơn vị báo cáo này.",
                 )
+            staff_function = member.staff_function
         org_ids = tuple(
             row[0] for row in db.query(ReportingUnitOrganization.organization_id)
             .filter_by(reporting_unit_id=unit_id).all()
         )
-        return Scope(kind=PORT, user=user, reporting_unit_id=unit_id, member_org_ids=org_ids)
+        return Scope(
+            kind=PORT, user=user, reporting_unit_id=unit_id,
+            member_org_ids=org_ids, staff_function=staff_function,
+        )
 
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vai trò không hợp lệ.")
 

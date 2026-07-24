@@ -566,10 +566,10 @@ DECLARATION_LABEL_ALIASES = {
     "destination_port": ("Cảng đích", "Điểm đến cuối cùng"),
     "agent_ptnd_name": ("Đại lý PTND",),
     "is_passenger_call": ("Lượt tàu khách", "Phương tiện tàu khách"),
-    "eta": ("Thời gian dự kiến đến",),
-    "etd": ("Thời gian dự kiến rời",),
-    "actual_arrival_at": ("Thời gian đến thực tế", "ATA"),
-    "actual_departure_at": ("Thời gian rời thực tế", "ATD"),
+    "eta": ("Thời gian dự kiến cập cầu (ETB)", "Thời gian dự kiến đến", "ETB"),
+    "etd": ("Thời gian dự kiến rời cầu (ETD)", "Thời gian dự kiến rời", "ETD"),
+    "actual_arrival_at": ("Thời gian cập cầu thực tế (ATB)", "Thời gian đến thực tế", "ATB"),
+    "actual_departure_at": ("Thời gian rời cầu thực tế (ATD)", "Thời gian rời thực tế", "ATD"),
     "master_name": ("Họ tên thuyền trưởng", "Thuyền trưởng"),
     "master_phone": ("Số điện thoại thuyền trưởng", "SĐT thuyền trưởng"),
 }
@@ -750,7 +750,10 @@ def _make_appendix2_xlsx(
     _merged_title_row(ws, 1, "Phụ lục 2", size=11, bold=True)
     _merged_title_row(ws, 2, "(Kèm theo biểu mẫu báo cáo hoạt động cảng)", size=10)
     _merged_title_row(ws, 3, "BÁO CÁO KHỐI LƯỢNG HÀNG HÓA, LƯỢT TÀU VÀ HÀNH KHÁCH", size=14, bold=True)
-    month_text = report_to.strftime("Tháng %m năm %Y") if report_to else "Tháng ……"
+    # strftime() không dùng được ở đây: trên Windows, ký tự Unicode ngoài các
+    # %-directive đi qua locale C runtime và bị hỏng dấu (vd. "năm" -> "nam").
+    # Lấy số bằng strftime, tự ghép chuỗi tiếng Việt bằng f-string thuần Python.
+    month_text = f"Tháng {report_to.month:02d} năm {report_to.year}" if report_to else "Tháng ……"
     _merged_title_row(ws, 4, month_text, size=12, bold=True)
     _merged_title_row(ws, 5, f"Đơn vị báo cáo: {reporting_unit or '………………………………'}", size=11)
     merges = (

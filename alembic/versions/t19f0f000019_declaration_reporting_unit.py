@@ -53,10 +53,9 @@ def upgrade() -> None:
             """
             UPDATE declarations
             SET reporting_unit_id = (
-                SELECT ruo.reporting_unit_id
+                SELECT MIN(ruo.reporting_unit_id)
                 FROM reporting_unit_organizations ruo
                 WHERE ruo.organization_id = declarations.organization_id
-                GROUP BY ruo.organization_id
                 HAVING COUNT(*) = 1
             )
             WHERE declarations.organization_id IS NOT NULL

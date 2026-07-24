@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=1.12.2">
+  <link rel="stylesheet" href="styles.css?v=1.13.1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Bỏ qua điều hướng, đến nội dung chính</a>
@@ -244,6 +244,19 @@
             <span class="muted">·</span>
             <button type="button" class="link-button" data-route-link="organizations">khách hàng</button>
           </section>
+
+          <section id="settings-audit-panel" class="panel" hidden>
+            <div class="panel-header"><div><p class="eyebrow">QUẢN TRỊ NỀN TẢNG</p><h2>Nhật ký hệ thống</h2><p class="muted">Tra cứu ai đã tạo/sửa gì, lúc nào — kể cả phiếu khai báo, người dùng, tổ chức, cấu hình.</p></div><button type="button" id="audit-log-clear-all" class="danger-link">Xóa tất cả</button></div>
+            <div class="audit-log-filters">
+              <label>Loại<select id="audit-log-entity-type"><option value="">Tất cả</option></select></label>
+              <label>Tìm theo mã/nội dung<input id="audit-log-q" type="text" placeholder="vd: TT-260723-001"></label>
+              <label>Từ ngày<input id="audit-log-from" type="date"></label>
+              <label>Đến ngày<input id="audit-log-to" type="date"></label>
+              <button type="button" id="audit-log-search" class="soft-button">Tìm</button>
+            </div>
+            <div id="audit-log-table" class="table-wrap"></div>
+            <div id="audit-log-pagination" class="pagination" aria-label="Phân trang nhật ký hệ thống"></div>
+          </section>
         </section>
       </main>
     </div>
@@ -276,7 +289,10 @@
           <input type="text" name="username" required autocomplete="username" autofocus placeholder="Nhập tên đăng nhập">
         </label>
         <label>Mật khẩu
-          <input type="password" name="password" required autocomplete="current-password" placeholder="Nhập mật khẩu">
+          <div class="password-field">
+            <input type="password" name="password" required autocomplete="current-password" placeholder="Nhập mật khẩu">
+            <button type="button" class="password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon-eye"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon-eye-off" hidden><path d="M3 3l18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 5.2A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a15.6 15.6 0 0 1-3.1 4.1M6.5 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 3.4-.6"></path></svg></button>
+          </div>
         </label>
         <button type="submit" class="primary-button full login-submit">Đăng nhập vào hệ thống <span aria-hidden="true">→</span></button>
         <p class="login-security-note">Phiên đăng nhập được bảo vệ.</p>
@@ -285,6 +301,6 @@
   </dialog>
 
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="app.js?v=1.12.2" defer></script>
+  <script src="app.js?v=1.13.1" defer></script>
 </body>
 </html>

@@ -12,6 +12,7 @@ const state = {
   analyticsSource: 'live',
   reportingUnits: [], activeReportingUnitId: null, reportingUnitOrganizations: [],
   users: [], organizations: [], editingOrganization: null,
+  auditLogPage: 1, auditLogEntityTypes: [],
 };
 const CREW_ROLES = ['Thuyền trưởng', 'Máy trưởng', 'Thuyền viên', 'Thuyền phó'];
 
@@ -112,6 +113,24 @@ function bindLoginForm() {
     } catch (error) {
       setLoginFeedback(error.message || 'Không thể đăng nhập. Vui lòng thử lại.');
     } finally { setSubmitting(form, event.submitter, false); }
+  });
+  bindPasswordToggles(form);
+}
+
+// Nút con mắt hiện/ẩn mật khẩu — dùng chung cho mọi ô ".password-field".
+function bindPasswordToggles(root = document) {
+  $$('[data-password-toggle]', root).forEach(button => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    const input = button.previousElementSibling;
+    button.addEventListener('click', () => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      button.setAttribute('aria-pressed', String(!showing));
+      button.setAttribute('aria-label', showing ? 'Hiện mật khẩu' : 'Ẩn mật khẩu');
+      button.querySelector('.icon-eye').hidden = !showing;
+      button.querySelector('.icon-eye-off').hidden = showing;
+    });
   });
 }
 
@@ -486,6 +505,9 @@ function loadSettings() {
   $('#settings-admin-shortcuts').hidden = !isAdmin;
   $('#settings-smtp-panel').hidden = !isAdmin;
   if (isAdmin) loadSmtpSettings();
+  // Nhật ký hệ thống (chỉ admin)
+  $('#settings-audit-panel').hidden = !isAdmin;
+  if (isAdmin) loadAuditLogEntityTypes();
 }
 
 async function loadSmtpSettings() {
@@ -551,6 +573,79 @@ async function sendSmtpTest() {
   } catch (error) {
     toast(error.message, true);
   } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+async function loadAuditLogEntityTypes() {
+  try {
+    const types = await api('/api/admin/audit-log/entity-types');
+    state.auditLogEntityTypes = types;
+    const select = $('#audit-log-entity-type');
+    const current = select.value;
+    select.innerHTML = '<option value="">Tất cả</option>' + types.map(t => `<option value="${esc(t)}">${esc(auditEntityLabel(t))}</option>`).join('');
+    select.value = current;
+  } catch (_) { /* im lặng — bộ lọc chỉ là tiện ích, không chặn xem log */ }
+  loadAuditLog();
+}
+
+function auditEntityLabel(type) {
+  return ({
+    DECLARATION: 'Phiếu khai báo', USER: 'Người dùng', ORGANIZATION: 'Tổ chức khách hàng',
+    VESSEL: 'Phương tiện', CREW: 'Thuyền viên', APP_SETTING: 'Cấu hình hệ thống',
+    REPORTING_UNIT: 'Đơn vị báo cáo',
+  })[type] || type;
+}
+
+async function loadAuditLog() {
+  const params = new URLSearchParams({ page: state.auditLogPage, page_size: 25 });
+  const entityType = $('#audit-log-entity-type').value;
+  const q = $('#audit-log-q').value.trim();
+  const from = $('#audit-log-from').value;
+  const to = $('#audit-log-to').value;
+  if (entityType) params.set('entity_type', entityType);
+  if (q) params.set('q', q);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  try {
+    const result = await api(`/api/admin/audit-log?${params}`);
+    renderAuditLogTable(result.items);
+    renderAuditLogPagination(result);
+  } catch (error) { toast(error.message, true); }
+}
+
+function renderAuditLogTable(items = []) {
+  const container = $('#audit-log-table');
+  if (!items.length) { container.innerHTML = empty('Chưa có nhật ký phù hợp', 'Thử bỏ bớt điều kiện lọc.'); return; }
+  container.innerHTML = `<table class="data-table responsive-table"><thead><tr><th>Thời gian</th><th>Loại</th><th>Hành động</th><th>Nội dung</th><th>Người thực hiện</th><th>Đơn vị</th><th></th></tr></thead><tbody>${items.map(r => `<tr><td data-label="Thời gian">${fmtDate(r.created_at)}</td><td data-label="Loại">${esc(auditEntityLabel(r.entity_type))}</td><td data-label="Hành động"><span class="table-badge">${esc(r.action)}</span></td><td data-label="Nội dung">${esc(r.summary)}</td><td data-label="Người thực hiện">${esc(r.actor_name)}</td><td data-label="Đơn vị">${esc(r.reporting_unit_name || '—')}</td><td data-label="Thao tác"><button class="danger-link" data-delete-audit-log="${r.id}">Xóa</button></td></tr>`).join('')}</tbody></table>`;
+  $$('[data-delete-audit-log]', container).forEach(button => button.onclick = () => deleteAuditLogEntry(Number(button.dataset.deleteAuditLog)));
+}
+
+async function deleteAuditLogEntry(id) {
+  if (!window.confirm('Xóa vĩnh viễn dòng nhật ký này? Thao tác này không thể hoàn tác.')) return;
+  try {
+    await api(`/api/admin/audit-log/${id}`, { method: 'DELETE' });
+    toast('Đã xóa dòng nhật ký.');
+    loadAuditLog();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function clearAllAuditLog() {
+  if (!window.confirm('Xóa vĩnh viễn TOÀN BỘ nhật ký hệ thống? Thao tác này không thể hoàn tác và không thể khôi phục.')) return;
+  try {
+    const result = await api('/api/admin/audit-log', { method: 'DELETE' });
+    toast(`Đã xóa ${result.deleted} dòng nhật ký.`);
+    state.auditLogPage = 1;
+    loadAuditLog();
+  } catch (error) { toast(error.message, true); }
+}
+
+function renderAuditLogPagination(result) {
+  const container = $('#audit-log-pagination');
+  if (result.total_pages <= 1) { container.innerHTML = ''; return; }
+  container.innerHTML = `<span>Trang ${result.page}/${result.total_pages}</span><button type="button" data-audit-log-page="${result.page - 1}" ${result.page <= 1 ? 'disabled' : ''}>Trước</button><button type="button" data-audit-log-page="${result.page + 1}" ${result.page >= result.total_pages ? 'disabled' : ''}>Sau</button>`;
+  $$('[data-audit-log-page]', container).forEach(button => button.onclick = () => {
+    state.auditLogPage = Number(button.dataset.auditLogPage);
+    loadAuditLog();
+  });
 }
 
 async function saveMyProfile(event) {
@@ -711,7 +806,7 @@ function declarationTable(items = [], editable = false) {
   const isAdmin = state.currentUser?.role === 'PLATFORM_ADMIN';
   const canDelete = editable && isAdmin;
   const canEditRow = d => isAdmin || ['DRAFT','CHANGES_REQUESTED'].includes(d.workflow_status);
-  return `${approvalLegend}<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Tiến trình</th><th>Trạng thái</th>${editable ? '<th></th>' : ''}</tr></thead><tbody>${items.map(d => `<tr><td data-label="Mã / Loại"><strong>${esc(d.reference_no)}</strong><br><small>${d.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</small></td><td data-label="Phương tiện">${esc(d.vessel_name)}<br><small>${esc(d.registration_no)} · ${esc(d.master_name)}</small></td><td data-label="Hành trình">${esc(d.last_port)} → ${esc(d.working_port)}${d.destination_port ? ` → ${esc(d.destination_port)}` : ''}</td><td data-label="Thời gian">${fmtDate(d.movement_type === 'DEPARTURE' ? d.etd : d.eta)}</td><td data-label="Tiến trình duyệt"><span class="approval-dots">${approvalDot(d.port_approval, 'Cảng')}</span></td><td data-label="Trạng thái"><span class="table-badge ${workflowTone(d.workflow_status)}">${workflowLabel(d.workflow_status)}</span></td>${editable ? `<td data-label="Thao tác">${canEditRow(d) ? `<button data-edit-declaration="${d.id}">Mở phiếu</button> · ` : ''}<button data-workflow="${d.id}">Chi tiết</button>${canDelete ? ` · <button class="danger-link" data-delete-declaration="${d.id}">Xóa</button>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  return `${approvalLegend}<table class="data-table responsive-table"><thead><tr><th>Mã / Loại</th><th>Phương tiện</th><th>Hành trình</th><th>Thời gian</th><th class="approval-heading">Tiến trình</th><th>Trạng thái</th>${editable ? '<th></th>' : ''}</tr></thead><tbody>${items.map(d => `<tr><td data-label="Mã / Loại"><strong>${esc(d.reference_no)}</strong><br><small>${d.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</small>${noCompanyBadge(d)}</td><td data-label="Phương tiện">${esc(d.vessel_name)}<br><small>${esc(d.registration_no)} · ${esc(d.master_name)}</small></td><td data-label="Hành trình">${esc(d.last_port)} → ${esc(d.working_port)}${d.destination_port ? ` → ${esc(d.destination_port)}` : ''}</td><td data-label="Thời gian">${fmtDate(d.movement_type === 'DEPARTURE' ? d.etd : d.eta)}</td><td data-label="Tiến trình duyệt"><span class="approval-dots">${approvalDot(d.port_approval, 'Cảng')}</span></td><td data-label="Trạng thái"><span class="table-badge ${workflowTone(d.workflow_status)}">${workflowLabel(d.workflow_status)}</span></td>${editable ? `<td data-label="Thao tác">${canEditRow(d) ? `<button data-edit-declaration="${d.id}">Mở phiếu</button> · ` : ''}<button data-workflow="${d.id}">Chi tiết</button>${canDelete ? ` · <button class="danger-link" data-delete-declaration="${d.id}">Xóa</button>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
 }
 
 function approvalDot(status, label) {
@@ -719,6 +814,9 @@ function approvalDot(status, label) {
 }
 function workflowLabel(status) { return ({DRAFT:'Nháp',PENDING_REVIEW:'Chờ Cảng xử lý',CHANGES_REQUESTED:'Cần bổ sung',APPROVED:'Đã duyệt'})[status] || status; }
 function workflowTone(status) { return status === 'APPROVED' ? 'submitted' : 'draft'; }
+// Phiếu lưu để trống Tên doanh nghiệp được backend lưu company_name = "-"
+// (xem save_declaration) — gắn nhãn nhắc nhở để không bị bỏ sót.
+function noCompanyBadge(d) { return d.company_name === '-' ? ' <span class="table-badge pending" title="Chưa có tên doanh nghiệp/chủ phương tiện">Chưa có DN</span>' : ''; }
 
 async function loadCrew() {
   try {
@@ -1362,7 +1460,7 @@ function renderDeclarationWizard() {
               <strong>Thuyền trưởng</strong>
               <div class="captain-edit-fields">
                 ${field('master_name','Họ và Tên',masterName,'text','required')}
-                ${field('master_phone','Số điện thoại',masterPhone,'tel','required')}
+                ${field('master_phone','Số điện thoại',masterPhone,'tel')}
               </div>
               <small id="assigned-captain">${assignedCaptain
                 ? `Tự điền từ Danh sách thuyền viên: ${esc(assignedCaptain.full_name)}.`
@@ -1524,11 +1622,14 @@ async function saveDeclaration(event) {
     return;
   }
   if (!validateWizardForm()) return;
-  const isNewVessel = state.declarationVesselMode === 'new';
-  if (!isNewVessel && (!form.elements.master_name.value || !form.elements.master_phone.value)) {
-    toast('Phương tiện chưa có Thuyền trưởng kèm số điện thoại. Hãy gán trong Danh sách thuyền viên trước khi lập phiếu.', true);
-    return;
+  // Tên doanh nghiệp không bắt buộc (khách có thể chưa xác định lúc lập phiếu),
+  // nhưng để trống là dễ bỏ sót ngoài ý muốn — hỏi lại một lần trước khi lưu.
+  // Không áp dụng cho CUSTOMER: giá trị của họ luôn bị ghi đè bằng tên tổ chức
+  // của chính họ ở backend nên câu hỏi này không có ý nghĩa.
+  if (state.currentUser?.role !== 'CUSTOMER' && !form.elements.company_name.value.trim()) {
+    if (!window.confirm('Bạn chưa nhập tên doanh nghiệp/chủ phương tiện. Vẫn lưu phiếu này?')) return;
   }
+  const isNewVessel = state.declarationVesselMode === 'new';
   setSubmitting(form, event.submitter, true, submit ? 'Đang xác nhận…' : 'Đang lưu…');
   try {
     if (isNewVessel) {
@@ -1610,7 +1711,7 @@ async function openWorkflow(id) {
   if (!declaration) return;
   state.workflowDeclaration = declaration;
   $('#workflow-title').textContent = `${declaration.reference_no} · ${declaration.vessel_name}`;
-  $('#workflow-summary').innerHTML = `<article><small>LOẠI PHIẾU</small><strong>${declaration.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</strong></article><article><small>TRẠNG THÁI</small><strong>${workflowLabel(declaration.workflow_status)}</strong></article><article><small>XÁC NHẬN CỦA CẢNG</small><span class="approval-dots">${approvalDot(declaration.port_approval, 'Cảng')}</span></article>`;
+  $('#workflow-summary').innerHTML = `<article><small>LOẠI PHIẾU</small><strong>${declaration.movement_type === 'DEPARTURE' ? 'Rời cảng' : 'Vào cảng'}</strong></article><article><small>TRẠNG THÁI</small><strong>${workflowLabel(declaration.workflow_status)}</strong></article><article><small>XÁC NHẬN CỦA CẢNG</small><span class="approval-dots">${approvalDot(declaration.port_approval, 'Cảng')}</span></article><article><small>DOANH NGHIỆP</small><strong>${esc(declaration.company_name)}${noCompanyBadge(declaration)}</strong></article>`;
   $('#workflow-risks').innerHTML = '';
   api(`/api/declarations/${id}/risks`).then(renderWorkflowRisks).catch(() => {});
   const events = await api(`/api/declarations/${id}/events`);
@@ -2813,6 +2914,12 @@ async function init() {
   $('#port-email-form')?.addEventListener('submit', savePortEmail);
   $('#smtp-form')?.addEventListener('submit', saveSmtp);
   $('#smtp-test-btn')?.addEventListener('click', sendSmtpTest);
+  $('#audit-log-search')?.addEventListener('click', () => { state.auditLogPage = 1; loadAuditLog(); });
+  $('#audit-log-entity-type')?.addEventListener('change', () => { state.auditLogPage = 1; loadAuditLog(); });
+  $('#audit-log-q')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); state.auditLogPage = 1; loadAuditLog(); }
+  });
+  $('#audit-log-clear-all')?.addEventListener('click', clearAllAuditLog);
   $('#report-adjustment-form').addEventListener('submit', saveReportAdjustment);
   $('#report-month').addEventListener('change', event => {
     $('#report-adjustment-form').elements.report_month.value = event.target.value;

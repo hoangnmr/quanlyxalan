@@ -79,6 +79,26 @@ class Scope:
                 detail="Tổ chức không thuộc phạm vi được phép.",
             )
 
+    def require_declaration(self, organization_id: int | None, reporting_unit_id: int | None) -> None:
+        """Fail closed unless this scope may access a declaration.
+
+        A declaration with no customer Organization (left blank at save time —
+        see ``Declaration.reporting_unit_id``) cannot be checked via
+        ``require_org``, since ``owns_org(None)`` is always false. Such a
+        declaration is scoped by its own ``reporting_unit_id`` tag instead: PORT
+        scope may access it only if it matches the resolved unit; CUSTOMER scope
+        never can, since an org-less declaration has no customer to belong to.
+        """
+        if organization_id is not None:
+            self.require_org(organization_id)
+        elif self.is_port and reporting_unit_id == self.reporting_unit_id:
+            return
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Phiếu không thuộc phạm vi được phép.",
+            )
+
 
 def _parse_unit_id(raw: str | None) -> int:
     if raw is None or str(raw).strip() == "":

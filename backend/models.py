@@ -113,6 +113,10 @@ class Declaration(Base):
     reference_no = Column(String, nullable=False, unique=True)
     status = Column(String, nullable=False, default="DRAFT")
     organization_id = Column(Integer, ForeignKey("organizations.id"))
+    # Tenant tag independent of organization_id: a declaration may have no
+    # customer organization (left blank at save time) but must still stay
+    # visible to the Cảng/reporting unit that created it.
+    reporting_unit_id = Column(Integer, ForeignKey("reporting_units.id"), nullable=True, index=True)
     vessel_id = Column(Integer, ForeignKey("vessels.id"))
     declaration_date = Column(String, nullable=False)
     company_name = Column(String, nullable=False)

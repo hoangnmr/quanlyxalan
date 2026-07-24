@@ -99,11 +99,32 @@ async def add_correlation_id(request: Request, call_next):
     return response
 
 
+# Recognize the common unique constraints so the 409 can name what actually
+# collided, instead of a generic message that leaves the user guessing which
+# field to change (e.g. an existing Vessel.registration_no or Organization.name
+# used elsewhere in the system, not necessarily in the caller's own tenant).
+_CONSTRAINT_MESSAGES = (
+    ("vessels.registration_no", "Số đăng ký phương tiện này đã được dùng cho một hồ sơ khác trong hệ thống."),
+    ("registration_no", "Số đăng ký phương tiện này đã được dùng cho một hồ sơ khác trong hệ thống."),
+    ("organizations.name", "Đã có tổ chức khác dùng đúng tên này trong hệ thống. Kiểm tra lại tên doanh nghiệp hoặc chọn tổ chức có sẵn."),
+    ("declarations.reference_no", "Mã phiếu bị trùng, vui lòng thử lưu lại."),
+    ("reference_no", "Mã phiếu bị trùng, vui lòng thử lưu lại."),
+    ("users.username", "Tên đăng nhập này đã được sử dụng."),
+    ("username", "Tên đăng nhập này đã được sử dụng."),
+)
+
+
 @app.exception_handler(IntegrityError)
-async def database_constraint_error(_: Request, __: IntegrityError) -> JSONResponse:
+async def database_constraint_error(_: Request, exc: IntegrityError) -> JSONResponse:
+    detail_text = str(getattr(exc, "orig", exc)).lower()
+    message = "Dữ liệu xung đột với một bản ghi đã tồn tại."
+    for needle, specific in _CONSTRAINT_MESSAGES:
+        if needle in detail_text:
+            message = specific
+            break
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
-        content={"detail": "Dữ liệu xung đột với một bản ghi đã tồn tại."},
+        content={"detail": message},
     )
 
 origins_env = os.getenv("ALLOWED_ORIGINS")
@@ -579,7 +600,7 @@ class DeclarationSaveRequest(BaseModel):
 
     @field_validator(
         "vessel_name", "registration_no", "vessel_type", "vessel_class",
-        "last_port", "working_port", "master_name", "master_phone",
+        "last_port", "working_port", "master_name",
     )
     @classmethod
     def required_declaration_text(cls, value: str) -> str:
@@ -588,12 +609,12 @@ class DeclarationSaveRequest(BaseModel):
             raise ValueError("Trường này là bắt buộc.")
         return value
 
-    @field_validator("company_name")
+    @field_validator("company_name", "master_phone")
     @classmethod
-    def optional_company_name(cls, value: str) -> str:
-        # Doanh nghiệp/Chủ phương tiện không bắt buộc — khách hàng có thể để
-        # trống và bổ sung sau; giá trị của CUSTOMER luôn bị ghi đè bằng tên
-        # tổ chức của họ khi lưu, xem save_declaration().
+    def optional_declaration_text(cls, value: str) -> str:
+        # Doanh nghiệp/Chủ phương tiện và Số điện thoại thuyền trưởng không bắt
+        # buộc — có thể để trống và bổ sung sau. company_name của CUSTOMER luôn
+        # bị ghi đè bằng tên tổ chức của họ khi lưu, xem save_declaration().
         return value.strip()
 
     @model_validator(mode="after")
@@ -1035,6 +1056,109 @@ def send_smtp_test(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# AUDIT LOG (PLATFORM_ADMIN) — read-only view of every audit() call already
+# written across the app (declarations, users, organizations, SMTP...), so an
+# admin can answer "what was just created/changed, by whom, when" without
+# touching the database directly.
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/audit-log")
+def get_audit_log(
+    entity_type: Optional[str] = None,
+    q: Optional[str] = None,
+    from_: Optional[str] = Query(default=None, alias="from"),
+    to: Optional[str] = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    query = db.query(AuditEvent)
+    if entity_type:
+        query = query.filter(AuditEvent.entity_type == entity_type)
+    if q:
+        search = f"%{q}%"
+        query = query.filter(AuditEvent.summary.like(search))
+    if from_:
+        query = query.filter(AuditEvent.created_at >= from_)
+    if to:
+        query = query.filter(AuditEvent.created_at <= f"{to}~")  # lexical upper bound on ISO timestamps
+    total = query.count()
+    rows = (
+        query.order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        .offset((page - 1) * page_size).limit(page_size).all()
+    )
+    actor_ids = {r.actor_user_id for r in rows if r.actor_user_id}
+    actors = {
+        u.id: (u.full_name or u.username)
+        for u in db.query(User).filter(User.id.in_(actor_ids)).all()
+    } if actor_ids else {}
+    unit_ids = {r.reporting_unit_id for r in rows if r.reporting_unit_id}
+    units = {
+        ru.id: ru.name
+        for ru in db.query(ReportingUnit).filter(ReportingUnit.id.in_(unit_ids)).all()
+    } if unit_ids else {}
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "entity_type": r.entity_type,
+                "entity_id": r.entity_id,
+                "action": r.action,
+                "summary": r.summary,
+                "actor_name": actors.get(r.actor_user_id, "—"),
+                "reporting_unit_name": units.get(r.reporting_unit_id),
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
+
+
+@app.get("/api/admin/audit-log/entity-types")
+def get_audit_log_entity_types(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    rows = db.query(AuditEvent.entity_type).distinct().order_by(AuditEvent.entity_type).all()
+    return [row[0] for row in rows]
+
+
+@app.delete("/api/admin/audit-log/{event_id}")
+def delete_audit_log_entry(
+    event_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    # The audit log is itself an administrative record, not a legal/financial
+    # one — admin has full authority to prune it (test noise, sensitive detail
+    # in a summary, etc.) with no time restriction. Deleting a log row is
+    # deliberately NOT itself audited: logging "deleted a log entry" here would
+    # just recreate the same row it removed.
+    row = db.query(AuditEvent).filter(AuditEvent.id == event_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dòng nhật ký.")
+    db.delete(row)
+    db.commit()
+    return {"deleted": event_id}
+
+
+@app.delete("/api/admin/audit-log")
+def delete_all_audit_log(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("PLATFORM_ADMIN")),
+):
+    """Erase the entire audit log. PLATFORM_ADMIN-only, no time restriction."""
+    deleted = db.query(AuditEvent).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # HEALTH
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1450,13 +1574,17 @@ def _next_reference_no(db: Session, scope: Scope, org_id: Optional[int]) -> str:
     unit_id = _resolve_unit_id_for_reference(db, scope, org_id)
     query = db.query(func.count(Declaration.id)).filter(Declaration.reference_no.like(f"{prefix}%"))
     if unit_id is not None:
-        # Restrict the count to declarations of orgs served by this unit.
+        # Restrict the count to this unit's declarations: either through an
+        # Organization served by the unit, OR tagged directly via
+        # reporting_unit_id (a declaration saved with no organization chosen —
+        # see Declaration.reporting_unit_id — must still be counted here, or
+        # its number gets reused and collides on the next save).
         member_org_ids = [
             row[0] for row in db.query(ReportingUnitOrganization.organization_id)
             .filter(ReportingUnitOrganization.reporting_unit_id == unit_id).all()
         ]
-        if member_org_ids:
-            query = query.filter(Declaration.organization_id.in_(member_org_ids))
+        org_clause = Declaration.organization_id.in_(member_org_ids) if member_org_ids else sql_false()
+        query = query.filter(or_(org_clause, Declaration.reporting_unit_id == unit_id))
     count = query.scalar() or 0
     return f"{prefix}{count + 1:03d}"
 
@@ -2368,9 +2496,14 @@ def get_declarations(
     if scope.is_customer:
         query = query.filter(Declaration.organization_id == scope.organization_id)
     else:
-        # PORT: only Organizations linked to the resolved unit.
+        # PORT: declarations belonging to an Organization linked to the
+        # resolved unit, OR directly tagged with this unit (a declaration
+        # created with no customer organization chosen — see
+        # Declaration.reporting_unit_id — must still be visible to the unit
+        # that created it, not silently disappear).
         org_ids = scope.member_org_ids
-        query = query.filter(Declaration.organization_id.in_(org_ids)) if org_ids else query.filter(sql_false())
+        org_clause = Declaration.organization_id.in_(org_ids) if org_ids else sql_false()
+        query = query.filter(or_(org_clause, Declaration.reporting_unit_id == scope.reporting_unit_id))
         if scope.user.role != "PLATFORM_ADMIN":
             # PORT_STAFF reviews submitted work only — a CUSTOMER's un-submitted
             # draft isn't theirs to see yet. PLATFORM_ADMIN is exempt: drafts it
@@ -2449,10 +2582,19 @@ def save_declaration(
     else:
         # PLATFORM_ADMIN/PORT_STAFF specify the company; a brand-new company is
         # onboarded through the resolved unit, an existing one must already
-        # belong to it.
-        org = _resolve_org_for_port_scope(db, scope, payload.company_name)
+        # belong to it. The field is optional — a declaration can be created
+        # before the customer organization is known — so a blank value simply
+        # means no organization, displayed as "-" rather than a placeholder.
+        company_name_raw = (payload.company_name or "").strip()
+        org = _resolve_org_for_port_scope(db, scope, company_name_raw or None)
         org_id = org.id if org else None
-        company_name = payload.company_name
+        company_name = company_name_raw or "-"
+
+    # Tenant tag independent of organization_id — see Declaration.reporting_unit_id.
+    # PORT scope always carries its own unit; CUSTOMER falls back to the same
+    # unit-resolution rule used for the reference number (unambiguous org
+    # membership), so both remain consistent for the same declaration.
+    unit_id = scope.reporting_unit_id if scope.is_port else _resolve_unit_id_for_reference(db, scope, org_id)
 
     # IDOR prevention: check vessel is inside the caller's scope
     if payload.vessel_id:
@@ -2479,7 +2621,7 @@ def save_declaration(
         if payload.version is not None and payload.version != decl.version:
             raise HTTPException(status_code=409, detail="Phiếu khai báo đã được cập nhật bởi người dùng khác.")
         # Tenant isolation check
-        scope.require_org(decl.organization_id)
+        scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
 
         # A submitted/approved declaration is normally locked for editing; the
         # customer or Cảng must use the REQUEST_CHANGES flow to reopen it.
@@ -2509,6 +2651,9 @@ def save_declaration(
         decl.unload_json = json.dumps(unload_data, ensure_ascii=False)
         decl.load_json = json.dumps(load_data, ensure_ascii=False)
         decl.organization_id = org_id
+        # Keep whichever unit tag the declaration already had if this save
+        # can't newly resolve one (e.g. org removed on edit) — never erase it.
+        decl.reporting_unit_id = unit_id or decl.reporting_unit_id
         decl.updated_at = now_iso()
         decl.version += 1
     else:
@@ -2516,6 +2661,7 @@ def save_declaration(
         decl = Declaration(
             reference_no=ref_no,
             organization_id=org_id,
+            reporting_unit_id=unit_id,
             vessel_id=payload.vessel_id,
             company_name=company_name,
             declaration_date=payload.declaration_date,
@@ -2564,7 +2710,11 @@ def save_declaration(
             except IntegrityError as exc:
                 if "reference_no" not in str(getattr(exc, "orig", exc)).lower():
                     raise
-                db.expunge(decl)
+                # Exiting `begin_nested()` via exception already rolls back the
+                # SAVEPOINT, which detaches `decl` from the session on its own —
+                # an explicit db.expunge() here would raise
+                # InvalidRequestError("not present in this Session"). Just clear
+                # the id/reference and let the next db.add() re-attach it.
                 decl.id = None
                 decl.reference_no = _next_reference_no(db, scope, org_id)
         else:
@@ -2661,7 +2811,7 @@ def delete_declaration(
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
-    scope.require_org(decl.organization_id)
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
 
     identity = decl.reference_no
     organization_id = decl.organization_id
@@ -2691,7 +2841,7 @@ def get_declaration_events(
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
 
     # Tenant isolation check
-    scope.require_org(decl.organization_id)
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
 
     events = (
         db.query(DeclarationEvent)
@@ -2721,8 +2871,9 @@ def declaration_workflow(
     decl = db.query(Declaration).filter(Declaration.id == declaration_id).first()
     if not decl:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
-    # The declaration must belong to an Organization inside the resolved unit.
-    scope.require_org(decl.organization_id)
+    # The declaration must belong to an Organization inside the resolved unit,
+    # or (if org-less) be tagged directly with this unit.
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
 
     if payload.action in RETIRED_WORKFLOW_ACTIONS:
         raise HTTPException(
@@ -2778,7 +2929,7 @@ async def upload_attachment(
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu.")
 
     # Tenant isolation check
-    scope.require_org(decl.organization_id)
+    scope.require_declaration(decl.organization_id, decl.reporting_unit_id)
 
     content = await request.body()
     ext = Path(filename).suffix.lower()

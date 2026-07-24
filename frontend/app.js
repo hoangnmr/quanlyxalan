@@ -921,12 +921,17 @@ function renderPortOpsPanel(declaration) {
 
   const feeConfirmed = declaration.berth_fee_status === 'CONFIRMED';
   const securityGroup = showSecurity ? `<div class="port-ops-group"><h4>Bảo vệ</h4>
-    <form class="port-ops-row" data-port-ops-form="atb-atd">
-      <label>Giờ cập cầu thực tế (ATB)<input type="datetime-local" name="actual_arrival_at" value="${declaration.actual_arrival_at ? esc(declaration.actual_arrival_at.slice(0,16)) : ''}"></label>
-      <label>Giờ rời cầu thực tế (ATD)<input type="datetime-local" name="actual_departure_at" value="${declaration.actual_departure_at ? esc(declaration.actual_departure_at.slice(0,16)) : ''}"></label>
-      <button type="submit" class="outline-button">Lưu ATB/ATD</button>
-    </form>
-    <div class="port-ops-row">
+    <div class="port-ops-forms">
+      <form class="port-ops-row" data-port-ops-form="atb">
+        <label>Giờ cập cầu thực tế (ATB)<input type="datetime-local" name="actual_arrival_at" value="${declaration.actual_arrival_at ? esc(declaration.actual_arrival_at.slice(0,16)) : ''}"></label>
+        <button type="submit" class="outline-button">Lưu ATB</button>
+      </form>
+      <form class="port-ops-row" data-port-ops-form="atd">
+        <label>Giờ rời cầu thực tế (ATD)<input type="datetime-local" name="actual_departure_at" value="${declaration.actual_departure_at ? esc(declaration.actual_departure_at.slice(0,16)) : ''}"></label>
+        <button type="submit" class="outline-button">Lưu ATD</button>
+      </form>
+    </div>
+    <div class="port-ops-row standalone">
       ${feeConfirmed
         ? `<p class="port-ops-hint">✓ Đã xác nhận thu phí cầu bến${declaration.berth_fee_confirmed_at ? ` · ${fmtDate(declaration.berth_fee_confirmed_at)}` : ''}</p>`
         : `<button type="button" class="primary-button" data-port-ops-action="berth-fee">Xác nhận đã thu phí cầu bến</button>`}
@@ -954,8 +959,10 @@ function renderPortOpsPanel(declaration) {
   panel.innerHTML = securityGroup + cargoOpsGroup;
   panel.hidden = false;
 
-  const atbAtdForm = panel.querySelector('[data-port-ops-form="atb-atd"]');
-  if (atbAtdForm) atbAtdForm.addEventListener('submit', savePortOpsAtbAtd);
+  const atbForm = panel.querySelector('[data-port-ops-form="atb"]');
+  if (atbForm) atbForm.addEventListener('submit', savePortOpsAtbAtd);
+  const atdForm = panel.querySelector('[data-port-ops-form="atd"]');
+  if (atdForm) atdForm.addEventListener('submit', savePortOpsAtbAtd);
   const feeButton = panel.querySelector('[data-port-ops-action="berth-fee"]');
   if (feeButton) feeButton.addEventListener('click', confirmPortOpsBerthFee);
   panel.querySelectorAll('[data-port-ops-cargo]').forEach(button => {
@@ -967,20 +974,24 @@ function renderPortOpsPanel(declaration) {
   });
 }
 
+// Bảo vệ xác nhận ATB và ATD tại 2 thời điểm cách xa nhau (tàu cập cầu rồi mới
+// rời sau, có khi vài ngày sau) — mỗi form dưới đây chỉ gửi ĐÚNG MỘT field để
+// không tạo cảm giác phải điền đủ cả hai mới lưu được.
 async function savePortOpsAtbAtd(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  const isAtd = form.dataset.portOpsForm === 'atd';
   const data = values(form);
   const body = {};
   if (data.actual_arrival_at) body.actual_arrival_at = data.actual_arrival_at;
   if (data.actual_departure_at) body.actual_departure_at = data.actual_departure_at;
-  if (!Object.keys(body).length) return toast('Nhập ít nhất một giờ cập cầu hoặc rời cầu.', true);
+  if (!Object.keys(body).length) return toast(`Nhập giờ ${isAtd ? 'rời' : 'cập'} cầu trước khi lưu.`, true);
   setSubmitting(form, form.querySelector('button[type="submit"]'), true, 'Đang lưu…');
   try {
     const updated = await api(`/api/declarations/${state.workflowDeclaration.id}/atb-atd`, {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
     });
-    toast('Đã lưu giờ cập/rời cầu.');
+    toast(`Đã lưu giờ ${isAtd ? 'rời' : 'cập'} cầu (${isAtd ? 'ATD' : 'ATB'}).`);
     await refreshWorkflowDialog(updated);
   } catch (error) { toast(error.message, true); }
   finally { setSubmitting(form, form.querySelector('button[type="submit"]'), false); }

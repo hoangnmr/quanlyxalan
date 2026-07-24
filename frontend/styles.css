@@ -146,8 +146,9 @@ label { display: grid; gap: 6px; color: var(--cvf-text-secondary); font-size: 11
 .port-ops-panel { display: grid; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--cvf-border); }
 .port-ops-panel .port-ops-group { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--cvf-border); border-radius: 9px; background: var(--cvf-surface-elevated); }
 .port-ops-panel .port-ops-group h4 { margin: 0 0 2px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--cvf-text-muted); }
-.port-ops-panel .port-ops-row { display: flex; flex-direction: row; flex-wrap: wrap; align-items: end; gap: 16px; }
-.port-ops-panel .port-ops-row + .port-ops-row { padding-top: 10px; border-top: 1px dashed var(--cvf-border); }
+.port-ops-panel .port-ops-forms { display: flex; flex-wrap: wrap; gap: 20px; }
+.port-ops-panel .port-ops-row { display: flex; flex-direction: row; flex-wrap: wrap; align-items: end; gap: 10px; }
+.port-ops-panel .port-ops-row.standalone { padding-top: 10px; border-top: 1px dashed var(--cvf-border); }
 .port-ops-panel .port-ops-row label { display: flex; flex: 0 0 auto; flex-direction: column; gap: 4px; font-size: 11px; color: var(--cvf-text-muted); }
 .port-ops-panel .port-ops-row input[type="datetime-local"] { width: auto; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--cvf-border); background: var(--cvf-surface); }
 .port-ops-panel .port-ops-hint { margin: 0; font-size: 11px; color: var(--cvf-text-muted); }

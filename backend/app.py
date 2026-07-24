@@ -3522,8 +3522,6 @@ async def import_declaration(
     scope: Scope = Depends(resolve_scope),
 ):
     user = scope.user
-    if scope.is_port and user.role != "PLATFORM_ADMIN":
-        raise HTTPException(status_code=403, detail="Chỉ Admin nền tảng hoặc khách hàng mới được nhập phiếu khai báo.")
     content = await request.body()
     if not content:
         raise HTTPException(status_code=400, detail="File trống.")

@@ -15,7 +15,9 @@ báo cáo trên cùng một nền tảng và tách biệt dữ liệu theo đơn
 
 ## Chức năng chính
 
-- Khách hàng tạo, lưu nháp và gửi phiếu khai báo; Cảng yêu cầu bổ sung hoặc duyệt.
+- Khách hàng tạo, lưu nháp và gửi phiếu khai báo; nhân viên Cảng cũng tạo/lưu
+  nháp được (kể cả qua import Excel) nhưng không tự gửi thay khách hàng; Cảng
+  yêu cầu bổ sung hoặc duyệt.
 - Quản lý hồ sơ phương tiện, sổ theo dõi Salan và danh sách thuyền viên.
 - Import dữ liệu vận hành có preview và bước xác nhận.
 - Import lịch sử từ workbook TOS Berth, chi tiết container và PL.03 cũ theo cấu

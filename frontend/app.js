@@ -2806,7 +2806,7 @@ async function init() {
     const isAdmin = state.currentUser.role === 'PLATFORM_ADMIN';
     const isReviewer = state.currentUser.role === 'PORT_STAFF';
 
-    const canCreateDeclaration = isCustomer || isAdmin;
+    const canCreateDeclaration = isCustomer || isAdmin || isReviewer;
     $$('[data-action="new-declaration"]').forEach(btn => { btn.hidden = !canCreateDeclaration; });
     // PLATFORM_ADMIN có toàn quyền: vừa lưu nháp, vừa xác nhận gửi thay mặt
     // khách hàng mà không cần đăng nhập tài khoản khách hàng.
@@ -2852,7 +2852,7 @@ async function init() {
     $('.data-nav').hidden = isCustomer;
     $('#import-vessels-card').hidden = !(isReviewer || isAdmin);
     $('#import-crew-card').hidden = !(isReviewer || isAdmin);
-    $('#import-declaration-card').hidden = !isAdmin;
+    $('#import-declaration-card').hidden = !(isReviewer || isAdmin);
 
     const integrationActions = $('#integration-admin-actions');
     const integrationJobs = $('#sync-jobs');

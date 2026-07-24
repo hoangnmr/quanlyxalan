@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng — Quản Lý Xalan
 
-> Cập nhật theo chức năng ứng dụng ngày 18/07/2026.
+> Cập nhật theo chức năng ứng dụng ngày 24/07/2026.
 
 ## 1. Vai trò và phạm vi sử dụng
 
@@ -45,6 +45,10 @@ Tài khoản `CUSTOMER` chỉ thấy các chức năng phù hợp với phạm v
 3. Chọn thuyền viên và nhập thông tin chuyến, thời gian, hàng hóa, hành khách.
 4. Kiểm tra bản xem lại.
 5. Chọn **Lưu nháp** để làm tiếp sau hoặc **Gửi** để chuyển cho Cảng xử lý.
+
+`PORT_STAFF` cũng tạo được phiếu mới (ví dụ khi nhận thông tin qua điện thoại/giấy
+từ khách hàng), nhưng chỉ **Lưu nháp** — bước **Gửi** (xác nhận nộp phiếu) vẫn chỉ
+`CUSTOMER` hoặc `PLATFORM_ADMIN` thực hiện được.
 
 ### Trạng thái
 
@@ -94,6 +98,10 @@ công việc hiện tại:
 - hồ sơ phương tiện khách hàng gửi;
 - danh sách thuyền viên;
 - phiếu khai báo.
+
+Cả ba loại đều mở cho `PORT_STAFF` và `PLATFORM_ADMIN`. Với phiếu khai báo, tên
+doanh nghiệp trong file sẽ được dùng để xác định (hoặc tạo mới) khách hàng
+thuộc đơn vị báo cáo đang chọn.
 
 Chọn file, xem preview và lỗi theo từng dòng, sau đó mới xác nhận import. Dữ
 liệu chưa xác nhận không trở thành dữ liệu vận hành. Nếu file sai, hủy lượt

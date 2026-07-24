@@ -868,6 +868,20 @@ def test_platform_admin_sees_its_own_drafts(client, auth_headers):
     assert any(item["reference_no"] == reference_no for item in dashboard.json()["recent"])
 
 
+def test_port_staff_can_create_draft_declaration(client, port_staff_headers):
+    # Port staff may key in a declaration on a customer's behalf (e.g. by
+    # phone/paper), but only as a DRAFT — confirmation/submission still
+    # requires the customer or a PLATFORM_ADMIN (see
+    # test_port_staff_cannot_submit_declarations).
+    res = client.post(
+        "/api/declarations",
+        json=_minimal_declaration(company_name="KHÁCH HÀNG PORT STAFF"),
+        headers=port_staff_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["workflow_status"] == "DRAFT"
+
+
 def test_declaration_submit(client, customer_headers):
     res = client.post(
         "/api/declarations?submit=true",
@@ -1884,6 +1898,30 @@ def test_import_preview_and_idempotency(client, auth_headers, customer_headers):
     )
     assert admin_import.status_code == 200, admin_import.text
     assert admin_import.json()["accepted"] == 1
+
+
+def test_port_staff_can_import_declaration(client, port_staff_headers):
+    # Port staff import a declaration workbook on behalf of a customer, the
+    # same way PLATFORM_ADMIN does: the workbook's company name resolves (or
+    # onboards) the tenant organization within the staff member's own unit.
+    root = Path(__file__).resolve().parents[1]
+    declaration_content = (root / "templates" / "Phieu_khai_bao_PTTND_truoc_khi_den_cang.xlsx").read_bytes()
+
+    from openpyxl import load_workbook
+    workbook = load_workbook(io.BytesIO(declaration_content))
+    workbook["KHAI BÁO"]["C6"] = f"DOANH NGHIỆP PORT STAFF {uuid.uuid4().hex[:8].upper()}"
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    content = buffer.getvalue()
+
+    headers = {**port_staff_headers, "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    preview = client.post("/api/import/declaration?preview=true", content=content, headers=headers)
+    assert preview.status_code == 200
+    assert preview.json()["preview"] is True
+
+    imported = client.post("/api/import/declaration", content=content, headers=headers)
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["accepted"] == 1
 
 
 def test_smart_vessel_import_accepts_complete_non_template_workbook(client, auth_headers):

@@ -63,7 +63,7 @@ def test_role_dashboard_layout():
     assert 'id="admin-operations"' in index_html
     assert 'id="integration-admin-actions"' in index_html
     assert "btn.hidden = !canCreateDeclaration" in app_js
-    assert "$('#import-declaration-card').hidden = !isAdmin" in app_js
+    assert "$('#import-declaration-card').hidden = !(isReviewer || isAdmin)" in app_js
     assert "$('#admin-operations').hidden = true" in app_js
     assert "api('/api/admin/operations-summary')" not in app_js
 
